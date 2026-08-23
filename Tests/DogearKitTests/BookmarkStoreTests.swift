@@ -210,6 +210,88 @@ private func tempDir() -> URL {
     #expect(recoveredAgain.didRecoverFromBackup)
 }
 
+@Test func recoversFromBackupWhenMainFileIsMissing() throws {
+    let dir = tempDir()
+    let store = try BookmarkStore(directory: dir)
+    _ = store.add(url: URL(string: "https://a.com/1")!)
+    _ = store.add(url: URL(string: "https://a.com/2")!)
+    // The second add rotated a .bak that contains the first bookmark.
+    try FileManager.default.removeItem(at: dir.appendingPathComponent("library.json"))
+    let recovered = try BookmarkStore(directory: dir)
+    #expect(recovered.library.bookmarks.count == 1)
+    #expect(recovered.didRecoverFromBackup)
+}
+
+@Test func missingMainFileRecoveryDoesNotDestroyTheBackup() throws {
+    let dir = tempDir()
+    let store = try BookmarkStore(directory: dir)
+    _ = store.add(url: URL(string: "https://a.com/1")!)
+    _ = store.add(url: URL(string: "https://a.com/2")!)
+    // .bak now holds the single-bookmark state. Delete library.json and recover from it.
+    try FileManager.default.removeItem(at: dir.appendingPathComponent("library.json"))
+    let recovered = try BookmarkStore(directory: dir)
+    // Two more saves after recovery, each rotating library.json into .bak: if the
+    // recovery write had clobbered the good .bak instead, this chain would still
+    // look fine here but fail the corrupt-and-recover below.
+    _ = recovered.add(url: URL(string: "https://a.com/3")!)
+    _ = recovered.add(url: URL(string: "https://a.com/4")!)
+    try Data("{corrupt".utf8).write(to: dir.appendingPathComponent("library.json"))
+    let recoveredAgain = try BookmarkStore(directory: dir)
+    #expect(!recoveredAgain.library.bookmarks.isEmpty)
+    #expect(recoveredAgain.didRecoverFromBackup)
+}
+
+@Test func oldLibraryGainsNewDefaultFolders() throws {
+    let dir = tempDir()
+    let json = """
+    {"folders":["Recipes","Restaurants","Shows","Articles","Unsorted"],\
+    "bookmarks":[{"id":"00000000-0000-0000-0000-000000000001",\
+    "url":"https://a.com/1","title":"A","folder":"Unsorted","source":"web",\
+    "createdAt":0,"hasThumbnail":false,"manuallyFiled":false}]}
+    """
+    try Data(json.utf8).write(to: dir.appendingPathComponent("library.json"))
+    let store = try BookmarkStore(directory: dir)
+    #expect(store.library.folders.contains("Music"))
+    let musicIndex = store.library.folders.firstIndex(of: "Music")!
+    let unsortedIndex = store.library.folders.firstIndex(of: Library.unsorted)!
+    #expect(musicIndex < unsortedIndex)
+    #expect(store.library.schemaVersion == Library.currentSchemaVersion)
+}
+
+@Test func folderAdoptionRunsOnce() throws {
+    let dir = tempDir()
+    let json = """
+    {"folders":["Recipes","Restaurants","Shows","Articles","Unsorted"],\
+    "bookmarks":[{"id":"00000000-0000-0000-0000-000000000001",\
+    "url":"https://a.com/1","title":"A","folder":"Unsorted","source":"web",\
+    "createdAt":0,"hasThumbnail":false,"manuallyFiled":false}]}
+    """
+    try Data(json.utf8).write(to: dir.appendingPathComponent("library.json"))
+    let store = try BookmarkStore(directory: dir)
+    store.removeFolder("Music")
+    let reloaded = try BookmarkStore(directory: dir)
+    #expect(!reloaded.library.folders.contains("Music"))
+}
+
+@Test func oldURLsAreRecanonicalizedOnLoad() throws {
+    let dir = tempDir()
+    let json = """
+    {"folders":["Unsorted"],"bookmarks":[\
+    {"id":"00000000-0000-0000-0000-000000000001",\
+    "url":"https://twitter.com/jack/status/20","title":"A","note":"keep me",\
+    "folder":"Unsorted","source":"web","createdAt":0,"hasThumbnail":false,"manuallyFiled":false},\
+    {"id":"00000000-0000-0000-0000-000000000002",\
+    "url":"https://x.com/jack/status/20","title":"B",\
+    "folder":"Unsorted","source":"web","createdAt":1,"hasThumbnail":false,"manuallyFiled":false}\
+    ]}
+    """
+    try Data(json.utf8).write(to: dir.appendingPathComponent("library.json"))
+    let store = try BookmarkStore(directory: dir)
+    #expect(store.library.bookmarks.count == 1)
+    #expect(store.library.bookmarks[0].url == "https://x.com/jack/status/20")
+    #expect(store.library.bookmarks[0].note == "keep me")
+}
+
 @Test func loadsFiveThousandBookmarksUnder200ms() throws {
     let dir = tempDir()
     let store = try BookmarkStore(directory: dir)
@@ -229,9 +311,13 @@ private func tempDir() -> URL {
 
 // Writes a library.json into a fresh temp directory, so a test can open a store on a
 // folder list that the public API alone cannot produce (Unsorted not last, or empty).
+// Stamped at the current schema version: these tests exercise folder mechanics, not
+// migration, so the one-shot default-folder adoption must not fire here.
 private func storeSeeded(folders: [String]) throws -> BookmarkStore {
     let dir = tempDir()
-    let data = try JSONEncoder().encode(Library(folders: folders, bookmarks: []))
+    let data = try JSONEncoder().encode(
+        Library(folders: folders, bookmarks: [], schemaVersion: Library.currentSchemaVersion)
+    )
     try data.write(to: dir.appendingPathComponent("library.json"))
     return try BookmarkStore(directory: dir)
 }
