@@ -29,16 +29,15 @@ public struct KeywordCategorizer: Categorizer {
     // Ordered, longest domain first: the first match wins, so a more specific domain is
     // always tested before any suffix of it. No pair overlaps today, but a Dictionary
     // iterates in an unspecified order, so the first overlap added would pick at random.
+    // The Code entries are opt-in: they only fire when the user has a folder named Code.
     static let domainHints: [(domain: String, folder: String)] = [
-        ("maps.google.com", "Restaurants"), ("maps.apple.com", "Restaurants"),
-        ("primevideo.com", "Shows"), ("substack.com", "Articles"),
-        ("youtube.com", "Shows"), ("netflix.com", "Shows"), ("hbomax.com", "Shows"),
-        ("medium.com", "Articles"), ("imdb.com", "Shows"),
-        ("open.spotify.com", "Music"), ("music.apple.com", "Music"),
-        ("soundcloud.com", "Music"), ("bandcamp.com", "Music"),
-        ("maps.apple.com", "Restaurants"), ("maps.google.com", "Restaurants"),
-        ("maps.app.goo.gl", "Restaurants"),
-        ("github.com", "Code"), ("gitlab.com", "Code"),
+        ("open.spotify.com", "Music"),
+        ("music.apple.com", "Music"), ("maps.app.goo.gl", "Restaurants"), ("maps.google.com", "Restaurants"),
+        ("soundcloud.com", "Music"), ("maps.apple.com", "Restaurants"), ("primevideo.com", "Shows"),
+        ("bandcamp.com", "Music"), ("substack.com", "Articles"),
+        ("youtube.com", "Shows"), ("netflix.com", "Shows"),
+        ("hbomax.com", "Shows"), ("medium.com", "Articles"), ("github.com", "Code"), ("gitlab.com", "Code"),
+        ("imdb.com", "Shows"),
     ]
 
     public func categorize(_ metadata: FetchedMetadata, url: URL, folders: [String]) async -> String? {
