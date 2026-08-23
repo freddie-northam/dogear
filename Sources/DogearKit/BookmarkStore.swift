@@ -154,13 +154,26 @@ public final class BookmarkStore {
         mutated()
     }
 
-    /// Files a bookmark without claiming the user chose the folder, so a
-    /// later categorizer run may still move it. For the categorizer's own use.
-    public func autoFile(id: UUID, to folder: String) {
-        guard let index = library.bookmarks.firstIndex(where: { $0.id == id }),
-              library.folders.contains(folder) else { return }
-        library.bookmarks[index].folder = folder
-        mutated()
+    /// Files bookmarks without claiming the user chose the folder, so a
+    /// later categorizer run may still move them. For the categorizer's own
+    /// use. Skips an assignment whose id is unknown, whose bookmark is
+    /// manuallyFiled, whose bookmark has already left Unsorted (a mid-run
+    /// user move), or whose target folder does not exist. Saves and notifies
+    /// at most once, only when at least one assignment applied. Returns the
+    /// number applied.
+    @discardableResult
+    public func autoFile(_ assignments: [(id: UUID, folder: String)]) -> Int {
+        var applied = 0
+        for assignment in assignments {
+            guard let index = library.bookmarks.firstIndex(where: { $0.id == assignment.id }),
+                  !library.bookmarks[index].manuallyFiled,
+                  library.bookmarks[index].folder == Library.unsorted,
+                  library.folders.contains(assignment.folder) else { continue }
+            library.bookmarks[index].folder = assignment.folder
+            applied += 1
+        }
+        if applied > 0 { mutated() }
+        return applied
     }
 
     public func refile(id: UUID, to folder: String) {
