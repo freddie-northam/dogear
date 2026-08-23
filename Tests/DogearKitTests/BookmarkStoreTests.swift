@@ -102,9 +102,10 @@ private func tempDir() -> URL {
     #expect(changes == 1)
     #expect(result.new.map(\.url) == ["https://a.com/1", "https://a.com/2"])
     #expect(result.touched == 3)
-    // The re-added duplicate is bumped above older items and no longer done.
+    // The batch sits at the top in paste order; the re-added duplicate is
+    // bumped above older items and no longer done.
     #expect(store.bookmarks(in: Library.unsorted).map(\.url)
-        == ["https://a.com/2", "https://a.com/old", "https://a.com/1"])
+        == ["https://a.com/1", "https://a.com/old", "https://a.com/2"])
     #expect(store.archive().isEmpty)
 }
 
