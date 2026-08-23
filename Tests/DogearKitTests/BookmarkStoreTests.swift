@@ -118,6 +118,32 @@ private func tempDir() -> URL {
     #expect(store.library.bookmarks[0].folder == Library.unsorted)
 }
 
+@Test func countsMatchExistingAccessors() throws {
+    let store = try BookmarkStore(directory: tempDir())
+    // Filed: refiled into Recipes.
+    let (filed, _) = store.add(url: URL(string: "https://a.com/1")!)
+    store.refile(id: filed.id, to: "Recipes")
+    // Unsorted: left in place.
+    store.add(url: URL(string: "https://a.com/2")!)
+    // Done: filed then marked done, so it should count toward archive but
+    // not toward its folder's not-done count.
+    let (done, _) = store.add(url: URL(string: "https://a.com/3")!)
+    store.refile(id: done.id, to: "Recipes")
+    store.markDone(id: done.id)
+    // Favorited and done: favorites() includes done bookmarks (a lens, not a
+    // queue), so this must count toward favorites even though it is archived.
+    let (favoriteDone, _) = store.add(url: URL(string: "https://a.com/4")!)
+    store.toggleFavorite(id: favoriteDone.id)
+    store.markDone(id: favoriteDone.id)
+
+    let counts = store.counts()
+    for folder in store.library.folders {
+        #expect(counts.byFolder[folder, default: 0] == store.bookmarks(in: folder).count)
+    }
+    #expect(counts.favorites == store.favorites().count)
+    #expect(counts.archived == store.archive().count)
+}
+
 @Test func searchMatchesTitleAuthorURLIncludingArchive() throws {
     let store = try BookmarkStore(directory: tempDir())
     let (a, _) = store.add(url: URL(string: "https://a.com/pasta")!)
