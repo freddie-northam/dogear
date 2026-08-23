@@ -4,6 +4,7 @@ cd "$(dirname "$0")/.."
 
 swift build -c release
 mkdir -p build
+rm -rf build/AppIcon.iconset
 swift Scripts/make-icon.swift
 iconutil -c icns build/AppIcon.iconset -o build/AppIcon.icns
 

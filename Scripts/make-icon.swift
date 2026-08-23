@@ -2,7 +2,10 @@ import AppKit
 
 // Renders assets/logo-glyph.png in white onto a pink rounded rect at every
 // icon size, producing build/AppIcon.iconset for iconutil.
-let glyph = NSImage(contentsOfFile: "assets/logo-glyph.png")!
+guard let glyph = NSImage(contentsOfFile: "assets/logo-glyph.png") else {
+    print("Run from the repository root: assets/logo-glyph.png not found")
+    exit(1)
+}
 
 // A white-tinted copy of the glyph: fill with white where the glyph has pixels.
 let whiteGlyph: NSImage = {
