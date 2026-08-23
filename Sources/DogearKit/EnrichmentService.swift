@@ -60,6 +60,19 @@ public final class EnrichmentService {
             bookmark.hasThumbnail = true
         }
 
-        store.update(bookmark)
+        // Re-read once more: categorize/thumbnail above are another await window where a
+        // concurrent edit can land. Merge enrichment onto the latest state, not the
+        // snapshot captured before those awaits, and only touch folder if it's still
+        // eligible (not manually filed in the meantime).
+        guard var latest = store.library.bookmarks.first(where: { $0.id == id }) else { return }
+        latest.url = bookmark.url
+        latest.title = bookmark.title
+        latest.author = bookmark.author
+        latest.source = bookmark.source
+        latest.hasThumbnail = bookmark.hasThumbnail
+        if !latest.manuallyFiled {
+            latest.folder = bookmark.folder
+        }
+        store.update(latest)
     }
 }
