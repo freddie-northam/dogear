@@ -258,6 +258,7 @@ struct BookmarkCard: View {
     @State private var isEditingNote = false
     @State private var draftNote = ""
     @State private var isHovering = false
+    @State private var showingQRCode = false
 
     var body: some View {
         if let url = URL(string: bookmark.url) {
@@ -298,6 +299,7 @@ struct BookmarkCard: View {
         .onHover { isHovering = $0 }
         .onTapGesture(count: 2) { open() }
         .contextMenu { menu }
+        .popover(isPresented: $showingQRCode) { qrPopover }
         .alert("Edit Title", isPresented: $isEditingTitle) {
             TextField("Title", text: $draftTitle)
             Button("Save") {
@@ -318,6 +320,29 @@ struct BookmarkCard: View {
             }
             Button("Cancel", role: .cancel) {}
         }
+    }
+
+    private var qrPopover: some View {
+        VStack(spacing: 8) {
+            Text(bookmark.title).font(.headline).lineLimit(1)
+            if let qr = QRCode.image(for: bookmark.url) {
+                Image(qr, scale: 1, label: Text("QR code for \(bookmark.title)"))
+                    .interpolation(.none)
+                    .resizable()
+                    .frame(width: 180, height: 180)
+                    .padding(8)
+                    // A QR code needs a light background to scan, in dark
+                    // mode too, so this white is deliberate.
+                    .background(.white, in: RoundedRectangle(cornerRadius: 8))
+            } else {
+                Text("Dogear could not make a QR code for this link.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Text("Scan with your iPhone camera.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        .padding(14)
+        .frame(width: 220)
     }
 
     private var favoriteStar: some View {
@@ -379,6 +404,7 @@ struct BookmarkCard: View {
         Button("Copy as Markdown") {
             copyToPasteboard(bookmark.markdownLink)
         }
+        Button("Show QR Code") { showingQRCode = true }
         if bookmark.folder == "Restaurants" {
             Button("Open in Maps") { openInMaps() }
         }
