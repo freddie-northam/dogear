@@ -87,6 +87,27 @@ private func tempDir() -> URL {
     #expect(store.search("zebra").isEmpty)
 }
 
+@Test func batchAddSavesOnceAndDedupes() throws {
+    let store = try BookmarkStore(directory: tempDir())
+    let (existing, _) = store.add(url: URL(string: "https://a.com/old")!)
+    store.markDone(id: existing.id)
+    var changes = 0
+    store.onChange = { changes += 1 }
+    let result = store.add(urls: [
+        URL(string: "https://a.com/1")!,
+        URL(string: "https://a.com/1")!,
+        URL(string: "https://a.com/old")!,
+        URL(string: "https://a.com/2")!,
+    ])
+    #expect(changes == 1)
+    #expect(result.new.map(\.url) == ["https://a.com/1", "https://a.com/2"])
+    #expect(result.touched == 3)
+    // The re-added duplicate is bumped above older items and no longer done.
+    #expect(store.bookmarks(in: Library.unsorted).map(\.url)
+        == ["https://a.com/2", "https://a.com/old", "https://a.com/1"])
+    #expect(store.archive().isEmpty)
+}
+
 @Test func searchMatchesNote() throws {
     let store = try BookmarkStore(directory: tempDir())
     _ = store.add(url: URL(string: "https://a.com/tacos")!)
