@@ -38,5 +38,15 @@
   {"title": "The complete history of the espresso machine", "description": "A deep dive article", "url": "https://example.com/espresso", "expected": "Articles"},
   {"title": "Why cities need more benches: op-ed", "description": "Urban design writing", "url": "https://example.com/benches", "expected": "Articles"},
   {"title": "Understanding transformer models", "description": "A technical explainer post", "url": "https://blog.example.com/transformers", "expected": "Articles"},
-  {"title": "Notes on writing well", "description": "An essay on style", "url": "https://example.com/writing", "expected": "Articles"}
+  {"title": "Notes on writing well", "description": "An essay on style", "url": "https://example.com/writing", "expected": "Articles"},
+  {"title": "Charli XCX drops surprise new single", "description": "Listen to the track now", "url": "https://open.spotify.com/track/1", "expected": "Music"},
+  {"title": "This album redefined the genre", "description": "A 20th anniversary review", "url": "https://music.apple.com/album/2", "expected": "Music"},
+  {"title": "My favorite driving playlist right now", "description": "Road trip mixtape", "url": "https://example.com/driving-playlist", "expected": "Music"},
+  {"title": "The setlist from last night's show", "description": "Every song they played", "url": "https://example.com/setlist", "expected": "Music"},
+  {"title": "Rare vinyl pressing worth collecting", "description": "A guide for record collectors", "url": "https://example.com/vinyl-guide", "expected": "Music"},
+  {"title": "New bandcamp release from a favorite artist", "description": "Support independent musicians", "url": "https://bandcamp.com/album/3", "expected": "Music"},
+  {"title": "Full DJ set from the festival", "description": "Two hours of nonstop mixing", "url": "https://soundcloud.com/set/4", "expected": "Music"},
+  {"title": "Best albums of the year so far", "description": "Our critics rank the top tracks", "url": "https://example.com/best-albums", "expected": "Music"},
+  {"title": "This remix is better than the original", "description": "New take on a classic song", "url": "https://example.com/remix", "expected": "Music"},
+  {"title": "How to actually listen to an album front to back", "description": "A case against shuffle", "url": "https://example.com/listen-albums", "expected": "Music"}
 ]
