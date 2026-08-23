@@ -90,12 +90,15 @@ public final class BookmarkStore {
 
     public func addFolder(_ name: String) {
         guard !name.isEmpty, !library.folders.contains(name) else { return }
-        library.folders.insert(name, at: library.folders.count - 1) // keep Unsorted last
+        // Insert before Unsorted wherever it sits: a loaded library may not have it last,
+        // and an empty folder list would make a count-based index negative.
+        let index = library.folders.firstIndex(of: Library.unsorted) ?? library.folders.endIndex
+        library.folders.insert(name, at: index)
         mutated()
     }
 
     public func renameFolder(_ name: String, to newName: String) {
-        guard name != Library.unsorted,
+        guard name != Library.unsorted, !newName.isEmpty,
               let index = library.folders.firstIndex(of: name),
               !library.folders.contains(newName) else { return }
         library.folders[index] = newName
@@ -106,7 +109,7 @@ public final class BookmarkStore {
     }
 
     public func removeFolder(_ name: String) {
-        guard name != Library.unsorted else { return }
+        guard name != Library.unsorted, library.folders.contains(name) else { return }
         library.folders.removeAll { $0 == name }
         for i in library.bookmarks.indices where library.bookmarks[i].folder == name {
             library.bookmarks[i].folder = Library.unsorted
@@ -145,7 +148,13 @@ public final class BookmarkStore {
     }
 
     public func saveNow() {
-        guard let data = try? JSONEncoder().encode(library) else { return }
+        let data: Data
+        do {
+            data = try JSONEncoder().encode(library)
+        } catch {
+            onWriteFailure?(error)
+            return
+        }
         if FileManager.default.fileExists(atPath: fileURL.path) {
             try? FileManager.default.removeItem(at: backupURL)
             try? FileManager.default.copyItem(at: fileURL, to: backupURL)
