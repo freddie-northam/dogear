@@ -16,7 +16,7 @@ import Testing
 }
 
 @Test func defaultFoldersMatchSpec() {
-    #expect(Library.defaultFolders == ["Recipes", "Restaurants", "Shows", "Articles", "Unsorted"])
+    #expect(Library.defaultFolders == ["Recipes", "Restaurants", "Shows", "Music", "Articles", "Unsorted"])
 }
 
 private func makeBookmark(title: String, url: String) -> Bookmark {

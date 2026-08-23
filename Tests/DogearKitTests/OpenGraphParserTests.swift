@@ -50,9 +50,13 @@ private func fixture(_ name: String) throws -> String {
     #expect(OpenGraphParser.parse(html: html).title == "Single Quoted")
 }
 
-@Test func doesNotDoubleDecodeAnEscapedAmpersand() {
+@Test func doubleEncodedNamedEntityDecodesFully() {
     // The author wrote the literal text "&lt;", escaping the ampersand as "&amp;".
-    #expect(OpenGraphParser.decodeEntities("Fish &amp;lt; Chips") == "Fish &lt; Chips")
+    // Ruling: sites like LinkedIn double-encode og titles, so a second
+    // decode pass runs when the first leaves entities behind. A title that
+    // literally discusses "&lt;" loses one level; sloppy double-encoding
+    // is far more common than titles about HTML entities.
+    #expect(OpenGraphParser.decodeEntities("Fish &amp;lt; Chips") == "Fish < Chips")
 }
 
 @Test func decodesApostropheEntity() {
@@ -72,7 +76,7 @@ private func fixture(_ name: String) throws -> String {
     #expect(OpenGraphParser.decodeEntities("bad &#55296; scalar") == "bad &#55296; scalar")
 }
 
-@Test func doesNotDoubleDecodeAnEscapedNumericEntity() {
+@Test func doubleEncodedNumericEntityDecodesFully() {
     // The author wrote the literal text "&#8217;", escaping the ampersand.
-    #expect(OpenGraphParser.decodeEntities("&amp;#8217;") == "&#8217;")
+    #expect(OpenGraphParser.decodeEntities("&amp;#8217;") == "\u{2019}")
 }

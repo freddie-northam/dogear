@@ -113,6 +113,15 @@ public final class BookmarkStore {
         mutated()
     }
 
+    /// Files a bookmark without claiming the user chose the folder, so a
+    /// later categorizer run may still move it. For the categorizer's own use.
+    public func autoFile(id: UUID, to folder: String) {
+        guard let index = library.bookmarks.firstIndex(where: { $0.id == id }),
+              library.folders.contains(folder) else { return }
+        library.bookmarks[index].folder = folder
+        mutated()
+    }
+
     public func refile(id: UUID, to folder: String) {
         guard let index = library.bookmarks.firstIndex(where: { $0.id == id }) else { return }
         library.bookmarks[index].folder = folder

@@ -55,6 +55,12 @@ public enum URLCleaner {
         }
         parts.scheme = parts.scheme?.lowercased()
         parts.host = parts.host?.lowercased()
+        // The same tweet arrives as twitter.com or x.com depending on where
+        // the link was copied; one host keeps them one bookmark.
+        if let host = parts.host,
+           host == "twitter.com" || host == "www.twitter.com" || host == "mobile.twitter.com" {
+            parts.host = "x.com"
+        }
         parts.fragment = nil
         // Strip the trailing slash from the path only: doing it on the serialized
         // string truncates a query value that legitimately ends in "/". Work on the

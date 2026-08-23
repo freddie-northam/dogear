@@ -7,6 +7,7 @@ func folderColor(for name: String) -> Color {
     case "Recipes": .orange
     case "Restaurants": .pink
     case "Shows": .purple
+    case "Music": .red
     case "Articles": .blue
     case "Unsorted": .gray
     default: .teal
@@ -19,6 +20,7 @@ func folderSymbol(for name: String) -> String {
     case "Recipes": "fork.knife"
     case "Restaurants": "mappin.and.ellipse"
     case "Shows": "tv"
+    case "Music": "music.note"
     case "Articles": "doc.text"
     case "Unsorted": "tray"
     default: "folder"

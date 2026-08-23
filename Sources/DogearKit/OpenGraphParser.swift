@@ -47,6 +47,18 @@ public enum OpenGraphParser {
     }
 
     static func decodeEntities(_ text: String) -> String {
+        // ponytail: sites like LinkedIn double-encode og titles ("&amp;#39;"),
+        // so the decode runs a second pass when the first leaves entities
+        // behind. The cost: a title that literally discusses "&lt;" decodes
+        // one level too far. Sloppy double-encoding is far more common.
+        let once = decodeEntitiesOnce(text)
+        guard once.contains("&"), once.firstMatch(of: #/&(#x?[0-9a-fA-F]+|[a-z]+);/#) != nil else {
+            return once
+        }
+        return decodeEntitiesOnce(once)
+    }
+
+    private static func decodeEntitiesOnce(_ text: String) -> String {
         var result = text
         // &amp; is decoded LAST: decoding it first turns "&amp;lt;" (the literal text
         // "&lt;") into "<" and "&amp;#8217;" into "'" on a following pass.

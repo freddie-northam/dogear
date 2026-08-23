@@ -87,3 +87,11 @@ func rejectsNonHTTPSchemes(text: String) {
         #expect(!url.absoluteString.contains("\""))
     }
 }
+
+@Test func canonicalUnifiesTwitterHostsToX() {
+    let a = URLCleaner.canonicalString(URL(string: "https://twitter.com/jack/status/20")!)
+    let b = URLCleaner.canonicalString(URL(string: "https://x.com/jack/status/20")!)
+    let c = URLCleaner.canonicalString(URL(string: "https://mobile.twitter.com/jack/status/20")!)
+    #expect(a == b)
+    #expect(c == b)
+}
