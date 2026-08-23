@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import Foundation
 import ImageIO
@@ -44,4 +45,34 @@ private func makePNG(width: Int = 4, height: Int = 4) -> Data {
     let id = UUID()
     #expect(!cache.store(Data("<html>error page</html>".utf8), for: id))
     #expect(!cache.exists(for: id))
+}
+
+@Test func imageForReturnsNilWithoutAFile() throws {
+    let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let cache = try ThumbnailCache(directory: dir)
+    #expect(cache.image(for: UUID()) == nil)
+}
+
+@Test func imageForReadsAndThenCaches() throws {
+    let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let cache = try ThumbnailCache(directory: dir)
+    let id = UUID()
+    #expect(cache.store(makePNG(), for: id))
+    #expect(cache.image(for: id) != nil)
+    #expect(cache.image(for: id) != nil)
+    cache.remove(for: id)
+    #expect(cache.image(for: id) == nil)
+}
+
+@Test func storeInvalidatesTheDecodedCache() throws {
+    let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let cache = try ThumbnailCache(directory: dir)
+    let id = UUID()
+    #expect(cache.store(makePNG(width: 4, height: 4), for: id))
+    let first = try #require(cache.image(for: id))
+    #expect(first.size.width == 4)
+    #expect(cache.store(makePNG(width: 40, height: 40), for: id))
+    let second = try #require(cache.image(for: id))
+    #expect(second.size.width == 40)
+    #expect(second.size.width != first.size.width)
 }
