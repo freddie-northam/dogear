@@ -1,0 +1,168 @@
+import Foundation
+
+public final class BookmarkStore {
+    public private(set) var library: Library
+    public private(set) var didRecoverFromBackup = false
+    public var onChange: (() -> Void)?
+    public var onWriteFailure: ((Error) -> Void)?
+
+    private let fileURL: URL
+    private let backupURL: URL
+
+    public init(directory: URL) throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        fileURL = directory.appendingPathComponent("library.json")
+        backupURL = directory.appendingPathComponent("library.json.bak")
+
+        if let data = try? Data(contentsOf: fileURL),
+           let loaded = try? JSONDecoder().decode(Library.self, from: data) {
+            library = loaded
+        } else if FileManager.default.fileExists(atPath: fileURL.path),
+                  let data = try? Data(contentsOf: backupURL),
+                  let loaded = try? JSONDecoder().decode(Library.self, from: data) {
+            // The main file exists but is unreadable: restore from backup, never start empty.
+            library = loaded
+            didRecoverFromBackup = true
+            saveNow()
+        } else if FileManager.default.fileExists(atPath: fileURL.path) {
+            throw CocoaError(.fileReadCorruptFile)
+        } else {
+            library = Library(folders: Library.defaultFolders, bookmarks: [])
+        }
+    }
+
+    // MARK: Mutations
+
+    @discardableResult
+    public func add(url: URL) -> (bookmark: Bookmark, isNew: Bool) {
+        let canonical = URLCleaner.canonicalString(url)
+        if let index = library.bookmarks.firstIndex(where: { $0.url == canonical }) {
+            var existing = library.bookmarks.remove(at: index)
+            existing.doneAt = nil
+            library.bookmarks.insert(existing, at: 0)
+            mutated()
+            return (existing, false)
+        }
+        let bookmark = Bookmark(
+            id: UUID(), url: canonical, title: displayTitle(for: url),
+            author: nil, note: nil, folder: Library.unsorted, source: .web,
+            createdAt: Date(), doneAt: nil, hasThumbnail: false, manuallyFiled: false
+        )
+        library.bookmarks.insert(bookmark, at: 0)
+        mutated()
+        return (bookmark, true)
+    }
+
+    public func update(_ bookmark: Bookmark) {
+        guard let index = library.bookmarks.firstIndex(where: { $0.id == bookmark.id }) else { return }
+        library.bookmarks[index] = bookmark
+        mutated()
+    }
+
+    public func remove(id: UUID) {
+        library.bookmarks.removeAll { $0.id == id }
+        mutated()
+    }
+
+    public func markDone(id: UUID) { setDone(id: id, date: Date()) }
+    public func markUndone(id: UUID) { setDone(id: id, date: nil) }
+
+    private func setDone(id: UUID, date: Date?) {
+        guard let index = library.bookmarks.firstIndex(where: { $0.id == id }) else { return }
+        library.bookmarks[index].doneAt = date
+        mutated()
+    }
+
+    public func refile(id: UUID, to folder: String) {
+        guard let index = library.bookmarks.firstIndex(where: { $0.id == id }) else { return }
+        library.bookmarks[index].folder = folder
+        library.bookmarks[index].manuallyFiled = true
+        mutated()
+    }
+
+    public func addFolder(_ name: String) {
+        guard !name.isEmpty, !library.folders.contains(name) else { return }
+        library.folders.insert(name, at: library.folders.count - 1) // keep Unsorted last
+        mutated()
+    }
+
+    public func renameFolder(_ name: String, to newName: String) {
+        guard name != Library.unsorted,
+              let index = library.folders.firstIndex(of: name),
+              !library.folders.contains(newName) else { return }
+        library.folders[index] = newName
+        for i in library.bookmarks.indices where library.bookmarks[i].folder == name {
+            library.bookmarks[i].folder = newName
+        }
+        mutated()
+    }
+
+    public func removeFolder(_ name: String) {
+        guard name != Library.unsorted else { return }
+        library.folders.removeAll { $0 == name }
+        for i in library.bookmarks.indices where library.bookmarks[i].folder == name {
+            library.bookmarks[i].folder = Library.unsorted
+        }
+        mutated()
+    }
+
+    // MARK: Queries
+
+    public func bookmarks(in folder: String) -> [Bookmark] {
+        library.bookmarks.filter { $0.folder == folder && !$0.isDone }
+            .sorted { $0.createdAt > $1.createdAt }
+    }
+
+    public func archive() -> [Bookmark] {
+        library.bookmarks.filter(\.isDone)
+            .sorted { ($0.doneAt ?? .distantPast) > ($1.doneAt ?? .distantPast) }
+    }
+
+    public func search(_ query: String) -> [Bookmark] {
+        let needle = query.lowercased()
+        guard !needle.isEmpty else { return [] }
+        return library.bookmarks.filter {
+            $0.title.lowercased().contains(needle)
+                || ($0.author?.lowercased().contains(needle) ?? false)
+                || $0.url.lowercased().contains(needle)
+        }
+    }
+
+    // MARK: Persistence
+
+    private func mutated() {
+        saveNow()
+        onChange?()
+    }
+
+    public func saveNow() {
+        guard let data = try? JSONEncoder().encode(library) else { return }
+        if FileManager.default.fileExists(atPath: fileURL.path) {
+            try? FileManager.default.removeItem(at: backupURL)
+            try? FileManager.default.copyItem(at: fileURL, to: backupURL)
+        }
+        do {
+            try data.write(to: fileURL, options: .atomic)
+        } catch {
+            onWriteFailure?(error)
+        }
+    }
+
+    // Test-only fast path: skips per-add disk writes so the 5,000-item benchmark
+    // measures load time, not 5,000 saves.
+    func addForTesting(urlString: String) -> Bookmark {
+        let bookmark = Bookmark(
+            id: UUID(), url: urlString, title: urlString, author: nil, note: nil,
+            folder: Library.unsorted, source: .web, createdAt: Date(), doneAt: nil,
+            hasThumbnail: false, manuallyFiled: false
+        )
+        library.bookmarks.append(bookmark)
+        return bookmark
+    }
+
+    private func displayTitle(for url: URL) -> String {
+        let host = url.host ?? url.absoluteString
+        let path = url.path == "/" ? "" : url.path
+        return host + path
+    }
+}
