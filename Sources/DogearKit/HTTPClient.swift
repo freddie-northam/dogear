@@ -45,9 +45,10 @@ public struct URLSessionHTTPClient: HTTPClient {
 
     public func resolvedURL(for url: URL) async throws -> URL {
         // URLSession follows redirects by default; the response URL is the final one.
-        var request = URLRequest(url: url)
-        request.httpMethod = "HEAD"
-        let (_, response) = try await session.data(for: request)
+        // A GET, not a HEAD: some shorteners (t.co) reject HEAD. bytes(for:) hands
+        // back the response before the body, so cancel instead of draining it.
+        let (bytes, response) = try await session.bytes(from: url)
+        bytes.task.cancel()
         return response.url ?? url
     }
 }
