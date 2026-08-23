@@ -172,8 +172,9 @@ public final class BookmarkStore {
         }
     }
 
+    /// Favourites are a lens, not a queue: done bookmarks stay in the list.
     public func favorites() -> [Bookmark] {
-        library.bookmarks.filter { $0.isFavorite && !$0.isDone }
+        library.bookmarks.filter(\.isFavorite)
             .sorted { ($0.favoritedAt ?? .distantPast) > ($1.favoritedAt ?? .distantPast) }
     }
 
