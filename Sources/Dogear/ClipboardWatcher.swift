@@ -32,7 +32,7 @@ final class ClipboardWatcher: ObservableObject {
         linkDetected = detected?.contains(\.links) ?? false
     }
 
-    /// The one intentional content read, run when the popover opens.
+    /// The one intentional content read. The popover calls it after a positive pattern check.
     func readClipboard() -> String? {
         NSPasteboard.general.string(forType: .string)
     }
