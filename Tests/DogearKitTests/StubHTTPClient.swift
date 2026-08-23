@@ -27,7 +27,14 @@ struct StubHTTPClient: HTTPClient {
 
     func resolvedURL(for url: URL) async throws -> URL {
         if failEverything { throw HTTPClientError.noResponse }
-        return redirects[url] ?? url
+        // Match on canonical form: a bookmark's URL is already canonicalized (e.g. trailing
+        // slash stripped) by the time enrichment re-resolves it, so exact URL equality would
+        // miss a redirect keyed on the pre-canonicalization URL.
+        let needle = URLCleaner.canonicalString(url)
+        if let match = redirects.first(where: { URLCleaner.canonicalString($0.key) == needle }) {
+            return match.value
+        }
+        return url
     }
 
     func requestedURLs() async -> [URL] { await log.all() }
