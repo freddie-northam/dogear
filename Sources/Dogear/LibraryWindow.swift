@@ -58,15 +58,16 @@ struct LibraryWindow: View {
                 NewFolderButton()
             }
         } detail: {
-            BookmarkGrid(
-                bookmarks: visibleBookmarks,
-                isArchive: selection == archiveID,
-                onPaste: pasteFromClipboard
-            )
-            .dropDestination(for: URL.self) { urls, _ in
-                let text = urls.map(\.absoluteString).joined(separator: "\n")
-                return model.capture(text: text).total > 0
-            }
+            detailContent
+                .dropDestination(for: URL.self) { urls, _ in
+                    // A card dragged and released over the window must not
+                    // re-add its own bookmark: that would un-archive and
+                    // reorder silently. Only URLs new to the store count.
+                    let existing = Set(model.store.library.bookmarks.map(\.url))
+                    let fresh = urls.filter { !existing.contains(URLCleaner.canonicalString($0)) }
+                    guard !fresh.isEmpty else { return false }
+                    return model.capture(urls: fresh).total > 0
+                }
         }
         .searchable(text: $query, prompt: "Search bookmarks")
         .navigationTitle("Dogear")
@@ -77,6 +78,7 @@ struct LibraryWindow: View {
                 Image(systemName: "plus")
             }
             .help("Save from clipboard")
+            .accessibilityLabel("Save from clipboard")
         }
         .alert("No Link Found", isPresented: $pasteFailed) {
             Button("OK") {}
@@ -106,11 +108,43 @@ struct LibraryWindow: View {
         }
     }
 
+    private var trimmedQuery: String {
+        query.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private var visibleBookmarks: [Bookmark] {
-        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedQuery.isEmpty { return model.store.search(trimmedQuery) }
         if selection == archiveID { return model.store.archive() }
         return model.store.bookmarks(in: selection)
+    }
+
+    @ViewBuilder private var detailContent: some View {
+        let bookmarks = visibleBookmarks
+        if bookmarks.isEmpty, !trimmedQuery.isEmpty {
+            ContentUnavailableView.search(text: trimmedQuery)
+        } else if bookmarks.isEmpty, selection == archiveID {
+            ContentUnavailableView(
+                "Nothing archived yet",
+                systemImage: "bookmark",
+                description: Text("Mark a bookmark done and it moves here.")
+            )
+        } else if bookmarks.isEmpty {
+            ContentUnavailableView {
+                Label("Nothing here yet", systemImage: "bookmark")
+            } description: {
+                Text("Copy a link, then click the bookmark icon in the menu bar.")
+            } actions: {
+                VStack(spacing: 8) {
+                    Button("Paste from Clipboard", action: pasteFromClipboard)
+                        .buttonStyle(.borderedProminent)
+                    Text("You can paste many links at once. Copy them from Apple Notes and Dogear saves each one.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        } else {
+            BookmarkGrid(bookmarks: bookmarks)
+        }
     }
 
     /// The one capture path: same as the popover, fed from the clipboard.
@@ -182,43 +216,18 @@ private struct NewFolderButton: View {
 }
 
 struct BookmarkGrid: View {
-    @EnvironmentObject var model: AppModel
     let bookmarks: [Bookmark]
-    let isArchive: Bool
-    let onPaste: () -> Void
 
     private let columns = [GridItem(.adaptive(minimum: 220), spacing: 16)]
 
     var body: some View {
-        if bookmarks.isEmpty, isArchive {
-            ContentUnavailableView(
-                "Nothing archived yet",
-                systemImage: "bookmark",
-                description: Text("Mark a bookmark done and it moves here.")
-            )
-        } else if bookmarks.isEmpty {
-            ContentUnavailableView {
-                Label("Nothing here yet", systemImage: "bookmark")
-            } description: {
-                Text("Copy a link, then click the bookmark icon in the menu bar.")
-            } actions: {
-                VStack(spacing: 8) {
-                    Button("Paste from Clipboard", action: onPaste)
-                        .buttonStyle(.borderedProminent)
-                    Text("You can paste many links at once. Copy them from Apple Notes and Dogear saves each one.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+        ScrollView {
+            LazyVGrid(columns: columns, spacing: 16) {
+                ForEach(bookmarks) { bookmark in
+                    BookmarkCard(bookmark: bookmark)
                 }
             }
-        } else {
-            ScrollView {
-                LazyVGrid(columns: columns, spacing: 16) {
-                    ForEach(bookmarks) { bookmark in
-                        BookmarkCard(bookmark: bookmark, isArchive: isArchive)
-                    }
-                }
-                .padding(16)
-            }
+            .padding(16)
         }
     }
 }
@@ -226,7 +235,6 @@ struct BookmarkGrid: View {
 struct BookmarkCard: View {
     @EnvironmentObject var model: AppModel
     let bookmark: Bookmark
-    let isArchive: Bool
     @State private var isEditingTitle = false
     @State private var draftTitle = ""
     @State private var isEditingNote = false
