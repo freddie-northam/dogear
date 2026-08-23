@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "Dogear",
-    platforms: [.macOS(.v15)],
+    platforms: [.macOS("15.4")], // NSPasteboard.detectedPatterns requires macOS 15.4+
     targets: [
         .target(name: "DogearKit", swiftSettings: [.swiftLanguageMode(.v5)]),
         .executableTarget(
