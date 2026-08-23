@@ -35,6 +35,7 @@ struct LibraryWindow: View {
     @State private var renameCollided = false
     @State private var showingImport = false
     @State private var importState: NotesImportState = .confirm
+    @State private var fileForMeResult: String?
     @AppStorage("libraryView") private var viewRaw = "grid"
     @AppStorage("librarySort") private var sortRaw = LibrarySort.lastSaved.rawValue
     private let archiveID = "__archive__"
@@ -87,6 +88,14 @@ struct LibraryWindow: View {
         } message: {
             Text(model.storageError ?? "")
         }
+        .alert("File These for Me", isPresented: Binding(
+            get: { fileForMeResult != nil },
+            set: { if !$0 { fileForMeResult = nil } }
+        )) {
+            Button("OK") { fileForMeResult = nil }
+        } message: {
+            Text(fileForMeResult ?? "")
+        }
     }
 
     // MARK: Sidebar
@@ -135,7 +144,12 @@ struct LibraryWindow: View {
                 }
                 if folder == Library.unsorted {
                     Button {
-                        Task { await model.fileUnsorted() }
+                        Task {
+                            let filed = await model.fileUnsorted()
+                            fileForMeResult = filed > 0
+                                ? "Dogear filed \(filed) bookmark\(filed == 1 ? "" : "s")."
+                                : "No matches. Add folders that fit your links, then try again."
+                        }
                     } label: {
                         Label("File These for Me", systemImage: "sparkles")
                     }
