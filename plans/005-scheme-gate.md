@@ -51,7 +51,7 @@ Conventions: no em dashes; Conventional Commits, no AI attribution; kit test-fir
 
 ## Scope
 
-**In scope**: the eight files in the drift check (TikTokFetcherTests additions allowed under the OpenGraphParserTests bullet's intent; add tests where the change lives).
+**In scope**: the eight files in the drift check (TikTokFetcherTests additions allowed under the OpenGraphParserTests bullet's intent; add tests where the change lives), plus `Tests/DogearKitTests/EnrichmentServiceTests.swift` for MECHANICAL updates only: its 12 `let (bookmark, isNew) = store.add(url: ...)` destructuring sites must adopt the optional return (force-unwrap `store.add(url: ...)!` is the accepted test idiom here; every such fixture uses an http URL, so the unwrap is safe by construction). No behavioral edits to that file.
 
 **Out of scope**: `AppModel.capture(urls:)` (its filter stays; it gives the UI its early "invalid" signal); `EnrichmentService.swift` (its writes become safe because the store rejects; do not edit it); `HTTPClient.swift`; the maps `open` at `LibraryWindow.swift:618`.
 
@@ -130,7 +130,7 @@ Covered in Steps 2-3; pattern files are the named test files.
 ## STOP conditions
 
 - Excerpt mismatch (drift).
-- `add(url:)`'s signature change ripples beyond simple nil-handling at its call sites (more than ~4 call sites, or a call site whose semantics genuinely need the non-optional — report the list).
+- A PRODUCTION call site of `add(url:)` genuinely needs the non-optional return (test-file destructuring churn is expected and in scope, not a stop).
 - Any existing test asserts non-http URLs are storable (would mean a behavior contract exists that this plan contradicts; report it).
 
 ## Maintenance notes
