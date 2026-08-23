@@ -21,8 +21,24 @@ public enum URLCleaner {
         return matches.compactMap { match in
             guard let url = match.url, let scheme = url.scheme?.lowercased(),
                   scheme == "http" || scheme == "https" else { return nil }
-            return url
+            // The detector can run past HTML that follows a link with no
+            // whitespace, like "example.com/a</div>", and it percent-encodes
+            // the markup. Cut the URL at the first markup character, in
+            // literal or percent-encoded form.
+            return trimmedAtMarkup(url)
         }
+    }
+
+    static let markupMarkers = ["<", ">", "\"", "'", "%3C", "%3E", "%22", "%27", "%3c", "%3e"]
+
+    static func trimmedAtMarkup(_ url: URL) -> URL? {
+        let text = url.absoluteString
+        var cut = text.endIndex
+        for marker in markupMarkers {
+            if let found = text.range(of: marker)?.lowerBound, found < cut { cut = found }
+        }
+        guard cut != text.endIndex else { return url }
+        return URL(string: String(text[..<cut]))
     }
 
     /// Extraction for HTML bodies, like Apple Notes exports. HTML escapes "&"

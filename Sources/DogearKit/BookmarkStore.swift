@@ -181,12 +181,18 @@ public final class BookmarkStore {
             .sorted { ($0.favoritedAt ?? .distantPast) > ($1.favoritedAt ?? .distantPast) }
     }
 
-    /// A random not-done bookmark to resurface. The given id is excluded when
+    /// A not-done bookmark to resurface. Filed bookmarks come before Unsorted
+    /// ones, and the draw is random among the ten oldest candidates, so the
+    /// longest-waiting saves come back first. The given id is excluded when
     /// another candidate exists, so "show another" never repeats itself.
     public func pick(excluding excluded: UUID? = nil) -> Bookmark? {
         let waiting = library.bookmarks.filter { !$0.isDone }
-        let fresh = waiting.filter { $0.id != excluded }
-        return (fresh.isEmpty ? waiting : fresh).randomElement()
+        let pool = waiting.filter { $0.id != excluded }
+        let candidates = pool.isEmpty ? waiting : pool
+        let filed = candidates.filter { $0.folder != Library.unsorted }
+        let preferred = filed.isEmpty ? candidates : filed
+        let oldest = preferred.sorted { $0.createdAt < $1.createdAt }.prefix(10)
+        return oldest.randomElement()
     }
 
     // MARK: Persistence

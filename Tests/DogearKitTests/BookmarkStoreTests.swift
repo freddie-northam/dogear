@@ -274,3 +274,16 @@ private func storeSeeded(folders: [String]) throws -> BookmarkStore {
     #expect(changes == 0)
     #expect(store.library.folders == Library.defaultFolders)
 }
+
+@Test func pickPrefersFiledAndOldest() throws {
+    let store = try BookmarkStore(directory: tempDir())
+    for i in 0..<30 {
+        _ = store.addForTesting(urlString: "https://example.com/u/\(i)")
+    }
+    let (filed, _) = store.add(url: URL(string: "https://example.com/filed")!)
+    store.refile(id: filed.id, to: "Recipes")
+    for _ in 0..<20 {
+        let picked = store.pick()
+        #expect(picked?.folder == "Recipes")
+    }
+}
