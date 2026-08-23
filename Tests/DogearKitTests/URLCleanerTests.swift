@@ -26,6 +26,16 @@ func rejectsNonHTTPSchemes(text: String) {
     #expect(URLCleaner.canonicalString(url) == "https://a.com/p")
 }
 
+@Test func canonicalKeepsTrailingSlashInsideAQueryValue() {
+    let url = URL(string: "https://a.com/p?next=/")!
+    #expect(URLCleaner.canonicalString(url) == "https://a.com/p?next=/")
+}
+
+@Test func canonicalLowercasesScheme() {
+    let url = URL(string: "HTTPS://x.com/jack")!
+    #expect(URLCleaner.canonicalString(url) == "https://x.com/jack")
+}
+
 @Test func canonicalLowercasesHost() {
     let url = URL(string: "https://X.com/Jack")!
     #expect(URLCleaner.canonicalString(url) == "https://x.com/Jack")

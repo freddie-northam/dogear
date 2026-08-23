@@ -21,8 +21,12 @@ public enum URLCleaner {
         guard var parts = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
             return url.absoluteString
         }
+        parts.scheme = parts.scheme?.lowercased()
         parts.host = parts.host?.lowercased()
         parts.fragment = nil
+        // Strip the trailing slash from the path only: doing it on the serialized
+        // string truncates a query value that legitimately ends in "/".
+        if parts.path.hasSuffix("/") { parts.path.removeLast() }
         let isXHost = xHosts.contains { host in
             parts.host == host || (parts.host?.hasSuffix("." + host) ?? false)
         }
@@ -35,8 +39,6 @@ public enum URLCleaner {
             }
             parts.queryItems = kept.isEmpty ? nil : kept
         }
-        var result = parts.string ?? url.absoluteString
-        if result.hasSuffix("/") { result.removeLast() }
-        return result
+        return parts.string ?? url.absoluteString
     }
 }
