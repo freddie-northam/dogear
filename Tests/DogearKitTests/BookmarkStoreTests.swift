@@ -126,7 +126,7 @@ private func tempDir() -> URL {
     #expect(!store.library.bookmarks[0].isFavorite)
 }
 
-@Test func favoritesExcludeDoneAndSortNewestFirst() throws {
+@Test func favoritesIncludeDoneAndSortNewestFirst() throws {
     let store = try BookmarkStore(directory: tempDir())
     let (a, _) = store.add(url: URL(string: "https://a.com/1")!)
     let (b, _) = store.add(url: URL(string: "https://a.com/2")!)
@@ -137,7 +137,7 @@ private func tempDir() -> URL {
         store.update(bookmark)
     }
     store.markDone(id: c.id)
-    #expect(store.favorites().map(\.id) == [b.id, a.id])
+    #expect(store.favorites().map(\.id) == [c.id, b.id, a.id])
 }
 
 @Test func decodesALibraryWrittenBeforeFavorites() throws {
