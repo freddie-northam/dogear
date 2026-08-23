@@ -20,6 +20,16 @@ bookmark yourself.
 When you cook the recipe or watch the show, mark the bookmark done. It moves
 to the Archive, which stays searchable.
 
+## Move your links from Apple Notes
+
+1. Open the note that holds your links.
+2. Select all the text and copy it.
+3. Click the Dogear icon in the menu bar.
+4. Press Save.
+
+Dogear saves every link it finds in the text and files each one into the
+right folder.
+
 ## Install
 
 Download `Dogear.app` from the latest GitHub release and move it to
