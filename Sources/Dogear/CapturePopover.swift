@@ -86,11 +86,11 @@ struct CapturePopover: View {
                 openWindow(id: "library")
                 dismiss()
             } label: {
-                Image(systemName: "books.vertical")
+                Image(systemName: "square.grid.2x2")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(.secondary)
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.plain)
             .help("Open Library")
             .accessibilityLabel("Open Library")
             Menu {
@@ -109,7 +109,7 @@ struct CapturePopover: View {
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(.secondary)
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.plain)
             .menuIndicator(.hidden)
             .fixedSize()
             .help("More")

@@ -39,7 +39,6 @@ struct DogearApp: App {
             CapturePopover()
                 .environmentObject(model)
                 .environmentObject(clipboard)
-                .tint(.pink)
                 .onAppear {
                     if !hasLaunchedBefore {
                         hasLaunchedBefore = true
@@ -54,13 +53,11 @@ struct DogearApp: App {
         Window("Library", id: "library") {
             LibraryWindow()
                 .environmentObject(model)
-                .tint(.pink)
         }
         .defaultSize(width: 900, height: 600)
 
         Settings {
             SettingsView()
-                .tint(.pink)
         }
     }
 }
