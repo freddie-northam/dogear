@@ -17,7 +17,9 @@ Stash is a small open source macOS app. It captures links from TikTok, X, and th
 - Automatic metadata fetch (title, author, thumbnail) per site.
 - Automatic categorisation: on-device LLM on macOS 26+, keyword rules otherwise.
 - Manual re-file, edit, and delete.
+- Done state with a searchable Archive.
 - Local JSON storage.
+- MIT license, README, and contribution notes.
 
 ### Out of scope for v1
 
@@ -37,7 +39,8 @@ Stash is a small open source macOS app. It captures links from TikTok, X, and th
 
 1. The user clicks the menu bar icon. A popover opens.
 2. If the clipboard contains a URL, the URL field is pre-filled. Universal Clipboard carries links copied on iPhone.
-3. The user presses Return. The app saves the bookmark immediately.
+3. The user presses Return. The app saves the bookmark immediately and the popover closes. Capture is fire-and-forget: no folder pick, no form, no notification. The library shows the result of auto-filing later.
+4. If the URL is already saved, the app does not create a duplicate. The existing bookmark moves to the top and the popover shows a short "already saved" hint.
 
 **Invariant: a save never blocks on the network and never fails because of the network.** The bookmark record is written first with the bare URL. Enrichment runs in the background and updates the record when results arrive. A failed fetch leaves an editable bare bookmark.
 
@@ -74,16 +77,19 @@ Rules:
 
 **Library window** (opened from the menu bar popover or its menu):
 
-- Sidebar: folder list with counts.
-- Main pane: card grid with thumbnail, title, author, source domain, and date.
-- Search field: matches title, author, and URL.
-- Double-click opens the link in the default browser. Context menu: re-file, edit title, copy link, delete.
+- Sidebar: folder list with counts, plus an Archive entry at the bottom.
+- Main pane: card grid with thumbnail, title, author, source domain, and date. Newest first. No manual reordering in v1.
+- Search field: matches title, author, and URL. Search also covers the Archive.
+- Double-click opens the link in the default browser. Context menu: mark done, re-file, edit title, copy link, delete.
+- Done state: each card has a checkmark action. A done bookmark leaves its folder view and appears in the Archive. The Archive keeps the record ("what was that pasta place again?") and an item can be un-done back to its folder.
+
+**First run**: the library window opens once with an empty state that explains capture ("Copy a link, then click the bookmark icon in the menu bar"), and offers Launch at Login. The app never opens the library uninvited after that.
 
 **Storage**:
 
 - One JSON file in `~/Library/Application Support/Stash/`, written atomically on every change.
 - Thumbnails as image files in a `thumbnails/` subdirectory, named by bookmark id.
-- Bookmark record: `id`, `url`, `title`, `author?`, `note?`, `folder`, `source` (tiktok | x | web), `createdAt`, `hasThumbnail`, `manuallyFiled` (bool).
+- Bookmark record: `id`, `url`, `title`, `author?`, `note?`, `folder`, `source` (tiktok | x | web), `createdAt`, `doneAt?`, `hasThumbnail`, `manuallyFiled` (bool). A bookmark is archived when `doneAt` is set.
 - No database. JSON handles thousands of bookmarks. Revisit only if real usage proves otherwise.
 
 ## 8. Icons
@@ -93,14 +99,21 @@ Rules:
 - The app icon is one piece of custom artwork (Apple's license forbids SF Symbols as app icons).
 - No TikTok or X brand logos ship in the repository. Source badges show the domain name or a generic `link` symbol.
 
-## 9. Error handling
+## 9. Open source
+
+- License: MIT.
+- The repository ships `LICENSE`, `README.md` (what it is, screenshots, install, build instructions), and a short `CONTRIBUTING.md`.
+- The repository is public on GitHub from the first release.
+- No analytics, no telemetry, no network calls except the metadata fetches the user triggers.
+
+## 10. Error handling
 
 - Network failure or unparseable page: bookmark stays bare and editable. No error dialog on the capture path.
 - Invalid clipboard content: the URL field is left empty, nothing else happens.
 - Storage write failure: the app surfaces one clear alert, because silent data loss is not acceptable.
 - LLM unavailable (older OS, Apple Intelligence off, model not downloaded): silent fallback to keyword rules.
 
-## 10. Testing
+## 11. Testing
 
 - Unit tests for OpenGraph parsing and oEmbed parsing against fixture responses captured from real TikTok and X output.
 - Unit tests for the keyword categorizer.
