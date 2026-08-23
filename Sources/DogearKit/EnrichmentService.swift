@@ -71,7 +71,7 @@ public final class EnrichmentService {
         latest.source = bookmark.source
         latest.hasThumbnail = bookmark.hasThumbnail
         if !latest.manuallyFiled {
-            latest.folder = bookmark.folder
+            latest.folder = store.library.folders.contains(bookmark.folder) ? bookmark.folder : Library.unsorted
         }
         store.update(latest)
     }
