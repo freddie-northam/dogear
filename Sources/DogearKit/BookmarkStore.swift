@@ -104,6 +104,12 @@ public final class BookmarkStore {
         mutated()
     }
 
+    public func toggleFavorite(id: UUID) {
+        guard let index = library.bookmarks.firstIndex(where: { $0.id == id }) else { return }
+        library.bookmarks[index].favoritedAt = library.bookmarks[index].isFavorite ? nil : Date()
+        mutated()
+    }
+
     public func refile(id: UUID, to folder: String) {
         guard let index = library.bookmarks.firstIndex(where: { $0.id == id }) else { return }
         library.bookmarks[index].folder = folder
@@ -164,6 +170,11 @@ public final class BookmarkStore {
                 || ($0.note?.lowercased().contains(needle) ?? false)
                 || $0.url.lowercased().contains(needle)
         }
+    }
+
+    public func favorites() -> [Bookmark] {
+        library.bookmarks.filter { $0.isFavorite && !$0.isDone }
+            .sorted { ($0.favoritedAt ?? .distantPast) > ($1.favoritedAt ?? .distantPast) }
     }
 
     /// A random not-done bookmark to resurface. The given id is excluded when
