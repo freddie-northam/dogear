@@ -28,6 +28,7 @@ struct DogearApp: App {
     @StateObject private var clipboard = ClipboardWatcher()
     @AppStorage("hasLaunchedBefore") private var hasLaunchedBefore = false
     @Environment(\.openWindow) private var openWindow
+    @State private var serviceProvider: ServiceProvider?
 
     init() {
         // No dock icon: menu bar app. Replaces LSUIElement when run outside a bundle.
@@ -47,6 +48,9 @@ struct DogearApp: App {
                 }
         } label: {
             Image(nsImage: clipboard.linkDetected ? linkDetectedIcon : idleIcon)
+                // The label renders at launch, unlike the popover content, so
+                // registration here also covers the launched-by-service path.
+                .task { registerServiceProviderIfNeeded() }
         }
         .menuBarExtraStyle(.window)
 
@@ -59,5 +63,18 @@ struct DogearApp: App {
         Settings {
             SettingsView()
         }
+    }
+
+    /// Registers the Save to Dogear service handler. NSApp.servicesProvider
+    /// does not retain its provider, so the strong reference lives here.
+    private func registerServiceProviderIfNeeded() {
+        guard serviceProvider == nil else { return }
+        let model = model
+        let provider = ServiceProvider { text in
+            _ = model.capture(text: text)
+        }
+        serviceProvider = provider
+        NSApp.servicesProvider = provider
+        NSUpdateDynamicServices()
     }
 }
