@@ -24,11 +24,14 @@ public struct KeywordCategorizer: Categorizer {
                      "history of", "notes on", "writing"],
     ]
 
-    static let domainHints: [String: String] = [
-        "netflix.com": "Shows", "primevideo.com": "Shows", "hbomax.com": "Shows",
-        "youtube.com": "Shows", "imdb.com": "Shows",
-        "maps.google.com": "Restaurants", "maps.apple.com": "Restaurants",
-        "substack.com": "Articles", "medium.com": "Articles",
+    // Ordered, longest domain first: the first match wins, so a more specific domain is
+    // always tested before any suffix of it. No pair overlaps today, but a Dictionary
+    // iterates in an unspecified order, so the first overlap added would pick at random.
+    static let domainHints: [(domain: String, folder: String)] = [
+        ("maps.google.com", "Restaurants"), ("maps.apple.com", "Restaurants"),
+        ("primevideo.com", "Shows"), ("substack.com", "Articles"),
+        ("youtube.com", "Shows"), ("netflix.com", "Shows"), ("hbomax.com", "Shows"),
+        ("medium.com", "Articles"), ("imdb.com", "Shows"),
     ]
 
     public func categorize(_ metadata: FetchedMetadata, url: URL, folders: [String]) async -> String? {
@@ -45,6 +48,7 @@ public struct KeywordCategorizer: Categorizer {
         var best: (folder: String, score: Int)?
         for folder in folders where folder != Library.unsorted {
             var score = Self.keywords[folder, default: []].filter { haystack.contains($0) }.count
+            // ponytail: substring folder-name match, word-boundary matching if short names misfile.
             if haystack.contains(folder.lowercased()) { score += 1 }
             if score > (best?.score ?? 0) { best = (folder, score) }
         }
