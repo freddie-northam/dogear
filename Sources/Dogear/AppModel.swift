@@ -2,7 +2,12 @@ import DogearKit
 import Foundation
 import SwiftUI
 
-enum CaptureResult { case saved, alreadySaved, invalid }
+struct CaptureResult {
+    /// Distinct bookmarks created by this capture.
+    let new: Int
+    /// Distinct bookmarks touched: created plus re-saved duplicates.
+    let total: Int
+}
 
 @MainActor
 final class AppModel: ObservableObject {
@@ -36,13 +41,20 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Saves every http(s) link in the text. Deduplication applies per URL,
+    /// so a link that appears twice in one paste counts once.
     func capture(text: String) -> CaptureResult {
-        guard let url = URLCleaner.firstHTTPURL(in: text) else { return .invalid }
-        let (bookmark, isNew) = store.add(url: url)
-        if isNew {
-            let id = bookmark.id
-            Task { await enrichment.enrich(id: id) }
+        var touched = Set<UUID>()
+        var newCount = 0
+        for url in URLCleaner.allHTTPURLs(in: text) {
+            let (bookmark, isNew) = store.add(url: url)
+            touched.insert(bookmark.id)
+            if isNew {
+                newCount += 1
+                let id = bookmark.id
+                Task { await enrichment.enrich(id: id) }
+            }
         }
-        return isNew ? .saved : .alreadySaved
+        return CaptureResult(new: newCount, total: touched.count)
     }
 }

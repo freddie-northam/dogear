@@ -10,34 +10,28 @@ struct CapturePopover: View {
 
     @State private var text = ""
     @State private var hint: String?
+    @State private var pick: Bookmark?
+    @State private var isPickHovering = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                TextField("Paste a link", text: $text)
-                    .textFieldStyle(.roundedBorder)
-                    .onSubmit(save)
-                Button("Save", action: save)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(text.isEmpty)
-            }
+        VStack(alignment: .leading, spacing: 12) {
+            captureRow
             if let hint {
                 Text(hint).font(.caption).foregroundStyle(.secondary)
             }
-            HStack {
-                Button("Open Library") {
-                    openWindow(id: "library")
-                    dismiss()
-                }
-                Spacer()
-                SettingsLink { Text("Settings") }
-                Button("Quit") { NSApp.terminate(nil) }
+            if let pick {
+                Divider()
+                pickSection(pick)
             }
-            .font(.caption)
+            Divider()
+            footer
         }
-        .padding(12)
-        .frame(width: 320)
-        .onAppear { Task { await prefill() } }
+        .padding(14)
+        .frame(width: 350)
+        .onAppear {
+            pick = model.store.pick()
+            Task { await prefill() }
+        }
         .alert("Storage Error", isPresented: Binding(
             get: { model.storageError != nil },
             set: { if !$0 { model.storageError = nil } }
@@ -46,6 +40,32 @@ struct CapturePopover: View {
         } message: {
             Text(model.storageError ?? "")
         }
+    }
+
+    // MARK: Capture
+
+    private var captureRow: some View {
+        HStack(spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "link")
+                    .foregroundStyle(.secondary)
+                TextField("Paste a link", text: $text)
+                    .textFieldStyle(.plain)
+                    .onSubmit(save)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+            Button(detectedURLCount > 1 ? "Save \(detectedURLCount)" : "Save", action: save)
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+                .disabled(detectedURLCount == 0)
+        }
+    }
+
+    /// Distinct links in the field, so the button count matches what a save reports.
+    private var detectedURLCount: Int {
+        Set(URLCleaner.allHTTPURLs(in: text).map(URLCleaner.canonicalString)).count
     }
 
     private func prefill() async {
@@ -60,17 +80,149 @@ struct CapturePopover: View {
     }
 
     private func save() {
-        switch model.capture(text: text) {
-        case .saved:
-            clipboard.consume()
-            text = ""
-            dismiss()
-        case .alreadySaved:
-            hint = "Already saved. It moved to the top of the library."
-            clipboard.consume()
-            text = ""
-        case .invalid:
+        let result = model.capture(text: text)
+        if result.total == 0 {
             hint = "That is not a web link. Dogear saves http and https links."
+            return
         }
+        clipboard.consume()
+        text = ""
+        if pick == nil { pick = model.store.pick() }
+        if result.total > 1 {
+            hint = "Saved \(result.total) links."
+        } else if result.new == 1 {
+            dismiss()
+        } else {
+            hint = "Already saved. It moved to the top of the library."
+        }
+    }
+
+    // MARK: Waiting for you
+
+    private func pickSection(_ pick: Bookmark) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("WAITING FOR YOU")
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.pink)
+                Spacer()
+                if let counts = countsLine {
+                    Text(counts)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            pickRow(pick)
+        }
+    }
+
+    private func pickRow(_ pick: Bookmark) -> some View {
+        HStack(spacing: 8) {
+            Button {
+                if let url = URL(string: pick.url) { NSWorkspace.shared.open(url) }
+                dismiss()
+            } label: {
+                HStack(spacing: 8) {
+                    pickBadge(pick)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(pick.title).font(.callout).lineLimit(2)
+                        Text(pick.folder)
+                            .font(.caption2)
+                            .foregroundStyle(folderColor(for: pick.folder))
+                    }
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            Spacer(minLength: 8)
+            Button {
+                model.store.markDone(id: pick.id)
+                self.pick = model.store.pick(excluding: pick.id)
+            } label: {
+                Image(systemName: "checkmark")
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(.secondary)
+            .help("Mark done")
+            Button {
+                self.pick = model.store.pick(excluding: pick.id)
+            } label: {
+                Image(systemName: "arrow.clockwise")
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(.secondary)
+            .help("Show another")
+        }
+        .padding(6)
+        .background(
+            .quaternary.opacity(isPickHovering ? 1 : 0),
+            in: RoundedRectangle(cornerRadius: 8)
+        )
+        .onHover { isPickHovering = $0 }
+    }
+
+    /// Control Center style badge: the thumbnail in a circle, or the folder
+    /// symbol on a soft circle of the folder color.
+    @ViewBuilder private func pickBadge(_ pick: Bookmark) -> some View {
+        if pick.hasThumbnail,
+           let image = NSImage(contentsOf: model.thumbnails.fileURL(for: pick.id)) {
+            Image(nsImage: image)
+                .resizable().aspectRatio(contentMode: .fill)
+                .frame(width: 36, height: 36)
+                .clipShape(Circle())
+        } else {
+            Circle()
+                .fill(folderColor(for: pick.folder).opacity(0.2))
+                .frame(width: 36, height: 36)
+                .overlay(
+                    Image(systemName: folderSymbol(for: pick.folder))
+                        .foregroundStyle(folderColor(for: pick.folder))
+                )
+        }
+    }
+
+    // MARK: Counts
+
+    private var countsLine: String? {
+        let parts = model.store.library.folders.compactMap { folder -> String? in
+            let count = model.store.bookmarks(in: folder).count
+            guard count > 0 else { return nil }
+            var name = folder.lowercased()
+            // ponytail: naive singularization; a folder like "Dishes" yields "1 dishe".
+            if count == 1, name.hasSuffix("s") { name.removeLast() }
+            return "\(count) \(name)"
+        }
+        guard !parts.isEmpty else { return nil }
+        return parts.joined(separator: ", ") + " waiting."
+    }
+
+    // MARK: Footer
+
+    private var footer: some View {
+        HStack(spacing: 12) {
+            Button {
+                openWindow(id: "library")
+                dismiss()
+            } label: {
+                Label("Open Library", systemImage: "books.vertical")
+            }
+            .buttonStyle(.plain)
+            Spacer()
+            SettingsLink {
+                Image(systemName: "gearshape")
+            }
+            .buttonStyle(.borderless)
+            .help("Settings")
+            Button {
+                NSApp.terminate(nil)
+            } label: {
+                Image(systemName: "power")
+            }
+            .buttonStyle(.borderless)
+            .help("Quit Dogear")
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
     }
 }
