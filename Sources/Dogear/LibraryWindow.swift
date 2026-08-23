@@ -8,6 +8,7 @@ struct LibraryWindow: View {
     @State private var pasteFailed = false
     @State private var renamingFolder: String?
     @State private var renameDraft = ""
+    @State private var renameCollided = false
     private let archiveID = "__archive__"
 
     var body: some View {
@@ -87,14 +88,13 @@ struct LibraryWindow: View {
             set: { if !$0 { renamingFolder = nil } }
         )) {
             TextField("Name", text: $renameDraft)
-            Button("Save") {
-                guard let folder = renamingFolder else { return }
-                model.store.renameFolder(folder, to: renameDraft)
-                if model.store.library.folders.contains(renameDraft), selection == folder {
-                    selection = renameDraft
-                }
-            }
+            Button("Save") { saveRename() }
             Button("Cancel", role: .cancel) {}
+        }
+        .alert("Folder Name in Use", isPresented: $renameCollided) {
+            Button("OK") {}
+        } message: {
+            Text("A folder with this name exists.")
         }
         .alert("Storage Error", isPresented: Binding(
             get: { model.storageError != nil },
@@ -117,6 +117,21 @@ struct LibraryWindow: View {
     private func pasteFromClipboard() {
         let text = NSPasteboard.general.string(forType: .string) ?? ""
         if model.capture(text: text).total == 0 { pasteFailed = true }
+    }
+
+    private func saveRename() {
+        guard let folder = renamingFolder else { return }
+        let before = model.store.library.folders
+        model.store.renameFolder(folder, to: renameDraft)
+        let trimmed = renameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        if model.store.library.folders != before {
+            // The rename went through; keep the renamed folder selected.
+            if selection == folder { selection = trimmed }
+        } else if !trimmed.isEmpty, trimmed != folder {
+            // Refused because another folder holds this name. An empty or
+            // unchanged name closes silently: that reads as a cancel.
+            renameCollided = true
+        }
     }
 }
 
