@@ -88,6 +88,13 @@ func rejectsNonHTTPSchemes(text: String) {
     }
 }
 
+@Test func keepsApostrophesInExtractedURLs() {
+    let urls = URLCleaner.allHTTPURLs(in: "read https://en.wikipedia.org/wiki/It%27s_a_Wonderful_Life and https://a.com/don't-stop")
+    #expect(urls.count == 2)
+    #expect(urls[0].absoluteString.contains("%27"))
+    #expect(urls[1].absoluteString.contains("'") || urls[1].absoluteString.contains("%27"))
+}
+
 @Test func canonicalUnifiesTwitterHostsToX() {
     let a = URLCleaner.canonicalString(URL(string: "https://twitter.com/jack/status/20")!)
     let b = URLCleaner.canonicalString(URL(string: "https://x.com/jack/status/20")!)
