@@ -5,8 +5,8 @@ import Testing
 import UniformTypeIdentifiers
 @testable import DogearKit
 
-private func makePNG() -> Data {
-    let context = CGContext(data: nil, width: 4, height: 4, bitsPerComponent: 8,
+private func makePNG(width: Int = 4, height: Int = 4) -> Data {
+    let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8,
                             bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
                             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
     let image = context.makeImage()!
@@ -25,6 +25,17 @@ private func makePNG() -> Data {
     #expect(cache.exists(for: id))
     cache.remove(for: id)
     #expect(!cache.exists(for: id))
+}
+
+@Test func downsamplesLargeImagesTo600Pixels() throws {
+    let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let cache = try ThumbnailCache(directory: dir)
+    let id = UUID()
+    #expect(cache.store(makePNG(width: 900, height: 300), for: id))
+    let stored = try Data(contentsOf: cache.fileURL(for: id))
+    let source = CGImageSourceCreateWithData(stored as CFData, nil)!
+    let image = CGImageSourceCreateImageAtIndex(source, 0, nil)!
+    #expect(max(image.width, image.height) <= 600)
 }
 
 @Test func rejectsNonImageData() throws {
