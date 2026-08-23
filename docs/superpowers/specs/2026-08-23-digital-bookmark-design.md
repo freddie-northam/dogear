@@ -38,9 +38,10 @@ Stash is a small open source macOS app. It captures links from TikTok, X, and th
 ## 4. Capture flow
 
 1. The user clicks the menu bar icon. A popover opens.
-2. If the clipboard contains a URL, the URL field is pre-filled. Universal Clipboard carries links copied on iPhone.
-3. The user presses Return. The app saves the bookmark immediately and the popover closes. Capture is fire-and-forget: no folder pick, no form, no notification. The library shows the result of auto-filing later.
-4. If the URL is already saved, the app does not create a duplicate. The existing bookmark moves to the top and the popover shows a short "already saved" hint.
+2. If the clipboard contains a URL, the URL field is pre-filled. Universal Clipboard carries links copied on iPhone. The app uses NSPasteboard pattern detection to check for a URL without a content read, and reads the clipboard only on a positive match. This limits macOS 15 pasteboard privacy prompts to one grant.
+3. Only `http` and `https` URLs are accepted. The app rejects `javascript:`, `file:`, `data:`, and every other scheme. When the clipboard holds text with an embedded URL, the app extracts the first URL.
+4. The user presses Return. The app saves the bookmark immediately and the popover closes. Capture is fire-and-forget: no folder pick, no form, no notification. The library shows the result of auto-filing later.
+5. If the URL is already saved, the app does not create a duplicate. Dedupe compares the redirect-resolved URL with known tracking parameters (`utm_*` and similar) stripped. The existing bookmark moves to the top and the popover shows a short "already saved" hint.
 
 **Invariant: a save never blocks on the network and never fails because of the network.** The bookmark record is written first with the bare URL. Enrichment runs in the background and updates the record when results arrive. A failed fetch leaves an editable bare bookmark.
 
@@ -59,6 +60,8 @@ Rules that apply to all fetchers:
 - Send a pinned browser user-agent string on every HTML fetch. URLSession's default user-agent gets served JS shells.
 - Download the thumbnail at save time into a local cache directory. Never hot-link remote thumbnail URLs.
 - Enrichment is best-effort. Any failure degrades to a bare bookmark. This also protects against X changing its unauthenticated behavior again.
+- Resource caps on every fetch: read at most 1 MB of HTML, 10 MB of thumbnail, 10 seconds per request. A thumbnail is cached only after it decodes as an image.
+- Fetched HTML is parsed by pure string scanning. No WebView, no script execution. Fetched pages are untrusted input.
 
 ## 6. Categorisation
 
@@ -71,6 +74,7 @@ Rules:
 
 - The category list is user data, not a hardcoded enum. The LLM prompt and the keyword table both read the live folder list.
 - Auto-categorisation runs only during enrichment. A manual re-file is final; enrichment never overwrites it.
+- Any categorizer failure, guardrail refusal, or a stall over 5 seconds falls back to keyword rules, then to Unsorted. If the target folder was renamed or deleted during enrichment, the bookmark goes to Unsorted.
 - Default folders: Recipes, Restaurants, Shows, Articles, Unsorted. The user can add, rename, and delete folders.
 
 ## 7. Library and storage
@@ -111,12 +115,40 @@ Rules:
 - Network failure or unparseable page: bookmark stays bare and editable. No error dialog on the capture path.
 - Invalid clipboard content: the URL field is left empty, nothing else happens.
 - Storage write failure: the app surfaces one clear alert, because silent data loss is not acceptable.
+- Storage corruption: the app keeps a rotating `.bak` copy of the last good load. When the JSON fails to parse at launch, the app restores from the backup and tells the user. It never silently starts with an empty store.
 - LLM unavailable (older OS, Apple Intelligence off, model not downloaded): silent fallback to keyword rules.
 
 ## 11. Testing
 
-- Unit tests for OpenGraph parsing and oEmbed parsing against fixture responses captured from real TikTok and X output.
-- Unit tests for the keyword categorizer.
-- Round-trip test for the JSON store, including atomic-write behavior.
-- The Foundation Models path is behind the `Categorizer` interface; tests cover the interface with a stub, not the model.
-- UI is thin and stays untested in v1.
+**Unit tests, run on every PR:**
+
+- URL extraction and scheme rejection (`javascript:`, `file:`, `data:` refused).
+- Fetcher routing by domain after redirect resolution.
+- OpenGraph parser and oEmbed parser against fixture responses captured from real TikTok and X output, plus malformed and truncated HTML fixtures.
+- X title composition (author + truncated tweet text, never `og:title`).
+- Keyword categorizer against the accuracy fixture set (section 12).
+- Dedupe, including tracking-parameter stripping.
+- JSON store: round-trip, kill-during-write atomicity, corrupt-file recovery from `.bak`.
+- Done/archive transitions and the manual-refile-is-final rule.
+
+**Offline integration test, run on every PR:** a full save with the network blackholed produces a persisted, editable bare bookmark.
+
+**Live canary tests, scheduled CI only (not on PRs):** one real TikTok oEmbed fetch and one real X OpenGraph fetch. These fail loudly when a platform changes its unauthenticated behavior.
+
+**Not automated:** SwiftUI views, and Foundation Models output. The `Categorizer` interface is covered with a stub; LLM accuracy is a manual run (section 12).
+
+## 12. Benchmarks
+
+The accuracy fixture set is roughly 40 real links, about 8 per default folder, checked into the repository with their expected folders.
+
+| Benchmark | Target | Verification |
+| --- | --- | --- |
+| Popover open to ready | < 150 ms | manual, Instruments |
+| Return pressed to record durably on disk | < 50 ms, independent of network | automated, network blackholed |
+| Enrichment visible in library | < 3 s typical, 10 s hard timeout | live canary tests |
+| Keyword categorizer accuracy | >= 70% on the fixture set | automated benchmark test |
+| LLM categorizer accuracy | >= 85% on the same set | manual run on macOS 26 |
+| Library open with 1,000 bookmarks | < 500 ms | automated, generated store |
+| Search keystroke to results | < 100 ms | automated, generated store |
+| Store load with 5,000 bookmarks | < 200 ms | automated |
+| Idle footprint | < 50 MB memory, ~0% CPU | Activity Monitor check per release |
