@@ -16,10 +16,13 @@ public struct Bookmark: Codable, Identifiable, Equatable, Sendable {
     public var doneAt: Date?
     public var hasThumbnail: Bool
     public var manuallyFiled: Bool
+    // Optional like doneAt: synthesized Codable decodes a missing key as nil,
+    // so libraries written before this field load unchanged.
+    public var favoritedAt: Date?
 
     public init(id: UUID, url: String, title: String, author: String?, note: String?,
                 folder: String, source: Source, createdAt: Date, doneAt: Date?,
-                hasThumbnail: Bool, manuallyFiled: Bool) {
+                hasThumbnail: Bool, manuallyFiled: Bool, favoritedAt: Date? = nil) {
         self.id = id
         self.url = url
         self.title = title
@@ -31,9 +34,11 @@ public struct Bookmark: Codable, Identifiable, Equatable, Sendable {
         self.doneAt = doneAt
         self.hasThumbnail = hasThumbnail
         self.manuallyFiled = manuallyFiled
+        self.favoritedAt = favoritedAt
     }
 
     public var isDone: Bool { doneAt != nil }
+    public var isFavorite: Bool { favoritedAt != nil }
 }
 
 extension Bookmark {

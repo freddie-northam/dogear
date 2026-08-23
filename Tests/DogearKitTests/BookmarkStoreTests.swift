@@ -117,6 +117,40 @@ private func tempDir() -> URL {
     #expect(store.search("game night").count == 1)
 }
 
+@Test func toggleFavoriteSetsAndClears() throws {
+    let store = try BookmarkStore(directory: tempDir())
+    let (bookmark, _) = store.add(url: URL(string: "https://a.com/1")!)
+    store.toggleFavorite(id: bookmark.id)
+    #expect(store.library.bookmarks[0].isFavorite)
+    store.toggleFavorite(id: bookmark.id)
+    #expect(!store.library.bookmarks[0].isFavorite)
+}
+
+@Test func favoritesExcludeDoneAndSortNewestFirst() throws {
+    let store = try BookmarkStore(directory: tempDir())
+    let (a, _) = store.add(url: URL(string: "https://a.com/1")!)
+    let (b, _) = store.add(url: URL(string: "https://a.com/2")!)
+    let (c, _) = store.add(url: URL(string: "https://a.com/3")!)
+    for (id, seconds) in [(a.id, 100.0), (b.id, 200.0), (c.id, 300.0)] {
+        var bookmark = store.library.bookmarks.first { $0.id == id }!
+        bookmark.favoritedAt = Date(timeIntervalSince1970: seconds)
+        store.update(bookmark)
+    }
+    store.markDone(id: c.id)
+    #expect(store.favorites().map(\.id) == [b.id, a.id])
+}
+
+@Test func decodesALibraryWrittenBeforeFavorites() throws {
+    let json = """
+    {"folders":["Unsorted"],"bookmarks":[{"id":"00000000-0000-0000-0000-000000000001",\
+    "url":"https://a.com/1","title":"A","folder":"Unsorted","source":"web",\
+    "createdAt":0,"hasThumbnail":false,"manuallyFiled":false}]}
+    """
+    let library = try JSONDecoder().decode(Library.self, from: Data(json.utf8))
+    #expect(library.bookmarks[0].favoritedAt == nil)
+    #expect(!library.bookmarks[0].isFavorite)
+}
+
 @Test func pickReturnsNilOnEmptyStore() throws {
     let store = try BookmarkStore(directory: tempDir())
     #expect(store.pick() == nil)
