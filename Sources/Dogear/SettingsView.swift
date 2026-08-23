@@ -2,6 +2,18 @@ import ServiceManagement
 import SwiftUI
 
 struct SettingsView: View {
+    var body: some View {
+        TabView {
+            GeneralSettings()
+                .tabItem { Label("General", systemImage: "gearshape") }
+            AboutSettings()
+                .tabItem { Label("About", systemImage: "info.circle") }
+        }
+        .frame(width: 420)
+    }
+}
+
+private struct GeneralSettings: View {
     @AppStorage("detectCopiedLinks") private var detectCopiedLinks = true
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
 
@@ -17,6 +29,28 @@ struct SettingsView: View {
                 }
         }
         .padding(20)
-        .frame(width: 360)
+    }
+}
+
+private struct AboutSettings: View {
+    private var version: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
+    }
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .frame(width: 64, height: 64)
+            Text("Dogear").font(.headline)
+            Text("Version \(version)")
+                .font(.caption).foregroundStyle(.secondary)
+            Text("Dogear is free and open source, MIT license.")
+                .font(.caption).foregroundStyle(.secondary)
+            Link("Dogear on GitHub", destination: URL(string: "https://github.com/northamf/dogear")!)
+                .font(.caption)
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity)
     }
 }
