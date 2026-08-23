@@ -45,5 +45,15 @@ import Testing
     let stub = StubHTTPClient(responses: [pageURL: try Data(contentsOf: fixtureURL)])
     let metadata = try await GenericFetcher().fetch(pageURL, client: stub)
     #expect(metadata.title == "How to Make Fresh Pasta 'Properly'")
+    #expect(metadata.author == "Example Cooking") // og:site_name maps to author
     #expect(metadata.source == .web)
+}
+
+@Test func genericFetcherThrowsWhenNoTitleParses() async throws {
+    let fixtureURL = Bundle.module.url(forResource: "malformed", withExtension: "html", subdirectory: "Fixtures")!
+    let pageURL = URL(string: "https://example.com/malformed")!
+    let stub = StubHTTPClient(responses: [pageURL: try Data(contentsOf: fixtureURL)])
+    await #expect(throws: HTTPClientError.self) {
+        _ = try await GenericFetcher().fetch(pageURL, client: stub)
+    }
 }
