@@ -24,6 +24,15 @@ import Testing
     #expect(URLCleaner.allHTTPURLs(in: "just words, no links at all").isEmpty)
 }
 
+@Test func extractsURLsFromNotesStyleHTML() {
+    let html = """
+    <div><a href="https://a.com/recipe?id=1&amp;u=2">Great recipe</a></div>
+    <div>plain text https://b.com/x end</div>
+    """
+    #expect(URLCleaner.allHTTPURLs(inHTML: html).map(\.absoluteString)
+        == ["https://a.com/recipe?id=1&u=2", "https://b.com/x"])
+}
+
 @Test(arguments: ["javascript:alert(1)", "file:///etc/passwd", "data:text/html,hi", "ftp://host/x", "not a url"])
 func rejectsNonHTTPSchemes(text: String) {
     #expect(URLCleaner.firstHTTPURL(in: text) == nil)
