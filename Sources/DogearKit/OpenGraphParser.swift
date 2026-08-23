@@ -12,19 +12,25 @@ public enum OpenGraphParser {
         var properties: [String: String] = [:]
         // ponytail: regex over string scanning is enough here; fetched HTML is capped at 1 MB.
         // Tag and attribute names are case-insensitive in HTML; attribute values are not.
-        let metaPattern = #/(?i)<meta\s+[^>]*>/#
+        let metaPattern = #/(?i)<meta\s+(?:[^>"']|"[^"]*"|'[^']*')*>/#
         let attrPattern = #/(?i)(property|name|content)\s*=\s*(?:"([^"]*)"|'([^']*)')/#
 
         for match in html.matches(of: metaPattern) {
             let tag = String(match.output)
-            var property: String?
+            var propertyAttr: String?
+            var nameAttr: String?
             var content: String?
             for attr in tag.matches(of: attrPattern) {
                 let name = String(attr.output.1).lowercased()
                 guard let raw = attr.output.2 ?? attr.output.3 else { continue }
                 let value = String(raw)
-                if name == "content" { content = value } else { property = value }
+                switch name {
+                case "content": if content == nil { content = value }
+                case "property": if propertyAttr == nil { propertyAttr = value }
+                default: if nameAttr == nil { nameAttr = value }
+                }
             }
+            let property = propertyAttr ?? nameAttr
             if let property, let content, property.hasPrefix("og:"), properties[property] == nil {
                 properties[property] = decodeEntities(content)
             }
