@@ -38,8 +38,8 @@ Requires macOS 15.4 or later.
 
 Dogear stores everything in one local JSON file. There is no server, no
 account, no telemetry. The app makes network requests only to fetch metadata
-for links you save. Clipboard detection checks the clipboard's shape without
-a content read; the content is read only when you save.
+for links you save. Dogear checks the clipboard's shape without a content
+read, and reads the content only when the clipboard holds a link.
 
 ## License
 

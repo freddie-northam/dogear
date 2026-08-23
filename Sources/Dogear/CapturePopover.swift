@@ -1,3 +1,4 @@
+import AppKit
 import DogearKit
 import SwiftUI
 
@@ -36,7 +37,7 @@ struct CapturePopover: View {
         }
         .padding(12)
         .frame(width: 320)
-        .onAppear(perform: prefill)
+        .onAppear { Task { await prefill() } }
         .alert("Storage Error", isPresented: Binding(
             get: { model.storageError != nil },
             set: { if !$0 { model.storageError = nil } }
@@ -47,9 +48,12 @@ struct CapturePopover: View {
         }
     }
 
-    private func prefill() {
+    private func prefill() async {
         hint = nil
-        guard let clip = clipboard.readClipboard(),
+        // Check the clipboard shape first; read the content only on a positive match.
+        let detected = try? await NSPasteboard.general.detectedPatterns(for: [\.links])
+        guard detected?.contains(\.links) == true,
+              let clip = clipboard.readClipboard(),
               URLCleaner.firstHTTPURL(in: clip) != nil else { return }
         text = clip
     }
