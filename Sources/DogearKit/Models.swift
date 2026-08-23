@@ -61,7 +61,7 @@ public struct Library: Codable, Equatable, Sendable {
     public var folders: [String]
     public var bookmarks: [Bookmark]
 
-    public static let defaultFolders = ["Recipes", "Restaurants", "Shows", "Articles", "Unsorted"]
+    public static let defaultFolders = ["Recipes", "Restaurants", "Shows", "Music", "Articles", "Unsorted"]
     public static let unsorted = "Unsorted"
 
     public init(folders: [String], bookmarks: [Bookmark]) {

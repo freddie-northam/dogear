@@ -16,6 +16,8 @@ struct CapturePopover: View {
     // reports. Held as state and updated per edit, not recomputed per render.
     @State private var detectedURLCount = 0
     @AppStorage("popoverListTab") private var listTab = "recents"
+    @State private var isHoveringLibrary = false
+    @State private var isHoveringMore = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -88,9 +90,13 @@ struct CapturePopover: View {
             } label: {
                 Image(systemName: "square.grid.2x2")
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(isHoveringLibrary ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+                    .frame(width: 22, height: 22)
+                    .background(.quaternary.opacity(isHoveringLibrary ? 1 : 0), in: Circle())
             }
             .buttonStyle(.plain)
+            .pointerStyle(.link)
+            .onHover { isHoveringLibrary = $0 }
             .help("Open Library")
             .accessibilityLabel("Open Library")
             Menu {
@@ -107,9 +113,13 @@ struct CapturePopover: View {
             } label: {
                 Image(systemName: "ellipsis.circle")
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(isHoveringMore ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+                    .frame(width: 22, height: 22)
+                    .background(.quaternary.opacity(isHoveringMore ? 1 : 0), in: Circle())
             }
             .buttonStyle(.plain)
+            .pointerStyle(.link)
+            .onHover { isHoveringMore = $0 }
             .menuIndicator(.hidden)
             .fixedSize()
             .help("More")
@@ -202,9 +212,13 @@ struct CapturePopover: View {
                     pickBadge(pick)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(pick.title).font(.callout).lineLimit(2)
-                        Text(pick.folder)
-                            .font(.caption2)
-                            .foregroundStyle(folderColor(for: pick.folder))
+                        HStack(spacing: 4) {
+                            Image(systemName: folderSymbol(for: pick.folder))
+                                .font(.system(size: 9))
+                            Text(pick.folder)
+                        }
+                        .font(.caption2)
+                        .foregroundStyle(folderColor(for: pick.folder))
                     }
                 }
                 .contentShape(Rectangle())
@@ -212,25 +226,17 @@ struct CapturePopover: View {
             .buttonStyle(.plain)
             .pointerStyle(.link)
             Spacer(minLength: 8)
-            Button {
-                model.store.markDone(id: pick.id)
-                self.pick = model.store.pick(excluding: pick.id)
-            } label: {
-                Image(systemName: "checkmark")
+            // The actions appear with the row hover, Control Center style,
+            // and each names itself through its own hover color.
+            if isPickHovering {
+                HoverIconButton(symbol: "checkmark", label: "Mark done", hoverColor: .green) {
+                    model.store.markDone(id: pick.id)
+                    self.pick = model.store.pick(excluding: pick.id)
+                }
+                HoverIconButton(symbol: "arrow.clockwise", label: "Show another", hoverColor: .primary) {
+                    self.pick = model.store.pick(excluding: pick.id)
+                }
             }
-            .buttonStyle(.borderless)
-            .foregroundStyle(.secondary)
-            .help("Mark done")
-            .accessibilityLabel("Mark done")
-            Button {
-                self.pick = model.store.pick(excluding: pick.id)
-            } label: {
-                Image(systemName: "arrow.clockwise")
-            }
-            .buttonStyle(.borderless)
-            .foregroundStyle(.secondary)
-            .help("Show another")
-            .accessibilityLabel("Show another")
         }
         .padding(6)
         .background(
@@ -361,5 +367,30 @@ private struct PopoverListRow: View {
         .buttonStyle(.plain)
         .pointerStyle(.link)
         .onHover { isHovering = $0 }
+    }
+}
+
+/// A quiet icon button that reveals its purpose on hover: a circular
+/// highlight plus a meaningful color, with the tooltip as backup.
+struct HoverIconButton: View {
+    let symbol: String
+    let label: String
+    let hoverColor: Color
+    let action: () -> Void
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(isHovering ? AnyShapeStyle(hoverColor) : AnyShapeStyle(.secondary))
+                .frame(width: 24, height: 24)
+                .background(.quaternary.opacity(isHovering ? 1 : 0), in: Circle())
+        }
+        .buttonStyle(.plain)
+        .pointerStyle(.link)
+        .onHover { isHovering = $0 }
+        .help(label)
+        .accessibilityLabel(label)
     }
 }

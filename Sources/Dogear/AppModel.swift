@@ -47,6 +47,27 @@ final class AppModel: ObservableObject {
         capture(urls: URLCleaner.allHTTPURLs(in: text))
     }
 
+    /// Re-runs the categorizer over every not-done Unsorted bookmark against
+    /// the current folder list. Returns how many were filed.
+    func fileUnsorted() async -> Int {
+        let categorizer = CategorizerFactory.make()
+        let unsorted = store.bookmarks(in: Library.unsorted)
+        var filed = 0
+        for bookmark in unsorted {
+            let metadata = FetchedMetadata(
+                title: bookmark.title, author: bookmark.author,
+                description: bookmark.note, source: bookmark.source)
+            guard let url = URL(string: bookmark.url) else { continue }
+            let folders = store.library.folders
+            if let folder = await categorizer.categorize(metadata, url: url, folders: folders),
+               folder != Library.unsorted {
+                store.autoFile(id: bookmark.id, to: folder)
+                filed += 1
+            }
+        }
+        return filed
+    }
+
     func capture(urls: [URL]) -> CaptureResult {
         // The one capture gate: every caller (text, drop, import) inherits it.
         // A dropped file:// URL must never become a bookmark or reach enrichment.

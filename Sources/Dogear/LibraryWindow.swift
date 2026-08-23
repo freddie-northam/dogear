@@ -133,6 +133,13 @@ struct LibraryWindow: View {
                 } label: {
                     Label("Copy as Markdown List", systemImage: "doc.on.doc")
                 }
+                if folder == Library.unsorted {
+                    Button {
+                        Task { await model.fileUnsorted() }
+                    } label: {
+                        Label("File These for Me", systemImage: "sparkles")
+                    }
+                }
                 if folder != Library.unsorted {
                     Button {
                         renameDraft = folder
@@ -430,6 +437,7 @@ private struct NewFolderButton: View {
     @EnvironmentObject var model: AppModel
     @State private var isAdding = false
     @State private var name = ""
+    @State private var isHoveringNewFolder = false
     @FocusState private var isFieldFocused: Bool
 
     var body: some View {
@@ -454,7 +462,9 @@ private struct NewFolderButton: View {
                     Label("New Folder", systemImage: "plus")
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
+                .pointerStyle(.link)
+                .foregroundStyle(isHoveringNewFolder ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+                .onHover { isHoveringNewFolder = $0 }
                 Spacer()
             }
         }
@@ -548,6 +558,12 @@ struct BookmarkActions: ViewModifier {
             isEditingNote = true
         } label: {
             Label("Edit Note", systemImage: "note.text")
+        }
+        Button {
+            let id = bookmark.id
+            Task { await model.enrichment.enrich(id: id) }
+        } label: {
+            Label("Refresh Metadata", systemImage: "arrow.clockwise")
         }
         Divider()
         Button {
@@ -661,10 +677,15 @@ struct BookmarkCard: View {
                         FavoriteStar(bookmark: bookmark)
                     }
                 }
-            Text(bookmark.title).font(.headline).lineLimit(2)
-            if let note = bookmark.note, !note.isEmpty {
-                Text(note).font(.caption).foregroundStyle(.secondary).lineLimit(2)
-            }
+            Text(bookmark.title)
+                .font(.headline)
+                .lineLimit(2, reservesSpace: true)
+            // The note line always reserves its height, so every card in a
+            // row is the same size whether or not a note exists.
+            Text(bookmark.note ?? " ")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1, reservesSpace: true)
             HStack(spacing: 6) {
                 // The folder speaks through its symbol and color; the word,
                 // the domain, and the raw link are noise at card size.
@@ -695,7 +716,9 @@ struct BookmarkCard: View {
            let image = NSImage(contentsOf: model.thumbnails.fileURL(for: bookmark.id)) {
             Image(nsImage: image)
                 .resizable().aspectRatio(contentMode: .fill)
-                .frame(height: 110).clipped()
+                .frame(minWidth: 0, maxWidth: .infinity)
+                .frame(height: 110)
+                .clipped()
                 .clipShape(RoundedRectangle(cornerRadius: 6))
         } else if bookmark.source == .x {
             // A text post reads as a quote, not as a missing image.
@@ -735,6 +758,7 @@ struct FavoriteStar: View {
                 .background(.thinMaterial, in: Circle())
         }
         .buttonStyle(.borderless)
+        .pointerStyle(.link)
         .help(bookmark.isFavorite ? "Remove from Favourites" : "Add to Favourites")
         .accessibilityLabel(bookmark.isFavorite ? "Remove from Favourites" : "Add to Favourites")
         .padding(6)
@@ -835,6 +859,9 @@ struct BookmarkListRow: View {
             Text(bookmark.createdAt, format: .dateTime.day().month())
                 .font(.caption).foregroundStyle(.tertiary)
         }
+        .padding(.horizontal, 4)
+        .padding(.vertical, 2)
+        .background(.quaternary.opacity(isHovering ? 0.6 : 0), in: RoundedRectangle(cornerRadius: 6))
         .contentShape(Rectangle())
         .pointerStyle(.link)
         .onHover { isHovering = $0 }

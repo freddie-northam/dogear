@@ -16,6 +16,8 @@ public struct KeywordCategorizer: Categorizer {
                         "tasting menu", "michelin", "reservation", "izakaya", "cafe", "bakery",
                         "steakhouse", "pizzeria", "street food", "food tour", "bar and grill",
                         "spots in", "places near", "worth the trip", "dining"],
+        "Music": ["song", "album", "playlist", "track", "listen", "remix", "setlist",
+                  "vinyl", "mixtape", "new single"],
         "Shows": ["episode", "season", "series", "binge", "watch", "streaming", "stream",
                   "netflix", "hbo", "trailer", "anime", "k-drama", "documentary", "film",
                   "movie", "tv", "finale"],
@@ -32,6 +34,10 @@ public struct KeywordCategorizer: Categorizer {
         ("primevideo.com", "Shows"), ("substack.com", "Articles"),
         ("youtube.com", "Shows"), ("netflix.com", "Shows"), ("hbomax.com", "Shows"),
         ("medium.com", "Articles"), ("imdb.com", "Shows"),
+        ("open.spotify.com", "Music"), ("music.apple.com", "Music"),
+        ("soundcloud.com", "Music"), ("bandcamp.com", "Music"),
+        ("maps.apple.com", "Restaurants"), ("maps.google.com", "Restaurants"),
+        ("maps.app.goo.gl", "Restaurants"),
         ("github.com", "Code"), ("gitlab.com", "Code"),
     ]
 
