@@ -39,6 +39,11 @@ func rejectsNonHTTPSchemes(text: String) {
     #expect(URLCleaner.canonicalString(url) == "https://a.com/p")
 }
 
+@Test func canonicalKeepsPercentEncodedPathSeparators() {
+    let url = URL(string: "https://a.com/a%2Fb/")!
+    #expect(URLCleaner.canonicalString(url) == "https://a.com/a%2Fb")
+}
+
 @Test func canonicalKeepsTrailingSlashInsideAQueryValue() {
     let url = URL(string: "https://a.com/p?next=/")!
     #expect(URLCleaner.canonicalString(url) == "https://a.com/p?next=/")

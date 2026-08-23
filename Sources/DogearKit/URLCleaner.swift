@@ -6,15 +6,18 @@ public enum URLCleaner {
     static let xHostTrackingNames: Set<String> = ["s", "t", "ref_src", "ref_url"]
     static let xHosts: Set<String> = ["x.com", "twitter.com"]
 
+    // One shared detector: creating an NSDataDetector compiles a regex, which is
+    // too costly to repeat on every keystroke. Matching itself is thread-safe.
+    private static let linkDetector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
+
     public static func firstHTTPURL(in text: String) -> URL? {
         allHTTPURLs(in: text).first
     }
 
     /// Every http(s) link in the text, in order of appearance. Other schemes are dropped.
     public static func allHTTPURLs(in text: String) -> [URL] {
-        let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
         let range = NSRange(text.startIndex..., in: text)
-        let matches = detector?.matches(in: text, options: [], range: range) ?? []
+        let matches = linkDetector?.matches(in: text, options: [], range: range) ?? []
         return matches.compactMap { match in
             guard let url = match.url, let scheme = url.scheme?.lowercased(),
                   scheme == "http" || scheme == "https" else { return nil }
@@ -30,8 +33,10 @@ public enum URLCleaner {
         parts.host = parts.host?.lowercased()
         parts.fragment = nil
         // Strip the trailing slash from the path only: doing it on the serialized
-        // string truncates a query value that legitimately ends in "/".
-        if parts.path.hasSuffix("/") { parts.path.removeLast() }
+        // string truncates a query value that legitimately ends in "/". Work on the
+        // percent-encoded path, because reading `path` decodes %2F into a real
+        // separator and would rewrite the path to a different resource.
+        if parts.percentEncodedPath.hasSuffix("/") { parts.percentEncodedPath.removeLast() }
         let isXHost = xHosts.contains { host in
             parts.host == host || (parts.host?.hasSuffix("." + host) ?? false)
         }
