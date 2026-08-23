@@ -2,7 +2,9 @@ import Foundation
 
 public enum URLCleaner {
     static let trackingPrefixes = ["utm_"]
-    static let trackingNames: Set<String> = ["fbclid", "gclid", "igsh", "si", "s", "t", "ref_src", "ref_url"]
+    static let trackingNames: Set<String> = ["fbclid", "gclid", "igsh", "si"]
+    static let xHostTrackingNames: Set<String> = ["s", "t", "ref_src", "ref_url"]
+    static let xHosts: Set<String> = ["x.com", "twitter.com"]
 
     public static func firstHTTPURL(in text: String) -> URL? {
         let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
@@ -21,10 +23,14 @@ public enum URLCleaner {
         }
         parts.host = parts.host?.lowercased()
         parts.fragment = nil
+        let isXHost = xHosts.contains { host in
+            parts.host == host || (parts.host?.hasSuffix("." + host) ?? false)
+        }
         if let items = parts.queryItems {
             let kept = items.filter { item in
                 let name = item.name.lowercased()
                 if trackingNames.contains(name) { return false }
+                if isXHost && xHostTrackingNames.contains(name) { return false }
                 return !trackingPrefixes.contains { name.hasPrefix($0) }
             }
             parts.queryItems = kept.isEmpty ? nil : kept

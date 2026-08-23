@@ -30,3 +30,13 @@ func rejectsNonHTTPSchemes(text: String) {
     let url = URL(string: "https://X.com/Jack")!
     #expect(URLCleaner.canonicalString(url) == "https://x.com/Jack")
 }
+
+@Test func canonicalKeepsTimestampOnNonXHost() {
+    let url = URL(string: "https://youtube.com/watch?v=A&t=120")!
+    #expect(URLCleaner.canonicalString(url) == "https://youtube.com/watch?v=A&t=120")
+}
+
+@Test func canonicalStripsShareAndTimestampOnXHost() {
+    let url = URL(string: "https://x.com/a/status/1?s=20&t=xyz")!
+    #expect(URLCleaner.canonicalString(url) == "https://x.com/a/status/1")
+}
