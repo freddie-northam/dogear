@@ -53,6 +53,7 @@ struct CapturePopover: View {
         // Check the clipboard shape first; read the content only on a positive match.
         let detected = try? await NSPasteboard.general.detectedPatterns(for: [\.links])
         guard detected?.contains(\.links) == true,
+              text.isEmpty,
               let clip = clipboard.readClipboard(),
               URLCleaner.firstHTTPURL(in: clip) != nil else { return }
         text = clip
