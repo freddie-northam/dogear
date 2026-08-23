@@ -37,6 +37,22 @@ private struct AccuracyEntry: Decodable {
     #expect(folder == "Gym")
 }
 
+@Test func githubFilesToCodeWhenTheFolderExists() async {
+    let metadata = FetchedMetadata(title: "swiftlang/swift", description: nil)
+    let folder = await KeywordCategorizer().categorize(
+        metadata, url: URL(string: "https://github.com/swiftlang/swift")!,
+        folders: ["Code", Library.unsorted])
+    #expect(folder == "Code")
+}
+
+@Test func githubStaysUnfiledWithoutACodeFolder() async {
+    let metadata = FetchedMetadata(title: "swiftlang/swift", description: nil)
+    let folder = await KeywordCategorizer().categorize(
+        metadata, url: URL(string: "https://github.com/swiftlang/swift")!,
+        folders: Library.defaultFolders)
+    #expect(folder == nil)
+}
+
 @Test func neverReturnsAFolderOutsideTheList() async {
     let metadata = FetchedMetadata(title: "Creamy pasta recipe", description: nil)
     let folder = await KeywordCategorizer().categorize(metadata, url: URL(string: "https://a.com")!, folders: ["Watchlist", "Unsorted"])
