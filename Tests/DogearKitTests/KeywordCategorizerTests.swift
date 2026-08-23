@@ -53,6 +53,27 @@ private struct AccuracyEntry: Decodable {
     #expect(folder == nil)
 }
 
+@Test func xPostWithOneKeywordHitStaysUnfiled() async {
+    let metadata = FetchedMetadata(title: "watch this demo tonight", description: nil, source: .x)
+    let folder = await KeywordCategorizer().categorize(
+        metadata, url: URL(string: "https://x.com/a/status/1")!, folders: Library.defaultFolders)
+    #expect(folder == nil)
+}
+
+@Test func webPageWithOneKeywordHitStillFiles() async {
+    let metadata = FetchedMetadata(title: "watch this demo tonight", description: nil, source: .web)
+    let folder = await KeywordCategorizer().categorize(
+        metadata, url: URL(string: "https://a.com")!, folders: Library.defaultFolders)
+    #expect(folder == "Shows")
+}
+
+@Test func xPostWithTwoKeywordHitsStillFiles() async {
+    let metadata = FetchedMetadata(title: "watch the season finale with me", description: nil, source: .x)
+    let folder = await KeywordCategorizer().categorize(
+        metadata, url: URL(string: "https://x.com/a/status/1")!, folders: Library.defaultFolders)
+    #expect(folder == "Shows")
+}
+
 @Test func neverReturnsAFolderOutsideTheList() async {
     let metadata = FetchedMetadata(title: "Creamy pasta recipe", description: nil)
     let folder = await KeywordCategorizer().categorize(metadata, url: URL(string: "https://a.com")!, folders: ["Watchlist", "Unsorted"])

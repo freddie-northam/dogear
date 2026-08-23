@@ -46,12 +46,15 @@ public struct KeywordCategorizer: Categorizer {
             }
         }
 
+        // Tweets are conversational, so one stray keyword ("watch this",
+        // a "recipe" metaphor) misfiles them: X posts need two hits.
+        let minimumScore = metadata.source == .x ? 2 : 1
         var best: (folder: String, score: Int)?
         for folder in folders where folder != Library.unsorted {
             var score = Self.keywords[folder, default: []].filter { haystack.contains($0) }.count
             // ponytail: substring folder-name match, word-boundary matching if short names misfile.
             if haystack.contains(folder.lowercased()) { score += 1 }
-            if score > (best?.score ?? 0) { best = (folder, score) }
+            if score >= minimumScore, score > (best?.score ?? 0) { best = (folder, score) }
         }
         return best?.folder
     }
