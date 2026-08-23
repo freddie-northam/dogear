@@ -24,3 +24,8 @@ import Testing
         _ = try await TikTokFetcher().fetch(videoURL, client: stub)
     }
 }
+
+@Test func buildsOEmbedURLWithTheVideoURLAsAQueryValue() {
+    let url = TikTokFetcher.oembedURL(for: URL(string: "https://www.tiktok.com/@a/video/1")!)
+    #expect(url.absoluteString == "https://www.tiktok.com/oembed?url=https://www.tiktok.com/@a/video/1")
+}
