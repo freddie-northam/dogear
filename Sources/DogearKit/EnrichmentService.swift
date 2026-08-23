@@ -30,11 +30,11 @@ public final class EnrichmentService {
         guard var bookmark = store.library.bookmarks.first(where: { $0.id == id }) else { return }
 
         // Post-redirect dedupe: the resolved URL may match an existing bookmark.
-        if let existing = store.library.bookmarks.first(where: { $0.url == resolved && $0.id != id }) {
+        if store.library.bookmarks.contains(where: { $0.url == resolved && $0.id != id }) {
             store.remove(id: id)
-            var bumped = existing
-            bumped.doneAt = nil
-            store.update(bumped)
+            // Re-add the survivor through add(): its re-add path clears doneAt and bumps the
+            // bookmark to the top, so re-sharing a short link surfaces it like any re-add.
+            store.add(url: result.resolvedURL)
             return
         }
         bookmark.url = resolved

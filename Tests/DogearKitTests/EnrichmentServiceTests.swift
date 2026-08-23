@@ -202,3 +202,25 @@ private final class InterceptingHTTPClient: HTTPClient, @unchecked Sendable {
     #expect(store.library.bookmarks.count == 1)
     #expect(store.library.bookmarks[0].id == existing.id)
 }
+
+@Test func redirectCollisionBumpsTheSurvivorToTheTop() async throws {
+    let short = URL(string: "https://vm.tiktok.com/SHORT/")!
+    let full = URL(string: "https://www.tiktok.com/@a/video/123")!
+    let oembed = try Data(contentsOf: Bundle.module.url(forResource: "tiktok-oembed", withExtension: "json", subdirectory: "Fixtures")!)
+    var client = StubHTTPClient(responses: [TikTokFetcher.oembedURL(for: full): oembed])
+    client.redirects = [short: full]
+    let (store, service) = try await makeEnvironment(client: client)
+
+    let (existing, _) = store.add(url: full)
+    await service.enrich(id: existing.id)
+    // Enrichment filed the survivor by category, so compare inside that folder.
+    let folder = store.library.bookmarks.first { $0.id == existing.id }!.folder
+    let (other, _) = store.add(url: URL(string: "https://example.com/other")!)
+    store.refile(id: other.id, to: folder)
+    #expect(store.bookmarks(in: folder).map(\.id) == [other.id, existing.id])
+
+    let (viaShort, _) = store.add(url: short)
+    await service.enrich(id: viaShort.id)
+
+    #expect(store.bookmarks(in: folder).map(\.id) == [existing.id, other.id])
+}
