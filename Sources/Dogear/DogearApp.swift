@@ -16,7 +16,6 @@ struct DogearApp: App {
             CapturePopover()
                 .environmentObject(model)
                 .environmentObject(clipboard)
-                .onAppear { clipboard.start() }
         } label: {
             Image(systemName: clipboard.linkDetected ? "bookmark.fill" : "bookmark")
         }

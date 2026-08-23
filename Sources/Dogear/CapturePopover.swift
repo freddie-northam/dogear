@@ -37,7 +37,10 @@ struct CapturePopover: View {
         .padding(12)
         .frame(width: 320)
         .onAppear(perform: prefill)
-        .alert("Storage Error", isPresented: .constant(model.storageError != nil)) {
+        .alert("Storage Error", isPresented: Binding(
+            get: { model.storageError != nil },
+            set: { if !$0 { model.storageError = nil } }
+        )) {
             Button("OK") { model.storageError = nil }
         } message: {
             Text(model.storageError ?? "")
