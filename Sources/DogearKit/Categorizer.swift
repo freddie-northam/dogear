@@ -32,6 +32,7 @@ public struct KeywordCategorizer: Categorizer {
         ("primevideo.com", "Shows"), ("substack.com", "Articles"),
         ("youtube.com", "Shows"), ("netflix.com", "Shows"), ("hbomax.com", "Shows"),
         ("medium.com", "Articles"), ("imdb.com", "Shows"),
+        ("github.com", "Code"), ("gitlab.com", "Code"),
     ]
 
     public func categorize(_ metadata: FetchedMetadata, url: URL, folders: [String]) async -> String? {
