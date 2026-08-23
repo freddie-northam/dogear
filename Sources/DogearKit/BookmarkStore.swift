@@ -21,9 +21,13 @@ public final class BookmarkStore {
                   let data = try? Data(contentsOf: backupURL),
                   let loaded = try? JSONDecoder().decode(Library.self, from: data) {
             // The main file exists but is unreadable: restore from backup, never start empty.
+            // Write directly (no rotation): library.json is corrupt, not a known-good state,
+            // so it must never be copied over the good .bak.
             library = loaded
             didRecoverFromBackup = true
-            saveNow()
+            if let data = try? JSONEncoder().encode(library) {
+                try? data.write(to: fileURL, options: .atomic)
+            }
         } else if FileManager.default.fileExists(atPath: fileURL.path) {
             throw CocoaError(.fileReadCorruptFile)
         } else {
@@ -55,6 +59,10 @@ public final class BookmarkStore {
 
     public func update(_ bookmark: Bookmark) {
         guard let index = library.bookmarks.firstIndex(where: { $0.id == bookmark.id }) else { return }
+        var bookmark = bookmark
+        if let url = URL(string: bookmark.url) {
+            bookmark.url = URLCleaner.canonicalString(url)
+        }
         library.bookmarks[index] = bookmark
         mutated()
     }
@@ -108,9 +116,10 @@ public final class BookmarkStore {
 
     // MARK: Queries
 
+    // Newest-first by insertion order: add() and re-add both insert at index 0,
+    // so no sort is needed (and a re-add's bump stays visible here).
     public func bookmarks(in folder: String) -> [Bookmark] {
         library.bookmarks.filter { $0.folder == folder && !$0.isDone }
-            .sorted { $0.createdAt > $1.createdAt }
     }
 
     public func archive() -> [Bookmark] {
