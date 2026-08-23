@@ -13,6 +13,7 @@ struct SettingsView: View {
             Toggle("Launch at login", isOn: $launchAtLogin)
                 .onChange(of: launchAtLogin) { _, enable in
                     try? enable ? SMAppService.mainApp.register() : SMAppService.mainApp.unregister()
+                    launchAtLogin = SMAppService.mainApp.status == .enabled
                 }
         }
         .padding(20)
