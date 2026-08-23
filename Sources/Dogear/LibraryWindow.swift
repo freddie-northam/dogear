@@ -1,6 +1,12 @@
 import DogearKit
 import SwiftUI
 
+enum NotesImportState: Equatable {
+    case confirm
+    case running
+    case finished(String)
+}
+
 struct LibraryWindow: View {
     @EnvironmentObject var model: AppModel
     @State private var selection: String = Library.unsorted
@@ -9,6 +15,8 @@ struct LibraryWindow: View {
     @State private var renamingFolder: String?
     @State private var renameDraft = ""
     @State private var renameCollided = false
+    @State private var showingImport = false
+    @State private var importState: NotesImportState = .confirm
     private let archiveID = "__archive__"
     private let favoritesID = "__favorites__"
 
@@ -83,13 +91,17 @@ struct LibraryWindow: View {
         .searchable(text: $query, prompt: "Search bookmarks")
         .navigationTitle("Dogear")
         .toolbar {
-            Button {
-                pasteFromClipboard()
+            Menu {
+                Button("Save from Clipboard") { pasteFromClipboard() }
+                Button("Import from Notes...") { startImport() }
             } label: {
                 Image(systemName: "plus")
             }
-            .help("Save from clipboard")
-            .accessibilityLabel("Save from clipboard")
+            .help("Add bookmarks")
+            .accessibilityLabel("Add bookmarks")
+        }
+        .sheet(isPresented: $showingImport) {
+            NotesImportSheet(state: $importState, run: runNotesImport)
         }
         .alert("No Link Found", isPresented: $pasteFailed) {
             Button("OK") {}
@@ -158,6 +170,10 @@ struct LibraryWindow: View {
                     Text("You can paste many links at once. Copy them from Apple Notes and Dogear saves each one.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    Button("Import from Notes...") { startImport() }
+                        .buttonStyle(.plain)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
         } else {
@@ -169,6 +185,41 @@ struct LibraryWindow: View {
     private func pasteFromClipboard() {
         let text = NSPasteboard.general.string(forType: .string) ?? ""
         if model.capture(text: text).total == 0 { pasteFailed = true }
+    }
+
+    private func startImport() {
+        importState = .confirm
+        showingImport = true
+    }
+
+    private func runNotesImport() {
+        importState = .running
+        // ponytail: reads every note serially in one AppleScript call;
+        // per-folder selection and incremental import can come later.
+        Task.detached {
+            let bodies = readNotesBodies()
+            await MainActor.run { finishImport(with: bodies) }
+        }
+    }
+
+    private func finishImport(with bodies: String?) {
+        guard let bodies else {
+            importState = .finished(
+                "Dogear could not read Notes. Open System Settings, Privacy and Security, Automation, and allow Dogear to control Notes.")
+            return
+        }
+        let result = model.capture(urls: URLCleaner.allHTTPURLs(inHTML: bodies))
+        if result.total == 0 {
+            importState = .finished("No links found in your notes.")
+        } else if result.new == 0 {
+            importState = .finished(result.total == 1
+                ? "This link was already saved."
+                : "All \(result.total) were already saved.")
+        } else {
+            importState = .finished(result.total == 1
+                ? "Imported 1 link."
+                : "Imported \(result.total) links.")
+        }
     }
 
     private func saveRename() {
@@ -190,6 +241,57 @@ struct LibraryWindow: View {
 func copyToPasteboard(_ string: String) {
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString(string, forType: .string)
+}
+
+/// Reads every note body over Apple events, off the main thread. Returns nil
+/// when Notes cannot be read: permission denied or Notes unavailable.
+private func readNotesBodies() -> String? {
+    let source = "tell application \"Notes\" to get body of every note"
+    var errorInfo: NSDictionary?
+    guard let descriptor = NSAppleScript(source: source)?.executeAndReturnError(&errorInfo),
+          errorInfo == nil else { return nil }
+    // A list descriptor is 1-indexed. Zero items covers both an empty Notes
+    // account and a scalar result, whose text still comes back as stringValue.
+    guard descriptor.numberOfItems > 0 else { return descriptor.stringValue ?? "" }
+    return (1...descriptor.numberOfItems)
+        .compactMap { descriptor.atIndex($0)?.stringValue }
+        .joined(separator: "\n")
+}
+
+private struct NotesImportSheet: View {
+    @Binding var state: NotesImportState
+    let run: () -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Text("Import from Notes").font(.headline)
+            switch state {
+            case .confirm:
+                Text("Dogear reads your notes on this Mac to find links. macOS asks you for permission one time. Nothing leaves your Mac.")
+                    .font(.callout)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack {
+                    Button("Cancel") { dismiss() }
+                    Spacer()
+                    Button("Import", action: run)
+                        .buttonStyle(.borderedProminent)
+                        .keyboardShortcut(.defaultAction)
+                }
+            case .running:
+                ProgressView("Reading your notes...")
+            case .finished(let message):
+                Text(message)
+                    .font(.callout)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("Done") { dismiss() }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 320)
+    }
 }
 
 private struct NewFolderButton: View {

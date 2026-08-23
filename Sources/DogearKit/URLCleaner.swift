@@ -25,6 +25,14 @@ public enum URLCleaner {
         }
     }
 
+    /// Extraction for HTML bodies, like Apple Notes exports. HTML escapes "&"
+    /// as "&amp;" inside href values, and the detector would keep the escaped
+    /// form and corrupt the query string. Unescape it, then reuse the text path.
+    /// ponytail: only &amp; is unescaped; other entities rarely appear inside URLs.
+    public static func allHTTPURLs(inHTML html: String) -> [URL] {
+        allHTTPURLs(in: html.replacingOccurrences(of: "&amp;", with: "&"))
+    }
+
     public static func canonicalString(_ url: URL) -> String {
         guard var parts = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
             return url.absoluteString
