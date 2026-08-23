@@ -64,6 +64,51 @@ private func tempDir() -> URL {
     #expect(updated.manuallyFiled)
 }
 
+@Test func autoFileBatchWritesOnce() throws {
+    let store = try BookmarkStore(directory: tempDir())
+    let (a, _) = store.add(url: URL(string: "https://a.com/1")!)
+    let (b, _) = store.add(url: URL(string: "https://a.com/2")!)
+    let (c, _) = store.add(url: URL(string: "https://a.com/3")!)
+    var changes = 0
+    store.onChange = { changes += 1 }
+    let applied = store.autoFile([
+        (id: a.id, folder: "Recipes"),
+        (id: b.id, folder: "Recipes"),
+        (id: c.id, folder: "Recipes"),
+    ])
+    #expect(applied == 3)
+    #expect(changes == 1)
+    #expect(store.library.bookmarks.allSatisfy { $0.folder == "Recipes" })
+}
+
+@Test func autoFileSkipsManuallyFiledAndMoved() throws {
+    let store = try BookmarkStore(directory: tempDir())
+    let (a, _) = store.add(url: URL(string: "https://a.com/1")!)
+    let (b, _) = store.add(url: URL(string: "https://a.com/2")!)
+    let (c, _) = store.add(url: URL(string: "https://a.com/3")!)
+    store.refile(id: a.id, to: "Shows")
+    let applied = store.autoFile([
+        (id: a.id, folder: "Recipes"),
+        (id: b.id, folder: "Recipes"),
+        (id: c.id, folder: "Recipes"),
+    ])
+    #expect(applied == 2)
+    #expect(store.library.bookmarks.first { $0.id == a.id }?.folder == "Shows")
+    #expect(store.library.bookmarks.first { $0.id == b.id }?.folder == "Recipes")
+    #expect(store.library.bookmarks.first { $0.id == c.id }?.folder == "Recipes")
+}
+
+@Test func autoFileSkipsUnknownFolder() throws {
+    let store = try BookmarkStore(directory: tempDir())
+    let (a, _) = store.add(url: URL(string: "https://a.com/1")!)
+    var changes = 0
+    store.onChange = { changes += 1 }
+    let applied = store.autoFile([(id: a.id, folder: "Not A Real Folder")])
+    #expect(applied == 0)
+    #expect(changes == 0)
+    #expect(store.library.bookmarks.first?.folder == Library.unsorted)
+}
+
 @Test func removeFolderMovesBookmarksToUnsorted() throws {
     let store = try BookmarkStore(directory: tempDir())
     let (bookmark, _) = store.add(url: URL(string: "https://a.com/1")!)

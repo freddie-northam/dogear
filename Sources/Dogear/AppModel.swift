@@ -52,7 +52,7 @@ final class AppModel: ObservableObject {
     func fileUnsorted() async -> Int {
         let categorizer = CategorizerFactory.make()
         let unsorted = store.bookmarks(in: Library.unsorted)
-        var filed = 0
+        var assignments: [(id: UUID, folder: String)] = []
         for bookmark in unsorted {
             let metadata = FetchedMetadata(
                 title: bookmark.title, author: bookmark.author,
@@ -61,11 +61,10 @@ final class AppModel: ObservableObject {
             let folders = store.library.folders
             if let folder = await categorizer.categorize(metadata, url: url, folders: folders),
                folder != Library.unsorted {
-                store.autoFile(id: bookmark.id, to: folder)
-                filed += 1
+                assignments.append((id: bookmark.id, folder: folder))
             }
         }
-        return filed
+        return store.autoFile(assignments)
     }
 
     func capture(urls: [URL]) -> CaptureResult {
