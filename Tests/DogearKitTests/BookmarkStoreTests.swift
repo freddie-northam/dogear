@@ -131,3 +131,39 @@ private func tempDir() -> URL {
     _ = reloaded.search("item/49")
     #expect(ContinuousClock.now - searchStart < .milliseconds(100))
 }
+
+// Writes a library.json into a fresh temp directory, so a test can open a store on a
+// folder list that the public API alone cannot produce (Unsorted not last, or empty).
+private func storeSeeded(folders: [String]) throws -> BookmarkStore {
+    let dir = tempDir()
+    let data = try JSONEncoder().encode(Library(folders: folders, bookmarks: []))
+    try data.write(to: dir.appendingPathComponent("library.json"))
+    return try BookmarkStore(directory: dir)
+}
+
+@Test func addFolderInsertsBeforeUnsortedWhereverItSits() throws {
+    let store = try storeSeeded(folders: [Library.unsorted, "Recipes"])
+    store.addFolder("Shows")
+    #expect(store.library.folders == ["Shows", Library.unsorted, "Recipes"])
+}
+
+@Test func addFolderOnEmptyFolderListAppends() throws {
+    let store = try storeSeeded(folders: [])
+    store.addFolder("Shows")
+    #expect(store.library.folders == ["Shows"])
+}
+
+@Test func renameFolderRejectsAnEmptyName() throws {
+    let store = try BookmarkStore(directory: tempDir())
+    store.renameFolder("Recipes", to: "")
+    #expect(store.library.folders == Library.defaultFolders)
+}
+
+@Test func removeFolderIgnoresAnUnknownName() throws {
+    let store = try BookmarkStore(directory: tempDir())
+    var changes = 0
+    store.onChange = { changes += 1 }
+    store.removeFolder("Nope")
+    #expect(changes == 0)
+    #expect(store.library.folders == Library.defaultFolders)
+}
