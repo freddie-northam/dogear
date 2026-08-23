@@ -44,17 +44,30 @@ final class AppModel: ObservableObject {
     /// Saves every http(s) link in the text. Deduplication applies per URL,
     /// so a link that appears twice in one paste counts once.
     func capture(text: String) -> CaptureResult {
-        var touched = Set<UUID>()
-        var newCount = 0
-        for url in URLCleaner.allHTTPURLs(in: text) {
-            let (bookmark, isNew) = store.add(url: url)
-            touched.insert(bookmark.id)
-            if isNew {
-                newCount += 1
-                let id = bookmark.id
-                Task { await enrichment.enrich(id: id) }
+        capture(urls: URLCleaner.allHTTPURLs(in: text))
+    }
+
+    func capture(urls: [URL]) -> CaptureResult {
+        let (new, touched) = store.add(urls: urls)
+        let ids = new.map(\.id)
+        if !ids.isEmpty {
+            let enrichment = enrichment
+            Task {
+                // At most four enrichments in flight: a big Notes paste must not
+                // open one network fetch per link at once.
+                await withTaskGroup(of: Void.self) { group in
+                    var iterator = ids.makeIterator()
+                    for _ in 0..<4 {
+                        guard let id = iterator.next() else { break }
+                        group.addTask { await enrichment.enrich(id: id) }
+                    }
+                    for await _ in group {
+                        guard let id = iterator.next() else { continue }
+                        group.addTask { await enrichment.enrich(id: id) }
+                    }
+                }
             }
         }
-        return CaptureResult(new: newCount, total: touched.count)
+        return CaptureResult(new: ids.count, total: touched)
     }
 }

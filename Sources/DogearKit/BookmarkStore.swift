@@ -39,12 +39,36 @@ public final class BookmarkStore {
 
     @discardableResult
     public func add(url: URL) -> (bookmark: Bookmark, isNew: Bool) {
+        let result = insert(url: url)
+        mutated()
+        return result
+    }
+
+    /// Batch add with one disk write and one change notification, so a paste
+    /// of many links does not encode the whole library once per link.
+    /// Returns the new bookmarks in paste order and the count of distinct
+    /// bookmarks touched (new plus re-saved duplicates).
+    public func add(urls: [URL]) -> (new: [Bookmark], touched: Int) {
+        guard !urls.isEmpty else { return ([], 0) }
+        var new: [Bookmark] = []
+        var touched = Set<UUID>()
+        for url in urls {
+            let (bookmark, isNew) = insert(url: url)
+            touched.insert(bookmark.id)
+            if isNew { new.append(bookmark) }
+        }
+        mutated()
+        return (new, touched.count)
+    }
+
+    /// Shared insert path: dedupe on the canonical URL, bump a duplicate to
+    /// the top and clear its done state. Does not save; callers call mutated().
+    private func insert(url: URL) -> (bookmark: Bookmark, isNew: Bool) {
         let canonical = URLCleaner.canonicalString(url)
         if let index = library.bookmarks.firstIndex(where: { $0.url == canonical }) {
             var existing = library.bookmarks.remove(at: index)
             existing.doneAt = nil
             library.bookmarks.insert(existing, at: 0)
-            mutated()
             return (existing, false)
         }
         let bookmark = Bookmark(
@@ -53,7 +77,6 @@ public final class BookmarkStore {
             createdAt: Date(), doneAt: nil, hasThumbnail: false, manuallyFiled: false
         )
         library.bookmarks.insert(bookmark, at: 0)
-        mutated()
         return (bookmark, true)
     }
 
