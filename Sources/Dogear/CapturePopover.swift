@@ -12,6 +12,9 @@ struct CapturePopover: View {
     @State private var hint: String?
     @State private var pick: Bookmark?
     @State private var isPickHovering = false
+    // Distinct links in the field, so the button count matches what a save
+    // reports. Held as state and updated per edit, not recomputed per render.
+    @State private var detectedURLCount = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -31,6 +34,21 @@ struct CapturePopover: View {
         .onAppear {
             pick = model.store.pick()
             Task { await prefill() }
+        }
+        .onChange(of: text) {
+            detectedURLCount = Set(URLCleaner.allHTTPURLs(in: text).map(URLCleaner.canonicalString)).count
+        }
+        .onChange(of: model.revision) {
+            // Enrichment lands title and thumbnail after the pick was rolled;
+            // re-read it by id so the row updates live. A pick that was deleted
+            // or marked done elsewhere rolls over to a fresh one.
+            guard let id = pick?.id else { return }
+            let fresh = model.store.library.bookmarks.first { $0.id == id }
+            if let fresh, !fresh.isDone {
+                pick = fresh
+            } else {
+                pick = model.store.pick(excluding: id)
+            }
         }
         .alert("Storage Error", isPresented: Binding(
             get: { model.storageError != nil },
@@ -63,11 +81,6 @@ struct CapturePopover: View {
         }
     }
 
-    /// Distinct links in the field, so the button count matches what a save reports.
-    private var detectedURLCount: Int {
-        Set(URLCleaner.allHTTPURLs(in: text).map(URLCleaner.canonicalString)).count
-    }
-
     private func prefill() async {
         hint = nil
         // Check the clipboard shape first; read the content only on a positive match.
@@ -89,7 +102,9 @@ struct CapturePopover: View {
         text = ""
         if pick == nil { pick = model.store.pick() }
         if result.total > 1 {
-            hint = "Saved \(result.total) links."
+            hint = result.new == 0
+                ? "All \(result.total) were already saved."
+                : "Saved \(result.total) links."
         } else if result.new == 1 {
             dismiss()
         } else {
@@ -145,6 +160,7 @@ struct CapturePopover: View {
             .buttonStyle(.borderless)
             .foregroundStyle(.secondary)
             .help("Mark done")
+            .accessibilityLabel("Mark done")
             Button {
                 self.pick = model.store.pick(excluding: pick.id)
             } label: {
@@ -153,6 +169,7 @@ struct CapturePopover: View {
             .buttonStyle(.borderless)
             .foregroundStyle(.secondary)
             .help("Show another")
+            .accessibilityLabel("Show another")
         }
         .padding(6)
         .background(
