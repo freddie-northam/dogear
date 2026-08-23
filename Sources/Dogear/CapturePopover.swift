@@ -15,9 +15,11 @@ struct CapturePopover: View {
     // Distinct links in the field, so the button count matches what a save
     // reports. Held as state and updated per edit, not recomputed per render.
     @State private var detectedURLCount = 0
+    @AppStorage("popoverListTab") private var listTab = "recents"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            header
             captureRow
             if let hint {
                 Text(hint).font(.caption).foregroundStyle(.secondary)
@@ -27,7 +29,7 @@ struct CapturePopover: View {
                 pickSection(pick)
             }
             Divider()
-            footer
+            listSection
         }
         .padding(14)
         .frame(width: 350)
@@ -57,6 +59,48 @@ struct CapturePopover: View {
             Button("OK") { model.storageError = nil }
         } message: {
             Text(model.storageError ?? "")
+        }
+    }
+
+    // MARK: Header
+
+    private var header: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "bookmark.fill")
+                .font(.system(size: 18))
+                .foregroundStyle(.pink)
+                .accessibilityLabel("Dogear")
+            Spacer()
+            Button {
+                openWindow(id: "library")
+                dismiss()
+            } label: {
+                Image(systemName: "books.vertical")
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(.secondary)
+            .help("Open Library")
+            .accessibilityLabel("Open Library")
+            Menu {
+                SettingsLink {
+                    Label("Settings...", systemImage: "gearshape")
+                }
+                .keyboardShortcut(",")
+                Button {
+                    NSApp.terminate(nil)
+                } label: {
+                    Label("Quit Dogear", systemImage: "power")
+                }
+                .keyboardShortcut("q")
+            } label: {
+                Image(systemName: "ellipsis.circle")
+            }
+            .buttonStyle(.borderless)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .foregroundStyle(.secondary)
+            .help("More")
+            .accessibilityLabel("More actions")
         }
     }
 
@@ -214,32 +258,71 @@ struct CapturePopover: View {
         return parts.joined(separator: ", ") + " waiting."
     }
 
-    // MARK: Footer
+    // MARK: Recents and Favourites
 
-    private var footer: some View {
-        HStack(spacing: 12) {
-            Button {
-                openWindow(id: "library")
-                dismiss()
-            } label: {
-                Label("Open Library", systemImage: "books.vertical")
+    private var listSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Picker("List", selection: $listTab) {
+                Text("Recents").tag("recents")
+                Text("Favourites").tag("favourites")
             }
-            .buttonStyle(.plain)
-            Spacer()
-            SettingsLink {
-                Image(systemName: "gearshape")
+            .pickerStyle(.segmented)
+            .controlSize(.mini)
+            .labelsHidden()
+            .fixedSize()
+            let items = listItems
+            if items.isEmpty {
+                Text(listTab == "favourites"
+                    ? "No favourites yet. Star a bookmark in the library."
+                    : "Nothing saved yet.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(items) { PopoverListRow(bookmark: $0) }
             }
-            .buttonStyle(.borderless)
-            .help("Settings")
-            Button {
-                NSApp.terminate(nil)
-            } label: {
-                Image(systemName: "power")
-            }
-            .buttonStyle(.borderless)
-            .help("Quit Dogear")
         }
-        .font(.caption)
-        .foregroundStyle(.secondary)
+    }
+
+    private var listItems: [Bookmark] {
+        let items = listTab == "favourites"
+            ? model.store.favorites()
+            : model.store.library.bookmarks
+                .filter { !$0.isDone }
+                .sorted { $0.createdAt > $1.createdAt }
+        return Array(items.prefix(3))
+    }
+}
+
+private struct PopoverListRow: View {
+    let bookmark: Bookmark
+    @Environment(\.dismiss) private var dismiss
+    @State private var isHovering = false
+
+    var body: some View {
+        Button {
+            if let url = URL(string: bookmark.url) { NSWorkspace.shared.open(url) }
+            dismiss()
+        } label: {
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(folderColor(for: bookmark.folder).opacity(0.2))
+                    .frame(width: 24, height: 24)
+                    .overlay(
+                        Image(systemName: folderSymbol(for: bookmark.folder))
+                            .font(.system(size: 11))
+                            .foregroundStyle(folderColor(for: bookmark.folder))
+                    )
+                Text(bookmark.title).font(.callout).lineLimit(1)
+                Spacer(minLength: 8)
+                if isHovering {
+                    Image(systemName: "arrow.up.right")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
     }
 }
