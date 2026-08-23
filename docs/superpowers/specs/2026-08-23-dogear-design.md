@@ -1,18 +1,18 @@
-# Stash: design specification
+# Dogear: design specification
 
 Date: 2026-08-23
 Status: approved design, ready for implementation planning
-Working name: Stash (rename is a one-line change)
 
 ## 1. Purpose
 
-Stash is a small open source macOS app. It captures links from TikTok, X, and the web, and it files them into folders such as Recipes, Restaurants, Shows, and Articles. The app must stay clean and lightweight: native code, no server, no accounts, no third-party dependencies.
+Dogear is a small open source macOS app. It captures links from TikTok, X, and the web, and it files them into folders such as Recipes, Restaurants, Shows, and Articles. The app must stay clean and lightweight: native code, no server, no accounts, no third-party dependencies.
 
 ## 2. Scope
 
 ### In scope for v1
 
 - Menu bar app with a quick-add popover.
+- Copied-link detection: the menu bar icon lights up when the clipboard holds a URL.
 - Library window with folders, thumbnails, and search.
 - Automatic metadata fetch (title, author, thumbnail) per site.
 - Automatic categorisation: on-device LLM on macOS 26+, keyword rules otherwise.
@@ -24,7 +24,6 @@ Stash is a small open source macOS app. It captures links from TikTok, X, and th
 ### Out of scope for v1
 
 - Global hotkey.
-- Background clipboard watcher (the popover reads the clipboard only when it opens).
 - iOS capture, browser extension, sync, and export.
 - Instagram support beyond the generic fallback (Instagram requires login for metadata).
 
@@ -36,6 +35,8 @@ Stash is a small open source macOS app. It captures links from TikTok, X, and th
 - Xcode project in a public GitHub repository. Later releases ship as a notarized DMG.
 
 ## 4. Capture flow
+
+**Copied-link detection.** The app polls `NSPasteboard.general.changeCount` on a 1-second timer. This is an integer comparison with no content read and no measurable CPU cost; it is the only mechanism macOS offers, and it is what every clipboard tool uses. When the count changes, pattern detection checks for a URL shape without a content read. On a match, the menu bar icon changes from `bookmark` to `bookmark.fill`. Nothing appears on screen. With Universal Clipboard, a link copied on iPhone lights the icon on the Mac. A "Detect copied links" setting (default on) disables the timer entirely.
 
 1. The user clicks the menu bar icon. A popover opens.
 2. If the clipboard contains a URL, the URL field is pre-filled. Universal Clipboard carries links copied on iPhone. The app uses NSPasteboard pattern detection to check for a URL without a content read, and reads the clipboard only on a positive match. This limits macOS 15 pasteboard privacy prompts to one grant.
@@ -91,16 +92,16 @@ Rules:
 
 **Storage**:
 
-- One JSON file in `~/Library/Application Support/Stash/`, written atomically on every change.
+- One JSON file in `~/Library/Application Support/Dogear/`, written atomically on every change.
 - Thumbnails as image files in a `thumbnails/` subdirectory, named by bookmark id.
 - Bookmark record: `id`, `url`, `title`, `author?`, `note?`, `folder`, `source` (tiktok | x | web), `createdAt`, `doneAt?`, `hasThumbnail`, `manuallyFiled` (bool). A bookmark is archived when `doneAt` is set.
 - No database. JSON handles thousands of bookmarks. Revisit only if real usage proves otherwise.
 
 ## 8. Icons
 
-- All in-app icons are SF Symbols: `bookmark` for the menu bar, `fork.knife` (Recipes), `mappin.and.ellipse` (Restaurants), `tv` (Shows), `doc.text` (Articles), `tray` (Unsorted).
+- All in-app icons are SF Symbols: `bookmark` for the menu bar (`bookmark.fill` when a copied link is detected), `fork.knife` (Recipes), `mappin.and.ellipse` (Restaurants), `tv` (Shows), `doc.text` (Articles), `tray` (Unsorted).
 - Custom folders pick from a curated SF Symbol palette.
-- The app icon is one piece of custom artwork (Apple's license forbids SF Symbols as app icons).
+- The app icon is the bookmark glyph in `assets/logo-glyph.png` centered on a macOS rounded-rect canvas. The glyph matches the MIT-licensed Feather/Lucide bookmark shape, so it is safe to redistribute. Apple's license forbids SF Symbols as app icons, which this avoids.
 - No TikTok or X brand logos ship in the repository. Source badges show the domain name or a generic `link` symbol.
 
 ## 9. Open source
