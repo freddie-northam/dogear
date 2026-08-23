@@ -44,6 +44,14 @@ struct LibraryWindow: View {
         }
         .searchable(text: $query, prompt: "Search bookmarks")
         .navigationTitle("Dogear")
+        .alert("Storage Error", isPresented: Binding(
+            get: { model.storageError != nil },
+            set: { if !$0 { model.storageError = nil } }
+        )) {
+            Button("OK") { model.storageError = nil }
+        } message: {
+            Text(model.storageError ?? "")
+        }
     }
 
     private var visibleBookmarks: [Bookmark] {
@@ -126,6 +134,8 @@ struct BookmarkCard: View {
                     Text(author).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
                 Spacer()
+                Text(bookmark.createdAt, format: .dateTime.day().month())
+                    .font(.caption2).foregroundStyle(.tertiary)
                 Text(host).font(.caption2).foregroundStyle(.tertiary)
             }
         }
