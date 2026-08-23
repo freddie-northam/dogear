@@ -10,10 +10,21 @@ struct LibraryWindow: View {
     @State private var renameDraft = ""
     @State private var renameCollided = false
     private let archiveID = "__archive__"
+    private let favoritesID = "__favorites__"
 
     var body: some View {
         NavigationSplitView {
             List(selection: $selection) {
+                Section {
+                    Label {
+                        Text("Favourites")
+                    } icon: {
+                        Image(systemName: "star.fill")
+                            .foregroundStyle(.pink)
+                    }
+                    .badge(model.store.favorites().count)
+                    .tag(favoritesID)
+                }
                 Section("Folders") {
                     ForEach(model.store.library.folders, id: \.self) { folder in
                         Label {
@@ -38,7 +49,7 @@ struct LibraryWindow: View {
                 }
             }
             .contextMenu(forSelectionType: String.self) { folders in
-                if let folder = folders.first, folder != archiveID {
+                if let folder = folders.first, folder != archiveID, folder != favoritesID {
                     Button("Copy as Markdown List") {
                         copyToPasteboard(Bookmark.markdownList(model.store.bookmarks(in: folder)))
                     }
@@ -115,6 +126,7 @@ struct LibraryWindow: View {
     private var visibleBookmarks: [Bookmark] {
         if !trimmedQuery.isEmpty { return model.store.search(trimmedQuery) }
         if selection == archiveID { return model.store.archive() }
+        if selection == favoritesID { return model.store.favorites() }
         return model.store.bookmarks(in: selection)
     }
 
@@ -122,6 +134,12 @@ struct LibraryWindow: View {
         let bookmarks = visibleBookmarks
         if bookmarks.isEmpty, !trimmedQuery.isEmpty {
             ContentUnavailableView.search(text: trimmedQuery)
+        } else if bookmarks.isEmpty, selection == favoritesID {
+            ContentUnavailableView(
+                "No favourites yet",
+                systemImage: "star",
+                description: Text("Hover a card and click the star.")
+            )
         } else if bookmarks.isEmpty, selection == archiveID {
             ContentUnavailableView(
                 "Nothing archived yet",
@@ -252,6 +270,11 @@ struct BookmarkCard: View {
     private var card: some View {
         VStack(alignment: .leading, spacing: 6) {
             thumbnail
+                .overlay(alignment: .topTrailing) {
+                    if isHovering || bookmark.isFavorite {
+                        favoriteStar
+                    }
+                }
             Text(bookmark.title).font(.headline).lineLimit(2)
             if let note = bookmark.note, !note.isEmpty {
                 Text(note).font(.caption).foregroundStyle(.secondary).lineLimit(2)
@@ -297,6 +320,22 @@ struct BookmarkCard: View {
         }
     }
 
+    private var favoriteStar: some View {
+        Button {
+            model.store.toggleFavorite(id: bookmark.id)
+        } label: {
+            Image(systemName: bookmark.isFavorite ? "star.fill" : "star")
+                .font(.caption)
+                .foregroundStyle(.pink)
+                .padding(4)
+                .background(.thinMaterial, in: Circle())
+        }
+        .buttonStyle(.borderless)
+        .help(bookmark.isFavorite ? "Remove from Favourites" : "Add to Favourites")
+        .accessibilityLabel(bookmark.isFavorite ? "Remove from Favourites" : "Add to Favourites")
+        .padding(6)
+    }
+
     @ViewBuilder private var thumbnail: some View {
         if bookmark.hasThumbnail,
            let image = NSImage(contentsOf: model.thumbnails.fileURL(for: bookmark.id)) {
@@ -317,6 +356,9 @@ struct BookmarkCard: View {
             Button("Move Back") { model.store.markUndone(id: bookmark.id) }
         } else {
             Button("Mark Done") { model.store.markDone(id: bookmark.id) }
+        }
+        Button(bookmark.isFavorite ? "Remove from Favourites" : "Add to Favourites") {
+            model.store.toggleFavorite(id: bookmark.id)
         }
         Menu("Move To") {
             ForEach(model.store.library.folders, id: \.self) { folder in
