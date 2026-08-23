@@ -28,8 +28,15 @@ struct CapturePopover: View {
                 Divider()
                 pickSection(pick)
             }
-            Divider()
-            listSection
+            // An empty store gets one friendly line, not tabs over nothing.
+            if model.store.library.bookmarks.isEmpty {
+                Text("Copy a link to get started.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Divider()
+                listSection
+            }
         }
         .padding(14)
         .frame(width: 350)
@@ -66,19 +73,24 @@ struct CapturePopover: View {
 
     private var header: some View {
         HStack(spacing: 12) {
-            Image(systemName: "bookmark.fill")
-                .font(.system(size: 18))
-                .foregroundStyle(.pink)
-                .accessibilityLabel("Dogear")
+            HStack(spacing: 6) {
+                Image(systemName: "bookmark.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.pink)
+                Text("Dogear")
+                    .font(.headline)
+            }
+            .accessibilityLabel("Dogear")
             Spacer()
             Button {
                 openWindow(id: "library")
                 dismiss()
             } label: {
                 Image(systemName: "books.vertical")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.secondary)
             }
             .buttonStyle(.borderless)
-            .foregroundStyle(.secondary)
             .help("Open Library")
             .accessibilityLabel("Open Library")
             Menu {
@@ -94,11 +106,12 @@ struct CapturePopover: View {
                 .keyboardShortcut("q")
             } label: {
                 Image(systemName: "ellipsis.circle")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.secondary)
             }
             .buttonStyle(.borderless)
             .menuIndicator(.hidden)
             .fixedSize()
-            .foregroundStyle(.secondary)
             .help("More")
             .accessibilityLabel("More actions")
         }
@@ -118,10 +131,13 @@ struct CapturePopover: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
             .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
-            Button(detectedURLCount > 1 ? "Save \(detectedURLCount)" : "Save", action: save)
-                .buttonStyle(.borderedProminent)
-                .keyboardShortcut(.defaultAction)
-                .disabled(detectedURLCount == 0)
+            // The button exists only when there is something to save. An empty
+            // field shows no dead disabled slab; Return still submits.
+            if detectedURLCount > 0 {
+                Button(detectedURLCount > 1 ? "Save \(detectedURLCount)" : "Save", action: save)
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
+            }
         }
     }
 
@@ -262,14 +278,12 @@ struct CapturePopover: View {
 
     private var listSection: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Picker("List", selection: $listTab) {
-                Text("Recents").tag("recents")
-                Text("Favourites").tag("favourites")
+            // Quiet text tabs, not segmented chrome: the selected tab reads as
+            // a section title, the other as an available lens.
+            HStack(spacing: 12) {
+                listTabButton("Recents", tag: "recents")
+                listTabButton("Favourites", tag: "favourites")
             }
-            .pickerStyle(.segmented)
-            .controlSize(.mini)
-            .labelsHidden()
-            .fixedSize()
             let items = listItems
             if items.isEmpty {
                 Text(listTab == "favourites"
@@ -281,6 +295,14 @@ struct CapturePopover: View {
                 ForEach(items) { PopoverListRow(bookmark: $0) }
             }
         }
+    }
+
+    private func listTabButton(_ title: String, tag: String) -> some View {
+        Button(title) { listTab = tag }
+            .buttonStyle(.plain)
+            .font(.caption.weight(listTab == tag ? .semibold : .regular))
+            .foregroundStyle(listTab == tag ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
+            .accessibilityAddTraits(listTab == tag ? .isSelected : [])
     }
 
     private var listItems: [Bookmark] {
