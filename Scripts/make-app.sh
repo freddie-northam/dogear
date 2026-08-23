@@ -29,6 +29,16 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>LSMinimumSystemVersion</key><string>15.4</string>
     <key>LSUIElement</key><true/>
+    <key>NSServices</key>
+    <array>
+        <dict>
+            <key>NSMenuItem</key><dict><key>default</key><string>Save to Dogear</string></dict>
+            <key>NSMessage</key><string>saveToDogear</string>
+            <key>NSPortName</key><string>Dogear</string>
+            <key>NSSendTypes</key>
+            <array><string>public.url</string><string>public.utf8-plain-text</string></array>
+        </dict>
+    </array>
     <key>NSAppleEventsUsageDescription</key><string>Dogear reads your notes to find links you saved.</string>
     <key>NSHumanReadableCopyright</key><string>MIT License</string>
 </dict>
