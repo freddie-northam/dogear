@@ -136,8 +136,17 @@ public final class BookmarkStore {
         return library.bookmarks.filter {
             $0.title.lowercased().contains(needle)
                 || ($0.author?.lowercased().contains(needle) ?? false)
+                || ($0.note?.lowercased().contains(needle) ?? false)
                 || $0.url.lowercased().contains(needle)
         }
+    }
+
+    /// A random not-done bookmark to resurface. The given id is excluded when
+    /// another candidate exists, so "show another" never repeats itself.
+    public func pick(excluding excluded: UUID? = nil) -> Bookmark? {
+        let waiting = library.bookmarks.filter { !$0.isDone }
+        let fresh = waiting.filter { $0.id != excluded }
+        return (fresh.isEmpty ? waiting : fresh).randomElement()
     }
 
     // MARK: Persistence

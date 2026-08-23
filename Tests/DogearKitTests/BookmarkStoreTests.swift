@@ -87,6 +87,45 @@ private func tempDir() -> URL {
     #expect(store.search("zebra").isEmpty)
 }
 
+@Test func searchMatchesNote() throws {
+    let store = try BookmarkStore(directory: tempDir())
+    _ = store.add(url: URL(string: "https://a.com/tacos")!)
+    var updated = store.library.bookmarks[0]
+    updated.note = "make for game night"
+    store.update(updated)
+    #expect(store.search("game night").count == 1)
+}
+
+@Test func pickReturnsNilOnEmptyStore() throws {
+    let store = try BookmarkStore(directory: tempDir())
+    #expect(store.pick() == nil)
+}
+
+@Test func pickNeverReturnsADoneBookmark() throws {
+    let store = try BookmarkStore(directory: tempDir())
+    let (done, _) = store.add(url: URL(string: "https://a.com/1")!)
+    let (waiting, _) = store.add(url: URL(string: "https://a.com/2")!)
+    store.markDone(id: done.id)
+    for _ in 0..<20 {
+        #expect(store.pick()?.id == waiting.id)
+    }
+}
+
+@Test func pickExcludesTheGivenIDWhenAnotherCandidateExists() throws {
+    let store = try BookmarkStore(directory: tempDir())
+    let (a, _) = store.add(url: URL(string: "https://a.com/1")!)
+    let (b, _) = store.add(url: URL(string: "https://a.com/2")!)
+    for _ in 0..<20 {
+        #expect(store.pick(excluding: a.id)?.id == b.id)
+    }
+}
+
+@Test func pickFallsBackToTheExcludedBookmarkWhenItIsTheOnlyOne() throws {
+    let store = try BookmarkStore(directory: tempDir())
+    let (only, _) = store.add(url: URL(string: "https://a.com/1")!)
+    #expect(store.pick(excluding: only.id)?.id == only.id)
+}
+
 @Test func recoversFromCorruptStoreUsingBackup() throws {
     let dir = tempDir()
     let store = try BookmarkStore(directory: dir)
