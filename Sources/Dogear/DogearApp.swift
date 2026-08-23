@@ -13,7 +13,11 @@ private let idleIcon: NSImage = {
 
 private let linkDetectedIcon: NSImage = {
     let base = NSImage(systemSymbolName: "bookmark.fill", accessibilityDescription: "Dogear, link detected")!
-    let image = base.withSymbolConfiguration(NSImage.SymbolConfiguration(paletteColors: [.systemPink])) ?? base
+    // A non-template image keeps its intrinsic size instead of following the
+    // menu bar, so pin the symbol to the menu bar's standard point size.
+    let configuration = NSImage.SymbolConfiguration(pointSize: 14, weight: .regular)
+        .applying(NSImage.SymbolConfiguration(paletteColors: [.systemPink]))
+    let image = base.withSymbolConfiguration(configuration) ?? base
     image.isTemplate = false
     return image
 }()
