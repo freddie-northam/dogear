@@ -60,12 +60,17 @@ extension Bookmark {
 public struct Library: Codable, Equatable, Sendable {
     public var folders: [String]
     public var bookmarks: [Bookmark]
+    // Optional like Bookmark.favoritedAt: synthesized Codable decodes a missing
+    // key as nil, so libraries written before this field load unchanged.
+    public var schemaVersion: Int?
 
     public static let defaultFolders = ["Recipes", "Restaurants", "Shows", "Music", "Articles", "Unsorted"]
     public static let unsorted = "Unsorted"
+    public static let currentSchemaVersion = 2
 
-    public init(folders: [String], bookmarks: [Bookmark]) {
+    public init(folders: [String], bookmarks: [Bookmark], schemaVersion: Int? = nil) {
         self.folders = folders
         self.bookmarks = bookmarks
+        self.schemaVersion = schemaVersion
     }
 }
