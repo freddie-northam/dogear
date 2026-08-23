@@ -19,6 +19,9 @@ final class AppModel: ObservableObject {
         // Crashing here is correct: never run against a store we cannot trust.
         store = try! BookmarkStore(directory: supportDir)
         thumbnails = try! ThumbnailCache(directory: supportDir.appendingPathComponent("thumbnails"))
+        if store.didRecoverFromBackup {
+            storageError = "Dogear restored your bookmarks from a backup. Recent changes may be missing."
+        }
         let client = URLSessionHTTPClient()
         enrichment = EnrichmentService(
             store: store,
