@@ -1,8 +1,22 @@
 import AppKit
 
-// Renders assets/logo-glyph.png onto a white rounded rect at every icon size,
-// producing build/AppIcon.iconset for iconutil.
+// Renders assets/logo-glyph.png in white onto a pink rounded rect at every
+// icon size, producing build/AppIcon.iconset for iconutil.
 let glyph = NSImage(contentsOfFile: "assets/logo-glyph.png")!
+
+// A white-tinted copy of the glyph: fill with white where the glyph has pixels.
+let whiteGlyph: NSImage = {
+    let tinted = NSImage(size: glyph.size)
+    tinted.lockFocus()
+    glyph.draw(in: NSRect(origin: .zero, size: glyph.size))
+    NSColor.white.set()
+    NSRect(origin: .zero, size: glyph.size).fill(using: .sourceAtop)
+    tinted.unlockFocus()
+    return tinted
+}()
+
+let brandPink = NSColor.systemPink
+let strokePink = NSColor.systemPink.blended(withFraction: 0.3, of: .black) ?? NSColor.systemPink
 let iconsetPath = "build/AppIcon.iconset"
 try FileManager.default.createDirectory(atPath: iconsetPath, withIntermediateDirectories: true)
 
@@ -17,13 +31,13 @@ func renderPNG(pixels: Int) -> Data {
     // Apple icon grid: the squircle occupies ~80% of the canvas.
     let rect = full.insetBy(dx: Double(pixels) * 0.1, dy: Double(pixels) * 0.1)
     let path = NSBezierPath(roundedRect: rect, xRadius: rect.width * 0.22, yRadius: rect.width * 0.22)
-    NSColor.white.setFill()
+    brandPink.setFill()
     path.fill()
-    NSColor.black.withAlphaComponent(0.08).setStroke()
+    strokePink.withAlphaComponent(0.4).setStroke()
     path.lineWidth = max(1, Double(pixels) / 256)
     path.stroke()
     let glyphInset = rect.width * 0.22
-    glyph.draw(in: rect.insetBy(dx: glyphInset, dy: glyphInset))
+    whiteGlyph.draw(in: rect.insetBy(dx: glyphInset, dy: glyphInset))
 
     NSGraphicsContext.restoreGraphicsState()
     return rep.representation(using: .png, properties: [:])!

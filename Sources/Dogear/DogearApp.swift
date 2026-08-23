@@ -1,6 +1,23 @@
 import AppKit
 import SwiftUI
 
+// Menu bar icons. The idle icon is a template image, so it follows the menu
+// bar appearance. The detected icon opts out of template rendering to show
+// the brand pink; MenuBarExtra strips color from template images, so a
+// palette-configured NSImage is the one way the pink survives.
+private let idleIcon: NSImage = {
+    let image = NSImage(systemSymbolName: "bookmark", accessibilityDescription: "Dogear")!
+    image.isTemplate = true
+    return image
+}()
+
+private let linkDetectedIcon: NSImage = {
+    let base = NSImage(systemSymbolName: "bookmark.fill", accessibilityDescription: "Dogear, link detected")!
+    let image = base.withSymbolConfiguration(NSImage.SymbolConfiguration(paletteColors: [.systemPink])) ?? base
+    image.isTemplate = false
+    return image
+}()
+
 @main
 struct DogearApp: App {
     @StateObject private var model = AppModel()
@@ -18,6 +35,7 @@ struct DogearApp: App {
             CapturePopover()
                 .environmentObject(model)
                 .environmentObject(clipboard)
+                .tint(.pink)
                 .onAppear {
                     if !hasLaunchedBefore {
                         hasLaunchedBefore = true
@@ -25,18 +43,20 @@ struct DogearApp: App {
                     }
                 }
         } label: {
-            Image(systemName: clipboard.linkDetected ? "bookmark.fill" : "bookmark")
+            Image(nsImage: clipboard.linkDetected ? linkDetectedIcon : idleIcon)
         }
         .menuBarExtraStyle(.window)
 
         Window("Library", id: "library") {
             LibraryWindow()
                 .environmentObject(model)
+                .tint(.pink)
         }
         .defaultSize(width: 900, height: 600)
 
         Settings {
             SettingsView()
+                .tint(.pink)
         }
     }
 }
