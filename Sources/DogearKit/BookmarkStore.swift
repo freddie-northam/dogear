@@ -52,11 +52,14 @@ public final class BookmarkStore {
         guard !urls.isEmpty else { return ([], 0) }
         var new: [Bookmark] = []
         var touched = Set<UUID>()
-        for url in urls {
+        // Insert back to front: each insert lands at index 0, so the batch ends
+        // up at the top of the list in paste order, first pasted link first.
+        for url in urls.reversed() {
             let (bookmark, isNew) = insert(url: url)
             touched.insert(bookmark.id)
             if isNew { new.append(bookmark) }
         }
+        new.reverse()
         mutated()
         return (new, touched.count)
     }
@@ -150,8 +153,8 @@ public final class BookmarkStore {
 
     // MARK: Queries
 
-    // Newest-first by insertion order: add() and re-add both insert at index 0,
-    // so no sort is needed (and a re-add's bump stays visible here).
+    // Newest-first by insertion order: adds and re-adds land at the top of the
+    // array (a batch in paste order), so no sort is needed.
     public func bookmarks(in folder: String) -> [Bookmark] {
         library.bookmarks.filter { $0.folder == folder && !$0.isDone }
     }
