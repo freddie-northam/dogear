@@ -284,11 +284,11 @@ struct CapturePopover: View {
     }
 
     private var listItems: [Bookmark] {
+        // Recents follow the store's array order, the same order the library
+        // shows: a re-saved duplicate sits on top, matching its hint.
         let items = listTab == "favourites"
             ? model.store.favorites()
-            : model.store.library.bookmarks
-                .filter { !$0.isDone }
-                .sorted { $0.createdAt > $1.createdAt }
+            : model.store.library.bookmarks.filter { !$0.isDone }
         return Array(items.prefix(3))
     }
 }
