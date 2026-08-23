@@ -244,6 +244,26 @@ public final class BookmarkStore {
             .sorted { ($0.favoritedAt ?? .distantPast) > ($1.favoritedAt ?? .distantPast) }
     }
 
+    public struct Counts {
+        public var byFolder: [String: Int]
+        public var favorites: Int
+        public var archived: Int
+    }
+
+    /// One pass over the library instead of a filter-and-sort per sidebar
+    /// badge and per popover count line.
+    public func counts() -> Counts {
+        var byFolder: [String: Int] = [:]
+        var favorites = 0
+        var archived = 0
+        for bookmark in library.bookmarks {
+            if !bookmark.isDone { byFolder[bookmark.folder, default: 0] += 1 }
+            if bookmark.isFavorite { favorites += 1 }
+            if bookmark.isDone { archived += 1 }
+        }
+        return Counts(byFolder: byFolder, favorites: favorites, archived: archived)
+    }
+
     /// A not-done bookmark to resurface. Filed bookmarks come before Unsorted
     /// ones, and the draw is random among the ten oldest candidates, so the
     /// longest-waiting saves come back first. The given id is excluded when

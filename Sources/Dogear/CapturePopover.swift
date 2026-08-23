@@ -250,7 +250,7 @@ struct CapturePopover: View {
     /// symbol on a soft circle of the folder color.
     @ViewBuilder private func pickBadge(_ pick: Bookmark) -> some View {
         if pick.hasThumbnail,
-           let image = NSImage(contentsOf: model.thumbnails.fileURL(for: pick.id)) {
+           let image = model.thumbnails.image(for: pick.id) {
             Image(nsImage: image)
                 .resizable().aspectRatio(contentMode: .fill)
                 .frame(width: 36, height: 36)
@@ -272,16 +272,17 @@ struct CapturePopover: View {
         // Unsorted is an inbox, not a promise, so it stays out of the summary.
         // The top three filed folders keep the line short enough to never
         // truncate; an all-unsorted library gets a call to sort instead.
+        let counts = model.store.counts()
         let filed = model.store.library.folders
             .filter { $0 != Library.unsorted }
             .compactMap { folder -> (name: String, count: Int)? in
-                let count = model.store.bookmarks(in: folder).count
+                let count = counts.byFolder[folder, default: 0]
                 return count > 0 ? (folder, count) : nil
             }
             .sorted { $0.count > $1.count }
             .prefix(3)
         if filed.isEmpty {
-            let unsorted = model.store.bookmarks(in: Library.unsorted).count
+            let unsorted = counts.byFolder[Library.unsorted, default: 0]
             return unsorted > 0 ? "\(unsorted) to sort." : nil
         }
         let parts = filed.map { entry -> String in

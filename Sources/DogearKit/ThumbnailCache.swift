@@ -1,9 +1,15 @@
+import AppKit
 import Foundation
 import ImageIO
 import UniformTypeIdentifiers
 
-public struct ThumbnailCache: Sendable {
+/// A `final class` (not a struct) because it wraps an `NSCache`: the app
+/// creates exactly one instance in `AppModel` and shares it by reference.
+public final class ThumbnailCache: @unchecked Sendable {
     let directory: URL
+    // NSCache is thread-safe, so sharing it across the @unchecked Sendable
+    // boundary is safe without extra locking.
+    private let decoded = NSCache<NSUUID, NSImage>()
 
     /// Cards render at ~220 points, so 600 pixels covers Retina with room to
     /// spare; full-size og:images measured 200 MB across a real library.
@@ -16,6 +22,15 @@ public struct ThumbnailCache: Sendable {
 
     public func fileURL(for id: UUID) -> URL {
         directory.appendingPathComponent("\(id.uuidString).img")
+    }
+
+    /// Decoded image for display, read from the file once and cached
+    /// thereafter so repeated view body evaluations don't re-decode JPEGs.
+    public func image(for id: UUID) -> NSImage? {
+        if let cached = decoded.object(forKey: id as NSUUID) { return cached }
+        guard let image = NSImage(contentsOf: fileURL(for: id)) else { return nil }
+        decoded.setObject(image, forKey: id as NSUUID)
+        return image
     }
 
     /// Decodes, downsamples to `maxPixelSize`, and stores as JPEG. Data that
@@ -37,7 +52,9 @@ public struct ThumbnailCache: Sendable {
             destination, image,
             [kCGImageDestinationLossyCompressionQuality: 0.8] as CFDictionary)
         guard CGImageDestinationFinalize(destination) else { return false }
-        return (try? (encoded as Data).write(to: fileURL(for: id), options: .atomic)) != nil
+        let wrote = (try? (encoded as Data).write(to: fileURL(for: id), options: .atomic)) != nil
+        if wrote { decoded.removeObject(forKey: id as NSUUID) }
+        return wrote
     }
 
     public func exists(for id: UUID) -> Bool {
@@ -46,5 +63,6 @@ public struct ThumbnailCache: Sendable {
 
     public func remove(for id: UUID) {
         try? FileManager.default.removeItem(at: fileURL(for: id))
+        decoded.removeObject(forKey: id as NSUUID)
     }
 }

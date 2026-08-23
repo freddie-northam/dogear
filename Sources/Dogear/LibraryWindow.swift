@@ -101,7 +101,8 @@ struct LibraryWindow: View {
     // MARK: Sidebar
 
     private var sidebar: some View {
-        List(selection: $selection) {
+        let counts = model.store.counts()
+        return List(selection: $selection) {
             Section {
                 Label {
                     Text("Favourites")
@@ -109,7 +110,7 @@ struct LibraryWindow: View {
                     Image(systemName: "star.fill")
                         .foregroundStyle(.pink)
                 }
-                .badge(model.store.favorites().count)
+                .badge(counts.favorites)
                 .tag(favoritesID)
             }
             Section("Folders") {
@@ -120,7 +121,7 @@ struct LibraryWindow: View {
                         Image(systemName: folderSymbol(for: folder))
                             .foregroundStyle(folderColor(for: folder))
                     }
-                    .badge(model.store.bookmarks(in: folder).count)
+                    .badge(counts.byFolder[folder, default: 0])
                     .tag(folder)
                 }
             }
@@ -131,7 +132,7 @@ struct LibraryWindow: View {
                     Image(systemName: "checkmark.circle")
                         .foregroundStyle(.green)
                 }
-                .badge(model.store.archive().count)
+                .badge(counts.archived)
                 .tag(archiveID)
             }
         }
@@ -727,7 +728,7 @@ struct BookmarkCard: View {
 
     @ViewBuilder private var thumbnail: some View {
         if bookmark.hasThumbnail,
-           let image = NSImage(contentsOf: model.thumbnails.fileURL(for: bookmark.id)) {
+           let image = model.thumbnails.image(for: bookmark.id) {
             Image(nsImage: image)
                 .resizable().aspectRatio(contentMode: .fill)
                 .frame(minWidth: 0, maxWidth: .infinity)
@@ -886,7 +887,7 @@ struct BookmarkListRow: View {
 
     @ViewBuilder private var badge: some View {
         if bookmark.hasThumbnail,
-           let image = NSImage(contentsOf: model.thumbnails.fileURL(for: bookmark.id)) {
+           let image = model.thumbnails.image(for: bookmark.id) {
             Image(nsImage: image)
                 .resizable().aspectRatio(contentMode: .fill)
                 .frame(width: 24, height: 24)
