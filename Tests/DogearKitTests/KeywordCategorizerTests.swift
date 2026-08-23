@@ -12,17 +12,27 @@ private struct AccuracyEntry: Decodable {
 @Test func meetsSeventyPercentAccuracyOnFixtureSet() async throws {
     let fixtureURL = Bundle.module.url(forResource: "accuracy-set", withExtension: "json", subdirectory: "Fixtures")!
     let entries = try JSONDecoder().decode([AccuracyEntry].self, from: Data(contentsOf: fixtureURL))
-    #expect(entries.count == 40)
+    #expect(entries.count == 50)
 
     let categorizer = KeywordCategorizer()
     var correct = 0
+    var perFolder: [String: (correct: Int, total: Int)] = [:]
     for entry in entries {
         let metadata = FetchedMetadata(title: entry.title, description: entry.description)
         let folder = await categorizer.categorize(metadata, url: URL(string: entry.url)!, folders: Library.defaultFolders)
-        if folder == entry.expected { correct += 1 }
+        var tally = perFolder[entry.expected, default: (correct: 0, total: 0)]
+        tally.total += 1
+        if folder == entry.expected {
+            correct += 1
+            tally.correct += 1
+        }
+        perFolder[entry.expected] = tally
     }
     let accuracy = Double(correct) / Double(entries.count)
-    #expect(accuracy >= 0.7, "accuracy \(accuracy) (\(correct)/40)")
+    let breakdown = perFolder.sorted { $0.key < $1.key }
+        .map { "\($0.key): \($0.value.correct)/\($0.value.total)" }
+        .joined(separator: ", ")
+    #expect(accuracy >= 0.7, "accuracy \(accuracy) (\(correct)/\(entries.count)) [\(breakdown)]")
 }
 
 @Test func returnsNilWhenNothingMatches() async {
@@ -78,4 +88,16 @@ private struct AccuracyEntry: Decodable {
     let metadata = FetchedMetadata(title: "Creamy pasta recipe", description: nil)
     let folder = await KeywordCategorizer().categorize(metadata, url: URL(string: "https://a.com")!, folders: ["Watchlist", "Unsorted"])
     #expect(folder == nil || folder == "Watchlist" || folder == "Unsorted")
+}
+
+@Test func everyDefaultFolderIsFullyWired() throws {
+    let fixtureURL = Bundle.module.url(forResource: "accuracy-set", withExtension: "json", subdirectory: "Fixtures")!
+    let entries = try JSONDecoder().decode([AccuracyEntry].self, from: Data(contentsOf: fixtureURL))
+
+    for folder in Library.defaultFolders where folder != Library.unsorted {
+        #expect(!(KeywordCategorizer.keywords[folder] ?? []).isEmpty, "\(folder) has no keyword table entries")
+        #expect(entries.contains { $0.expected == folder }, "\(folder) has no accuracy fixture entries")
+        #expect(folderSymbol(for: folder) != "folder", "\(folder) has no distinct symbol")
+        #expect(folderColor(for: folder) != folderColor(for: "SomeUnknownFolderName"), "\(folder) has no distinct color")
+    }
 }
