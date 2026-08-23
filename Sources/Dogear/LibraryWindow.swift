@@ -7,6 +7,24 @@ enum NotesImportState: Equatable {
     case finished(String)
 }
 
+enum LibrarySort: String, CaseIterable, Identifiable {
+    case lastSaved
+    case oldestFirst
+    case title
+    case site
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .lastSaved: return "Last Saved"
+        case .oldestFirst: return "Oldest First"
+        case .title: return "Title"
+        case .site: return "By Site"
+        }
+    }
+}
+
 struct LibraryWindow: View {
     @EnvironmentObject var model: AppModel
     @State private var selection: String = Library.unsorted
@@ -17,65 +35,14 @@ struct LibraryWindow: View {
     @State private var renameCollided = false
     @State private var showingImport = false
     @State private var importState: NotesImportState = .confirm
+    @AppStorage("libraryView") private var viewRaw = "grid"
+    @AppStorage("librarySort") private var sortRaw = LibrarySort.lastSaved.rawValue
     private let archiveID = "__archive__"
     private let favoritesID = "__favorites__"
 
     var body: some View {
         NavigationSplitView {
-            List(selection: $selection) {
-                Section {
-                    Label {
-                        Text("Favourites")
-                    } icon: {
-                        Image(systemName: "star.fill")
-                            .foregroundStyle(.pink)
-                    }
-                    .badge(model.store.favorites().count)
-                    .tag(favoritesID)
-                }
-                Section("Folders") {
-                    ForEach(model.store.library.folders, id: \.self) { folder in
-                        Label {
-                            Text(folder)
-                        } icon: {
-                            Image(systemName: folderSymbol(for: folder))
-                                .foregroundStyle(folderColor(for: folder))
-                        }
-                        .badge(model.store.bookmarks(in: folder).count)
-                        .tag(folder)
-                    }
-                }
-                Section {
-                    Label {
-                        Text("Archive")
-                    } icon: {
-                        Image(systemName: "checkmark.circle")
-                            .foregroundStyle(.green)
-                    }
-                    .badge(model.store.archive().count)
-                    .tag(archiveID)
-                }
-            }
-            .contextMenu(forSelectionType: String.self) { folders in
-                if let folder = folders.first, folder != archiveID, folder != favoritesID {
-                    Button("Copy as Markdown List") {
-                        copyToPasteboard(Bookmark.markdownList(model.store.bookmarks(in: folder)))
-                    }
-                    if folder != Library.unsorted {
-                        Button("Rename Folder") {
-                            renameDraft = folder
-                            renamingFolder = folder
-                        }
-                        Button("Delete Folder") {
-                            model.store.removeFolder(folder)
-                            selection = Library.unsorted
-                        }
-                    }
-                }
-            }
-            .safeAreaInset(edge: .bottom) {
-                NewFolderButton()
-            }
+            sidebar
         } detail: {
             detailContent
                 .dropDestination(for: URL.self) { urls, _ in
@@ -90,16 +57,7 @@ struct LibraryWindow: View {
         }
         .searchable(text: $query, prompt: "Search bookmarks")
         .navigationTitle("Dogear")
-        .toolbar {
-            Menu {
-                Button("Save from Clipboard") { pasteFromClipboard() }
-                Button("Import from Notes...") { startImport() }
-            } label: {
-                Image(systemName: "plus")
-            }
-            .help("Add bookmarks")
-            .accessibilityLabel("Add bookmarks")
-        }
+        .toolbar { toolbarContent }
         .sheet(isPresented: $showingImport) {
             NotesImportSheet(state: $importState, run: runNotesImport)
         }
@@ -131,15 +89,150 @@ struct LibraryWindow: View {
         }
     }
 
+    // MARK: Sidebar
+
+    private var sidebar: some View {
+        List(selection: $selection) {
+            Section {
+                Label {
+                    Text("Favourites")
+                } icon: {
+                    Image(systemName: "star.fill")
+                        .foregroundStyle(.pink)
+                }
+                .badge(model.store.favorites().count)
+                .tag(favoritesID)
+            }
+            Section("Folders") {
+                ForEach(model.store.library.folders, id: \.self) { folder in
+                    Label {
+                        Text(folder)
+                    } icon: {
+                        Image(systemName: folderSymbol(for: folder))
+                            .foregroundStyle(folderColor(for: folder))
+                    }
+                    .badge(model.store.bookmarks(in: folder).count)
+                    .tag(folder)
+                }
+            }
+            Section {
+                Label {
+                    Text("Archive")
+                } icon: {
+                    Image(systemName: "checkmark.circle")
+                        .foregroundStyle(.green)
+                }
+                .badge(model.store.archive().count)
+                .tag(archiveID)
+            }
+        }
+        .contextMenu(forSelectionType: String.self) { folders in
+            if let folder = folders.first, folder != archiveID, folder != favoritesID {
+                Button {
+                    copyToPasteboard(Bookmark.markdownList(model.store.bookmarks(in: folder)))
+                } label: {
+                    Label("Copy as Markdown List", systemImage: "doc.on.doc")
+                }
+                if folder != Library.unsorted {
+                    Button {
+                        renameDraft = folder
+                        renamingFolder = folder
+                    } label: {
+                        Label("Rename Folder", systemImage: "pencil")
+                    }
+                    Button(role: .destructive) {
+                        model.store.removeFolder(folder)
+                        selection = Library.unsorted
+                    } label: {
+                        Label("Delete Folder", systemImage: "trash")
+                    }
+                }
+            }
+        }
+        .safeAreaInset(edge: .bottom) {
+            NewFolderButton()
+        }
+    }
+
+    // MARK: Toolbar
+
+    @ToolbarContentBuilder private var toolbarContent: some ToolbarContent {
+        ToolbarItemGroup {
+            Picker("View", selection: $viewRaw) {
+                Label("Grid", systemImage: "square.grid.2x2").tag("grid")
+                Label("List", systemImage: "list.bullet").tag("list")
+            }
+            .pickerStyle(.segmented)
+            .help("View as grid or list")
+            Menu {
+                Picker("Sort", selection: $sortRaw) {
+                    ForEach(LibrarySort.allCases) { sort in
+                        Text(sort.label).tag(sort.rawValue)
+                    }
+                }
+                .pickerStyle(.inline)
+                .labelsHidden()
+            } label: {
+                Image(systemName: "arrow.up.arrow.down")
+            }
+            .help("Sort")
+            .accessibilityLabel("Sort")
+            Menu {
+                Button {
+                    pasteFromClipboard()
+                } label: {
+                    Label("Save from Clipboard", systemImage: "doc.on.clipboard")
+                }
+                Button {
+                    startImport()
+                } label: {
+                    Label("Import from Notes...", systemImage: "square.and.arrow.down")
+                }
+            } label: {
+                Image(systemName: "plus")
+            }
+            .menuIndicator(.hidden)
+            .help("Add bookmarks")
+            .accessibilityLabel("Add bookmarks")
+        }
+    }
+
+    // MARK: Content
+
     private var trimmedQuery: String {
         query.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var sort: LibrarySort {
+        LibrarySort(rawValue: sortRaw) ?? .lastSaved
     }
 
     private var visibleBookmarks: [Bookmark] {
         if !trimmedQuery.isEmpty { return model.store.search(trimmedQuery) }
         if selection == archiveID { return model.store.archive() }
         if selection == favoritesID { return model.store.favorites() }
-        return model.store.bookmarks(in: selection)
+        return sorted(model.store.bookmarks(in: selection))
+    }
+
+    /// The sort menu applies to folder views. Favourites and Archive keep
+    /// their own recency orders: they are time lenses already.
+    private func sorted(_ items: [Bookmark]) -> [Bookmark] {
+        switch sort {
+        case .lastSaved:
+            return items
+        case .oldestFirst:
+            return items.sorted { $0.createdAt < $1.createdAt }
+        case .title:
+            return items.sorted {
+                $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
+            }
+        case .site:
+            return items.sorted { hostName($0) < hostName($1) }
+        }
+    }
+
+    private var isFolderSelection: Bool {
+        selection != archiveID && selection != favoritesID && trimmedQuery.isEmpty
     }
 
     @ViewBuilder private var detailContent: some View {
@@ -150,36 +243,71 @@ struct LibraryWindow: View {
             ContentUnavailableView(
                 "No favourites yet",
                 systemImage: "star",
-                description: Text("Hover a card and click the star.")
+                description: Text("Point at a bookmark and click its star.")
             )
         } else if bookmarks.isEmpty, selection == archiveID {
             ContentUnavailableView(
                 "Nothing archived yet",
-                systemImage: "bookmark",
+                systemImage: "checkmark.circle",
                 description: Text("Mark a bookmark done and it moves here.")
             )
+        } else if bookmarks.isEmpty, model.store.library.bookmarks.isEmpty {
+            firstRunEmptyState
         } else if bookmarks.isEmpty {
+            // The folder is empty but the library is not: no capture pitch,
+            // just the folder speaking in its own color.
             ContentUnavailableView {
-                Label("Nothing here yet", systemImage: "bookmark")
-            } description: {
-                Text("Copy a link, then click the bookmark icon in the menu bar.")
-            } actions: {
-                VStack(spacing: 8) {
-                    Button("Paste from Clipboard", action: pasteFromClipboard)
-                        .buttonStyle(.borderedProminent)
-                    Text("You can paste many links at once. Copy them from Apple Notes and Dogear saves each one.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Button("Import from Notes...") { startImport() }
-                        .buttonStyle(.plain)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                Label {
+                    Text("No \(selection.lowercased()) yet")
+                } icon: {
+                    Image(systemName: folderSymbol(for: selection))
+                        .foregroundStyle(folderColor(for: selection))
                 }
+            } description: {
+                Text("Move a bookmark here, or let Dogear file one for you.")
             }
+        } else if viewRaw == "list" {
+            BookmarkList(bookmarks: bookmarks, grouping: listGrouping)
         } else {
             BookmarkGrid(bookmarks: bookmarks)
         }
     }
+
+    private var listGrouping: BookmarkList.Grouping {
+        guard isFolderSelection else { return .none }
+        switch sort {
+        case .lastSaved: return .date
+        case .site: return .site
+        case .oldestFirst, .title: return .none
+        }
+    }
+
+    private var firstRunEmptyState: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "bookmark")
+                .font(.system(size: 34))
+                .foregroundStyle(.tertiary)
+            Text("Nothing here yet")
+                .font(.title3.weight(.semibold))
+            Text("Copy a link, then click the bookmark icon in the menu bar.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            HStack(spacing: 10) {
+                Button("Paste from Clipboard", action: pasteFromClipboard)
+                    .buttonStyle(.borderedProminent)
+                Button("Import from Notes...") { startImport() }
+                    .buttonStyle(.bordered)
+            }
+            Text("Paste many links at once. Dogear saves each one.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: 380)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: Actions
 
     /// The one capture path: same as the popover, fed from the clipboard.
     private func pasteFromClipboard() {
@@ -241,6 +369,10 @@ struct LibraryWindow: View {
 func copyToPasteboard(_ string: String) {
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString(string, forType: .string)
+}
+
+func hostName(_ bookmark: Bookmark) -> String {
+    URL(string: bookmark.url)?.host ?? ""
 }
 
 /// Reads every note body over Apple events, off the main thread. Returns nil
@@ -326,7 +458,8 @@ private struct NewFolderButton: View {
                 Spacer()
             }
         }
-        .padding(8)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
     }
 
     private func cancel() {
@@ -335,96 +468,136 @@ private struct NewFolderButton: View {
     }
 }
 
-struct BookmarkGrid: View {
-    let bookmarks: [Bookmark]
+// MARK: - Shared bookmark actions
 
-    private let columns = [GridItem(.adaptive(minimum: 220), spacing: 16)]
-
-    var body: some View {
-        ScrollView {
-            LazyVGrid(columns: columns, spacing: 16) {
-                ForEach(bookmarks) { bookmark in
-                    BookmarkCard(bookmark: bookmark)
-                }
-            }
-            .padding(16)
-        }
-    }
-}
-
-struct BookmarkCard: View {
+/// The context menu, edit alerts, and QR popover that every bookmark
+/// presentation shares, so the grid card and the list row behave the same.
+struct BookmarkActions: ViewModifier {
     @EnvironmentObject var model: AppModel
     let bookmark: Bookmark
     @State private var isEditingTitle = false
     @State private var draftTitle = ""
     @State private var isEditingNote = false
     @State private var draftNote = ""
-    @State private var isHovering = false
     @State private var showingQRCode = false
 
-    var body: some View {
-        if let url = URL(string: bookmark.url) {
-            card.draggable(url)
-        } else {
-            card
-        }
-    }
-
-    private var card: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            thumbnail
-                .overlay(alignment: .topTrailing) {
-                    if isHovering || bookmark.isFavorite {
-                        favoriteStar
+    func body(content: Content) -> some View {
+        content
+            .contextMenu { menu }
+            .popover(isPresented: $showingQRCode) { QRPopover(bookmark: bookmark) }
+            .alert("Edit Title", isPresented: $isEditingTitle) {
+                TextField("Title", text: $draftTitle)
+                Button("Save") {
+                    if var current = model.store.library.bookmarks.first(where: { $0.id == bookmark.id }) {
+                        current.title = draftTitle
+                        model.store.update(current)
                     }
                 }
-            Text(bookmark.title).font(.headline).lineLimit(2)
-            if let note = bookmark.note, !note.isEmpty {
-                Text(note).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                Button("Cancel", role: .cancel) {}
             }
-            HStack {
-                Text(bookmark.folder)
-                    .font(.caption2)
-                    .foregroundStyle(folderColor(for: bookmark.folder))
-                if let author = bookmark.author {
-                    Text(author).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            .alert("Edit Note", isPresented: $isEditingNote) {
+                TextField("Note", text: $draftNote)
+                Button("Save") {
+                    if var current = model.store.library.bookmarks.first(where: { $0.id == bookmark.id }) {
+                        current.note = draftNote.isEmpty ? nil : draftNote
+                        model.store.update(current)
+                    }
                 }
-                Spacer()
-                Text(bookmark.createdAt, format: .dateTime.day().month())
-                    .font(.caption2).foregroundStyle(.tertiary)
-                Text(host).font(.caption2).foregroundStyle(.tertiary)
+                Button("Cancel", role: .cancel) {}
+            }
+    }
+
+    @ViewBuilder private var menu: some View {
+        if bookmark.isDone {
+            Button {
+                model.store.markUndone(id: bookmark.id)
+            } label: {
+                Label("Move Back", systemImage: "arrow.uturn.backward")
+            }
+        } else {
+            Button {
+                model.store.markDone(id: bookmark.id)
+            } label: {
+                Label("Mark Done", systemImage: "checkmark.circle")
             }
         }
-        .padding(12)
-        .background(isHovering ? .quaternary : .quinary, in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.separator, lineWidth: 0.5))
-        .onHover { isHovering = $0 }
-        .onTapGesture(count: 2) { open() }
-        .contextMenu { menu }
-        .popover(isPresented: $showingQRCode) { qrPopover }
-        .alert("Edit Title", isPresented: $isEditingTitle) {
-            TextField("Title", text: $draftTitle)
-            Button("Save") {
-                if var current = model.store.library.bookmarks.first(where: { $0.id == bookmark.id }) {
-                    current.title = draftTitle
-                    model.store.update(current)
-                }
-            }
-            Button("Cancel", role: .cancel) {}
+        Button {
+            model.store.toggleFavorite(id: bookmark.id)
+        } label: {
+            Label(
+                bookmark.isFavorite ? "Remove from Favourites" : "Add to Favourites",
+                systemImage: bookmark.isFavorite ? "star.slash" : "star"
+            )
         }
-        .alert("Edit Note", isPresented: $isEditingNote) {
-            TextField("Note", text: $draftNote)
-            Button("Save") {
-                if var current = model.store.library.bookmarks.first(where: { $0.id == bookmark.id }) {
-                    current.note = draftNote.isEmpty ? nil : draftNote
-                    model.store.update(current)
-                }
+        Menu {
+            ForEach(model.store.library.folders, id: \.self) { folder in
+                Button(folder) { model.store.refile(id: bookmark.id, to: folder) }
             }
-            Button("Cancel", role: .cancel) {}
+        } label: {
+            Label("Move To", systemImage: "folder")
+        }
+        Divider()
+        Button {
+            draftTitle = bookmark.title
+            isEditingTitle = true
+        } label: {
+            Label("Edit Title", systemImage: "pencil")
+        }
+        Button {
+            draftNote = bookmark.note ?? ""
+            isEditingNote = true
+        } label: {
+            Label("Edit Note", systemImage: "note.text")
+        }
+        Divider()
+        Button {
+            copyToPasteboard(bookmark.url)
+        } label: {
+            Label("Copy Link", systemImage: "link")
+        }
+        Button {
+            copyToPasteboard(bookmark.markdownLink)
+        } label: {
+            Label("Copy as Markdown", systemImage: "doc.on.doc")
+        }
+        Button {
+            showingQRCode = true
+        } label: {
+            Label("Show QR Code", systemImage: "qrcode")
+        }
+        if bookmark.folder == "Restaurants" {
+            Button {
+                openInMaps()
+            } label: {
+                Label("Open in Maps", systemImage: "map")
+            }
+        }
+        Divider()
+        Button(role: .destructive) {
+            model.thumbnails.remove(for: bookmark.id)
+            model.store.remove(id: bookmark.id)
+        } label: {
+            Label("Delete", systemImage: "trash")
         }
     }
 
-    private var qrPopover: some View {
+    private func openInMaps() {
+        var parts = URLComponents(string: "https://maps.apple.com/")!
+        parts.queryItems = [URLQueryItem(name: "q", value: bookmark.title)]
+        if let url = parts.url { NSWorkspace.shared.open(url) }
+    }
+}
+
+extension View {
+    func bookmarkActions(_ bookmark: Bookmark) -> some View {
+        modifier(BookmarkActions(bookmark: bookmark))
+    }
+}
+
+private struct QRPopover: View {
+    let bookmark: Bookmark
+
+    var body: some View {
         VStack(spacing: 8) {
             Text(bookmark.title).font(.headline).lineLimit(1)
             if let qr = QRCode.image(for: bookmark.url) {
@@ -446,8 +619,112 @@ struct BookmarkCard: View {
         .padding(14)
         .frame(width: 220)
     }
+}
 
-    private var favoriteStar: some View {
+// MARK: - Grid
+
+struct BookmarkGrid: View {
+    let bookmarks: [Bookmark]
+
+    private let columns = [GridItem(.adaptive(minimum: 220), spacing: 16)]
+
+    var body: some View {
+        ScrollView {
+            LazyVGrid(columns: columns, spacing: 16) {
+                ForEach(bookmarks) { bookmark in
+                    BookmarkCard(bookmark: bookmark)
+                }
+            }
+            .padding(16)
+        }
+    }
+}
+
+struct BookmarkCard: View {
+    @EnvironmentObject var model: AppModel
+    let bookmark: Bookmark
+    @State private var isHovering = false
+
+    var body: some View {
+        if let url = URL(string: bookmark.url) {
+            card.draggable(url)
+        } else {
+            card
+        }
+    }
+
+    private var card: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            thumbnail
+                .overlay(alignment: .topTrailing) {
+                    if isHovering || bookmark.isFavorite {
+                        FavoriteStar(bookmark: bookmark)
+                    }
+                }
+            Text(bookmark.title).font(.headline).lineLimit(2)
+            if let note = bookmark.note, !note.isEmpty {
+                Text(note).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+            }
+            HStack(spacing: 6) {
+                // The folder speaks through its symbol and color; the word,
+                // the domain, and the raw link are noise at card size.
+                Image(systemName: folderSymbol(for: bookmark.folder))
+                    .font(.caption2)
+                    .foregroundStyle(folderColor(for: bookmark.folder))
+                    .help(bookmark.folder)
+                    .accessibilityLabel(bookmark.folder)
+                if let author = bookmark.author {
+                    Text(author).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                }
+                Spacer()
+                Text(bookmark.createdAt, format: .dateTime.day().month())
+                    .font(.caption2).foregroundStyle(.tertiary)
+            }
+        }
+        .padding(12)
+        .background(isHovering ? .quaternary : .quinary, in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.separator, lineWidth: 0.5))
+        .onHover { isHovering = $0 }
+        .pointerStyle(.link)
+        .onTapGesture(count: 2) { open() }
+        .bookmarkActions(bookmark)
+    }
+
+    @ViewBuilder private var thumbnail: some View {
+        if bookmark.hasThumbnail,
+           let image = NSImage(contentsOf: model.thumbnails.fileURL(for: bookmark.id)) {
+            Image(nsImage: image)
+                .resizable().aspectRatio(contentMode: .fill)
+                .frame(height: 110).clipped()
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+        } else if bookmark.source == .x {
+            // A text post reads as a quote, not as a missing image.
+            RoundedRectangle(cornerRadius: 6)
+                .fill(.quaternary)
+                .frame(height: 110)
+                .overlay(
+                    Image(systemName: "quote.opening")
+                        .font(.title3)
+                        .foregroundStyle(folderColor(for: bookmark.folder))
+                )
+        } else {
+            RoundedRectangle(cornerRadius: 6)
+                .fill(.quaternary)
+                .frame(height: 110)
+                .overlay(Image(systemName: "link").foregroundStyle(.tertiary))
+        }
+    }
+
+    private func open() {
+        if let url = URL(string: bookmark.url) { NSWorkspace.shared.open(url) }
+    }
+}
+
+struct FavoriteStar: View {
+    @EnvironmentObject var model: AppModel
+    let bookmark: Bookmark
+
+    var body: some View {
         Button {
             model.store.toggleFavorite(id: bookmark.id)
         } label: {
@@ -462,69 +739,130 @@ struct BookmarkCard: View {
         .accessibilityLabel(bookmark.isFavorite ? "Remove from Favourites" : "Add to Favourites")
         .padding(6)
     }
+}
 
-    @ViewBuilder private var thumbnail: some View {
+// MARK: - List
+
+struct BookmarkList: View {
+    enum Grouping {
+        case none
+        case date
+        case site
+    }
+
+    let bookmarks: [Bookmark]
+    let grouping: Grouping
+
+    var body: some View {
+        List {
+            ForEach(groups, id: \.title) { group in
+                if let title = group.title {
+                    Section(title) {
+                        rows(group.items)
+                    }
+                } else {
+                    rows(group.items)
+                }
+            }
+        }
+        .listStyle(.inset)
+    }
+
+    private func rows(_ items: [Bookmark]) -> some View {
+        ForEach(items) { bookmark in
+            BookmarkListRow(bookmark: bookmark)
+        }
+    }
+
+    private var groups: [(title: String?, items: [Bookmark])] {
+        switch grouping {
+        case .none:
+            return [(nil, bookmarks)]
+        case .site:
+            let grouped = Dictionary(grouping: bookmarks, by: hostName)
+            return grouped.keys.sorted().map { ($0.isEmpty ? "Other" : $0, grouped[$0] ?? []) }
+        case .date:
+            return dateGroups
+        }
+    }
+
+    /// Finder-style recency sections.
+    private var dateGroups: [(title: String?, items: [Bookmark])] {
+        let calendar = Calendar.current
+        let now = Date()
+        var buckets: [(String, [Bookmark])] = [
+            ("Today", []), ("Yesterday", []), ("Previous 7 Days", []),
+            ("Previous 30 Days", []), ("Older", []),
+        ]
+        for bookmark in bookmarks {
+            let date = bookmark.createdAt
+            let index: Int
+            if calendar.isDateInToday(date) {
+                index = 0
+            } else if calendar.isDateInYesterday(date) {
+                index = 1
+            } else if let days = calendar.dateComponents([.day], from: date, to: now).day, days < 7 {
+                index = 2
+            } else if let days = calendar.dateComponents([.day], from: date, to: now).day, days < 30 {
+                index = 3
+            } else {
+                index = 4
+            }
+            buckets[index].1.append(bookmark)
+        }
+        return buckets.filter { !$0.1.isEmpty }.map { ($0.0, $0.1) }
+    }
+}
+
+struct BookmarkListRow: View {
+    @EnvironmentObject var model: AppModel
+    let bookmark: Bookmark
+    @State private var isHovering = false
+
+    var body: some View {
+        HStack(spacing: 10) {
+            badge
+            Text(bookmark.title).lineLimit(1)
+            if let note = bookmark.note, !note.isEmpty {
+                Text(note).font(.caption).foregroundStyle(.tertiary).lineLimit(1)
+            }
+            Spacer(minLength: 8)
+            if bookmark.isFavorite {
+                Image(systemName: "star.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.pink)
+            }
+            Text(bookmark.createdAt, format: .dateTime.day().month())
+                .font(.caption).foregroundStyle(.tertiary)
+        }
+        .contentShape(Rectangle())
+        .pointerStyle(.link)
+        .onHover { isHovering = $0 }
+        .onTapGesture(count: 2) { open() }
+        .bookmarkActions(bookmark)
+        .draggable(URL(string: bookmark.url) ?? URL(fileURLWithPath: "/"))
+    }
+
+    @ViewBuilder private var badge: some View {
         if bookmark.hasThumbnail,
            let image = NSImage(contentsOf: model.thumbnails.fileURL(for: bookmark.id)) {
             Image(nsImage: image)
                 .resizable().aspectRatio(contentMode: .fill)
-                .frame(height: 110).clipped()
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .frame(width: 24, height: 24)
+                .clipShape(RoundedRectangle(cornerRadius: 5))
         } else {
-            RoundedRectangle(cornerRadius: 6)
-                .fill(.quaternary)
-                .frame(height: 110)
-                .overlay(Image(systemName: "link").foregroundStyle(.tertiary))
+            Circle()
+                .fill(folderColor(for: bookmark.folder).opacity(0.2))
+                .frame(width: 24, height: 24)
+                .overlay(
+                    Image(systemName: bookmark.source == .x ? "quote.opening" : folderSymbol(for: bookmark.folder))
+                        .font(.system(size: 10))
+                        .foregroundStyle(folderColor(for: bookmark.folder))
+                )
         }
     }
 
-    @ViewBuilder private var menu: some View {
-        if bookmark.isDone {
-            Button("Move Back") { model.store.markUndone(id: bookmark.id) }
-        } else {
-            Button("Mark Done") { model.store.markDone(id: bookmark.id) }
-        }
-        Button(bookmark.isFavorite ? "Remove from Favourites" : "Add to Favourites") {
-            model.store.toggleFavorite(id: bookmark.id)
-        }
-        Menu("Move To") {
-            ForEach(model.store.library.folders, id: \.self) { folder in
-                Button(folder) { model.store.refile(id: bookmark.id, to: folder) }
-            }
-        }
-        Button("Edit Title") {
-            draftTitle = bookmark.title
-            isEditingTitle = true
-        }
-        Button("Edit Note") {
-            draftNote = bookmark.note ?? ""
-            isEditingNote = true
-        }
-        Button("Copy Link") {
-            copyToPasteboard(bookmark.url)
-        }
-        Button("Copy as Markdown") {
-            copyToPasteboard(bookmark.markdownLink)
-        }
-        Button("Show QR Code") { showingQRCode = true }
-        if bookmark.folder == "Restaurants" {
-            Button("Open in Maps") { openInMaps() }
-        }
-        Divider()
-        Button("Delete", role: .destructive) {
-            model.thumbnails.remove(for: bookmark.id)
-            model.store.remove(id: bookmark.id)
-        }
-    }
-
-    private var host: String { URL(string: bookmark.url)?.host ?? "" }
     private func open() {
         if let url = URL(string: bookmark.url) { NSWorkspace.shared.open(url) }
-    }
-
-    private func openInMaps() {
-        var parts = URLComponents(string: "https://maps.apple.com/")!
-        parts.queryItems = [URLQueryItem(name: "q", value: bookmark.title)]
-        if let url = parts.url { NSWorkspace.shared.open(url) }
     }
 }

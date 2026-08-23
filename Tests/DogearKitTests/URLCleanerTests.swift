@@ -77,3 +77,13 @@ func rejectsNonHTTPSchemes(text: String) {
     let url = URL(string: "https://x.com/a/status/1?s=20&t=xyz")!
     #expect(URLCleaner.canonicalString(url) == "https://x.com/a/status/1")
 }
+
+@Test func trimsExtractedURLAtHTMLMarkup() {
+    let urls = URLCleaner.allHTTPURLs(in: "see https://a.com/tools/</div> and https://b.com/x\"&gt;")
+    #expect(urls.first?.absoluteString == "https://a.com/tools/")
+    #expect(urls.count >= 1)
+    for url in urls {
+        #expect(!url.absoluteString.contains("%3C"))
+        #expect(!url.absoluteString.contains("\""))
+    }
+}

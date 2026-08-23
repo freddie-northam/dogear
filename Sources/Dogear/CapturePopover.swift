@@ -210,6 +210,7 @@ struct CapturePopover: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .pointerStyle(.link)
             Spacer(minLength: 8)
             Button {
                 model.store.markDone(id: pick.id)
@@ -262,15 +263,27 @@ struct CapturePopover: View {
     // MARK: Counts
 
     private var countsLine: String? {
-        let parts = model.store.library.folders.compactMap { folder -> String? in
-            let count = model.store.bookmarks(in: folder).count
-            guard count > 0 else { return nil }
-            var name = folder.lowercased()
-            // ponytail: naive singularization; a folder like "Dishes" yields "1 dishe".
-            if count == 1, name.hasSuffix("s") { name.removeLast() }
-            return "\(count) \(name)"
+        // Unsorted is an inbox, not a promise, so it stays out of the summary.
+        // The top three filed folders keep the line short enough to never
+        // truncate; an all-unsorted library gets a call to sort instead.
+        let filed = model.store.library.folders
+            .filter { $0 != Library.unsorted }
+            .compactMap { folder -> (name: String, count: Int)? in
+                let count = model.store.bookmarks(in: folder).count
+                return count > 0 ? (folder, count) : nil
+            }
+            .sorted { $0.count > $1.count }
+            .prefix(3)
+        if filed.isEmpty {
+            let unsorted = model.store.bookmarks(in: Library.unsorted).count
+            return unsorted > 0 ? "\(unsorted) to sort." : nil
         }
-        guard !parts.isEmpty else { return nil }
+        let parts = filed.map { entry -> String in
+            var name = entry.name.lowercased()
+            // ponytail: naive singularization; a folder like "Dishes" yields "1 dishe".
+            if entry.count == 1, name.hasSuffix("s") { name.removeLast() }
+            return "\(entry.count) \(name)"
+        }
         return parts.joined(separator: ", ") + " waiting."
     }
 
@@ -300,6 +313,7 @@ struct CapturePopover: View {
     private func listTabButton(_ title: String, tag: String) -> some View {
         Button(title) { listTab = tag }
             .buttonStyle(.plain)
+            .pointerStyle(.link)
             .font(.caption.weight(listTab == tag ? .semibold : .regular))
             .foregroundStyle(listTab == tag ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
             .accessibilityAddTraits(listTab == tag ? .isSelected : [])
@@ -345,6 +359,7 @@ private struct PopoverListRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .pointerStyle(.link)
         .onHover { isHovering = $0 }
     }
 }
