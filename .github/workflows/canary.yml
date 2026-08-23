@@ -1,0 +1,12 @@
+name: Canary
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+jobs:
+  canary:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run live platform canaries
+        run: CANARY=1 swift test --filter CanaryTests
