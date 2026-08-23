@@ -50,6 +50,29 @@ private func fixture(_ name: String) throws -> String {
     #expect(OpenGraphParser.parse(html: html).title == "Single Quoted")
 }
 
+@Test func parsesContentContainingAGreaterThan() {
+    let html = "<html><head><meta property=\"og:description\" content=\"5 > 3 tips\"></head></html>"
+    #expect(OpenGraphParser.parse(html: html).description == "5 > 3 tips")
+}
+
+@Test func propertyWinsOverName() {
+    let propertyFirst = "<html><head><meta property=\"og:title\" name=\"twitter:title\" content=\"Real\"></head></html>"
+    #expect(OpenGraphParser.parse(html: propertyFirst).title == "Real")
+
+    let nameFirst = "<html><head><meta name=\"twitter:title\" property=\"og:title\" content=\"Real\"></head></html>"
+    #expect(OpenGraphParser.parse(html: nameFirst).title == "Real")
+}
+
+@Test func singleQuotedContentWithAGreaterThan() {
+    let html = "<html><head><meta property='og:title' content='a > b'></head></html>"
+    #expect(OpenGraphParser.parse(html: html).title == "a > b")
+}
+
+@Test func unquotedGreaterThanStillEndsTheTag() {
+    let html = "<html><head><meta property=\"og:title\" content=\"x\">trailing<p></head></html>"
+    #expect(OpenGraphParser.parse(html: html).title == "x")
+}
+
 @Test func doubleEncodedNamedEntityDecodesFully() {
     // The author wrote the literal text "&lt;", escaping the ampersand as "&amp;".
     // Ruling: sites like LinkedIn double-encode og titles, so a second
