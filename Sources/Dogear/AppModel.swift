@@ -48,6 +48,12 @@ final class AppModel: ObservableObject {
     }
 
     func capture(urls: [URL]) -> CaptureResult {
+        // The one capture gate: every caller (text, drop, import) inherits it.
+        // A dropped file:// URL must never become a bookmark or reach enrichment.
+        let urls = urls.filter {
+            let scheme = $0.scheme?.lowercased()
+            return scheme == "http" || scheme == "https"
+        }
         let (new, touched) = store.add(urls: urls)
         let ids = new.map(\.id)
         if !ids.isEmpty {
