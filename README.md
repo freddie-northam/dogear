@@ -54,3 +54,5 @@ read, and reads the content only when the clipboard holds a link.
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+See ROADMAP.md for what comes next.
