@@ -18,3 +18,29 @@ import Testing
 @Test func defaultFoldersMatchSpec() {
     #expect(Library.defaultFolders == ["Recipes", "Restaurants", "Shows", "Articles", "Unsorted"])
 }
+
+private func makeBookmark(title: String, url: String) -> Bookmark {
+    Bookmark(
+        id: UUID(), url: url, title: title, author: nil, note: nil,
+        folder: Library.unsorted, source: .web, createdAt: Date(), doneAt: nil,
+        hasThumbnail: false, manuallyFiled: false
+    )
+}
+
+@Test func markdownLinkFormatsTitleAndURL() {
+    let bookmark = makeBookmark(title: "Creamy pasta", url: "https://a.com/pasta")
+    #expect(bookmark.markdownLink == "[Creamy pasta](https://a.com/pasta)")
+}
+
+@Test func markdownLinkReplacesSquareBracketsInTheTitle() {
+    let bookmark = makeBookmark(title: "[2024] Best ramen [ranked]", url: "https://a.com/ramen")
+    #expect(bookmark.markdownLink == "[(2024) Best ramen (ranked)](https://a.com/ramen)")
+}
+
+@Test func markdownListProducesOneBulletPerBookmark() {
+    let list = Bookmark.markdownList([
+        makeBookmark(title: "A", url: "https://a.com/1"),
+        makeBookmark(title: "B", url: "https://a.com/2"),
+    ])
+    #expect(list == "- [A](https://a.com/1)\n- [B](https://a.com/2)")
+}

@@ -36,6 +36,22 @@ public struct Bookmark: Codable, Identifiable, Equatable, Sendable {
     public var isDone: Bool { doneAt != nil }
 }
 
+extension Bookmark {
+    /// A `[title](url)` markdown link. Square brackets in the title become
+    /// parentheses so the link text cannot break the markdown syntax.
+    public var markdownLink: String {
+        let safeTitle = title
+            .replacingOccurrences(of: "[", with: "(")
+            .replacingOccurrences(of: "]", with: ")")
+        return "[\(safeTitle)](\(url))"
+    }
+
+    /// A markdown bullet list, one `- [title](url)` line per bookmark.
+    public static func markdownList(_ bookmarks: [Bookmark]) -> String {
+        bookmarks.map { "- \($0.markdownLink)" }.joined(separator: "\n")
+    }
+}
+
 public struct Library: Codable, Equatable, Sendable {
     public var folders: [String]
     public var bookmarks: [Bookmark]
