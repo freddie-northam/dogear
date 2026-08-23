@@ -30,7 +30,10 @@ struct LibraryWindow: View {
             }
             .contextMenu(forSelectionType: String.self) { folders in
                 if let folder = folders.first, folder != archiveID, folder != Library.unsorted {
-                    Button("Delete Folder") { model.store.removeFolder(folder) }
+                    Button("Delete Folder") {
+                        model.store.removeFolder(folder)
+                        selection = Library.unsorted
+                    }
                 }
             }
             .safeAreaInset(edge: .bottom) {
@@ -41,11 +44,11 @@ struct LibraryWindow: View {
         }
         .searchable(text: $query, prompt: "Search bookmarks")
         .navigationTitle("Dogear")
-        .id(model.revision) // re-render on every store change
     }
 
     private var visibleBookmarks: [Bookmark] {
-        if !query.isEmpty { return model.store.search(query) }
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedQuery.isEmpty { return model.store.search(trimmedQuery) }
         if selection == archiveID { return model.store.archive() }
         return model.store.bookmarks(in: selection)
     }
@@ -133,9 +136,10 @@ struct BookmarkCard: View {
         .alert("Edit Title", isPresented: $isEditingTitle) {
             TextField("Title", text: $draftTitle)
             Button("Save") {
-                var updated = bookmark
-                updated.title = draftTitle
-                model.store.update(updated)
+                if var current = model.store.library.bookmarks.first(where: { $0.id == bookmark.id }) {
+                    current.title = draftTitle
+                    model.store.update(current)
+                }
             }
             Button("Cancel", role: .cancel) {}
         }
@@ -157,7 +161,7 @@ struct BookmarkCard: View {
     }
 
     @ViewBuilder private var menu: some View {
-        if isArchive {
+        if bookmark.isDone {
             Button("Move Back") { model.store.markUndone(id: bookmark.id) }
         } else {
             Button("Mark Done") { model.store.markDone(id: bookmark.id) }
