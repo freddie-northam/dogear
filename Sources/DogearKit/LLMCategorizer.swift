@@ -22,7 +22,9 @@ public struct FallbackCategorizer: Categorizer {
             group.cancelAll()
             return first
         }
-        if case let .some(answer?) = primaryResult, folders.contains(answer) { return answer }
+        if case let .some(answer?) = primaryResult, answer != Library.unsorted, folders.contains(answer) {
+            return answer
+        }
         return await fallback.categorize(metadata, url: url, folders: folders)
     }
 }

@@ -29,6 +29,26 @@ private struct FixedCategorizer: Categorizer {
     #expect(result == "Articles")
 }
 
+@Test func primaryAnswerIsHonoredWhenValid() async {
+    let categorizer = FallbackCategorizer(
+        primary: FixedCategorizer(answer: "Recipes"),
+        fallback: FixedCategorizer(answer: "Shows"),
+        timeout: .seconds(5)
+    )
+    let result = await categorizer.categorize(FetchedMetadata(), url: URL(string: "https://a.com")!, folders: ["Recipes", "Shows"])
+    #expect(result == "Recipes")
+}
+
+@Test func unsortedPrimaryAnswerFallsBack() async {
+    let categorizer = FallbackCategorizer(
+        primary: FixedCategorizer(answer: "Unsorted"),
+        fallback: FixedCategorizer(answer: "Recipes"),
+        timeout: .seconds(5)
+    )
+    let result = await categorizer.categorize(FetchedMetadata(), url: URL(string: "https://a.com")!, folders: ["Recipes", "Unsorted"])
+    #expect(result == "Recipes")
+}
+
 @Test func primaryTimeoutFallsBack() async {
     let categorizer = FallbackCategorizer(
         primary: SlowCategorizer(),
