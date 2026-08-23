@@ -15,13 +15,14 @@ next, and what the team chose to leave out.
 - Favourites: mark a bookmark as a favourite.
 - Markdown export: export bookmarks as a markdown link list.
 - Drag in/out: drag a link into Dogear, and drag a bookmark out to another app.
+- QR code on cards: show a QR code for a bookmark, so you can open the link
+  on your phone.
+- Import from Apple Notes: read your notes locally and save every link found.
+  macOS asks for permission first.
 
 ## Next up
 
-- QR code on cards: show a QR code on a bookmark card, so you can open the
-  link on your phone.
-- Import from Apple Notes: a local automation that reads links from an Apple
-  Notes note. It asks for permission first.
+Nothing is scheduled. New ideas start as deferred decisions below.
 
 ## Deferred by decision
 
