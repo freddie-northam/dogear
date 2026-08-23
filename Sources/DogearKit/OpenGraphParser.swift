@@ -49,15 +49,25 @@ public enum OpenGraphParser {
     static func decodeEntities(_ text: String) -> String {
         var result = text
         // &amp; is decoded LAST: decoding it first turns "&amp;lt;" (the literal text
-        // "&lt;") into "<" on the following pass.
+        // "&lt;") into "<" and "&amp;#8217;" into "'" on a following pass.
         let entities = [
             ("&lt;", "<"), ("&gt;", ">"), ("&quot;", "\""),
-            ("&#39;", "'"), ("&#x27;", "'"), ("&apos;", "'"), ("&nbsp;", " "),
-            ("&amp;", "&"),
+            ("&apos;", "'"), ("&nbsp;", " "),
         ]
         for (entity, character) in entities {
             result = result.replacingOccurrences(of: entity, with: character)
         }
-        return result
+        // Numeric entities, decimal and hex. An invalid scalar (a surrogate,
+        // or out of range) stays as literal text.
+        result = result.replacing(#/&#([xX][0-9a-fA-F]+|[0-9]+);/#) { match in
+            let body = match.output.1
+            let isHex = body.hasPrefix("x") || body.hasPrefix("X")
+            let value = isHex ? UInt32(body.dropFirst(), radix: 16) : UInt32(body)
+            guard let value, let scalar = Unicode.Scalar(value) else {
+                return String(match.output.0)
+            }
+            return String(Character(scalar))
+        }
+        return result.replacingOccurrences(of: "&amp;", with: "&")
     }
 }

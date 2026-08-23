@@ -58,3 +58,21 @@ private func fixture(_ name: String) throws -> String {
 @Test func decodesApostropheEntity() {
     #expect(OpenGraphParser.decodeEntities("Gordon&apos;s") == "Gordon's")
 }
+
+@Test func decodesHexNumericEntity() {
+    #expect(OpenGraphParser.decodeEntities("Here&#x2019;s the plan") == "Here\u{2019}s the plan")
+}
+
+@Test func decodesDecimalNumericEntity() {
+    #expect(OpenGraphParser.decodeEntities("Here&#8217;s the plan") == "Here\u{2019}s the plan")
+}
+
+@Test func leavesAnInvalidScalarEntityAsIs() {
+    // 55296 is 0xD800, a surrogate: not a valid Unicode scalar.
+    #expect(OpenGraphParser.decodeEntities("bad &#55296; scalar") == "bad &#55296; scalar")
+}
+
+@Test func doesNotDoubleDecodeAnEscapedNumericEntity() {
+    // The author wrote the literal text "&#8217;", escaping the ampersand.
+    #expect(OpenGraphParser.decodeEntities("&amp;#8217;") == "&#8217;")
+}
