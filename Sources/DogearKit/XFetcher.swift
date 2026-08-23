@@ -13,11 +13,16 @@ public struct XFetcher: MetadataFetcher {
         let author = og.title.map { title in
             title.hasSuffix(" on X") ? String(title.dropLast(" on X".count)) : title
         }
+        // A text-only tweet's og:image is the author avatar, not tweet media;
+        // an avatar makes a misleading thumbnail.
+        let thumbnailURL: URL? = og.imageURL.flatMap {
+            $0.path.contains("/profile_images/") ? nil : $0
+        }
         return FetchedMetadata(
             title: Self.composeTitle(author: author, text: text),
             author: author,
             description: text,
-            thumbnailURL: og.imageURL,
+            thumbnailURL: thumbnailURL,
             source: .x
         )
     }

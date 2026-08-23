@@ -22,6 +22,34 @@ import Testing
     #expect(title.hasSuffix("…"))
 }
 
+private func xHTML(image: String) -> Data {
+    Data("""
+    <html><head>
+    <meta property="og:title" content="jack on X">
+    <meta property="og:description" content="just setting up my twttr">
+    <meta property="og:image" content="\(image)">
+    </head></html>
+    """.utf8)
+}
+
+@Test func dropsAvatarOGImage() async throws {
+    let tweetURL = URL(string: "https://x.com/a/status/2")!
+    let stub = StubHTTPClient(responses: [
+        tweetURL: xHTML(image: "https://pbs.twimg.com/profile_images/123/me_400x400.jpg"),
+    ])
+    let metadata = try await XFetcher().fetch(tweetURL, client: stub)
+    #expect(metadata.thumbnailURL == nil)
+}
+
+@Test func keepsTweetMediaOGImage() async throws {
+    let tweetURL = URL(string: "https://x.com/a/status/3")!
+    let stub = StubHTTPClient(responses: [
+        tweetURL: xHTML(image: "https://pbs.twimg.com/media/Fabc123.jpg"),
+    ])
+    let metadata = try await XFetcher().fetch(tweetURL, client: stub)
+    #expect(metadata.thumbnailURL?.absoluteString == "https://pbs.twimg.com/media/Fabc123.jpg")
+}
+
 @Test func throwsWhenNoOGDescription() async {
     let tweetURL = URL(string: "https://x.com/a/status/1")!
     let stub = StubHTTPClient(responses: [tweetURL: Data("<html><head></head></html>".utf8)])
