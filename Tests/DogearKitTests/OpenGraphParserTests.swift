@@ -30,3 +30,31 @@ private func fixture(_ name: String) throws -> String {
     let data = OpenGraphParser.parse(html: "")
     #expect(data.title == nil && data.description == nil && data.imageURL == nil)
 }
+
+@Test func parsesUppercaseTagAndAttributeNames() {
+    let html = """
+    <HTML><HEAD>
+    <META PROPERTY="og:title" CONTENT="Shouty Page">
+    <TITLE>Ignored Fallback</TITLE>
+    </HEAD></HTML>
+    """
+    #expect(OpenGraphParser.parse(html: html).title == "Shouty Page")
+}
+
+@Test func fallsBackToAnUppercaseTitleTag() {
+    #expect(OpenGraphParser.parse(html: "<HTML><TITLE>Shouty Title</TITLE></HTML>").title == "Shouty Title")
+}
+
+@Test func parsesSingleQuotedAttributeValues() {
+    let html = "<html><head><meta property='og:title' content='Single Quoted'></head></html>"
+    #expect(OpenGraphParser.parse(html: html).title == "Single Quoted")
+}
+
+@Test func doesNotDoubleDecodeAnEscapedAmpersand() {
+    // The author wrote the literal text "&lt;", escaping the ampersand as "&amp;".
+    #expect(OpenGraphParser.decodeEntities("Fish &amp;lt; Chips") == "Fish &lt; Chips")
+}
+
+@Test func decodesApostropheEntity() {
+    #expect(OpenGraphParser.decodeEntities("Gordon&apos;s") == "Gordon's")
+}
