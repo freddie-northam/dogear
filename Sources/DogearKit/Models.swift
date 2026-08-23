@@ -42,13 +42,24 @@ public struct Bookmark: Codable, Identifiable, Equatable, Sendable {
 }
 
 extension Bookmark {
-    /// A `[title](url)` markdown link. Square brackets in the title become
-    /// parentheses so the link text cannot break the markdown syntax.
+    /// A `[title](<url>)` markdown link. Square brackets in the title become
+    /// parentheses, and newlines/control characters collapse to single spaces,
+    /// so the link text cannot break the markdown syntax or the line structure
+    /// of an exported list. The URL is wrapped in CommonMark's angle-bracket
+    /// delimiters so a `)` or space inside the URL cannot terminate the link
+    /// early, without altering the URL itself.
     public var markdownLink: String {
-        let safeTitle = title
+        // Splitting on newlines/control characters yields an empty component
+        // for each run of them; dropping the empties before rejoining is what
+        // collapses a run to a single space instead of one space per character.
+        let flattenedTitle = title
+            .components(separatedBy: .newlines.union(.controlCharacters))
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        let safeTitle = flattenedTitle
             .replacingOccurrences(of: "[", with: "(")
             .replacingOccurrences(of: "]", with: ")")
-        return "[\(safeTitle)](\(url))"
+        return "[\(safeTitle)](<\(url)>)"
     }
 
     /// A markdown bullet list, one `- [title](url)` line per bookmark.

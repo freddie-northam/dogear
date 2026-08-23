@@ -29,7 +29,7 @@ public enum URLCleaner {
         }
     }
 
-    static let markupMarkers = ["<", ">", "\"", "'", "%3C", "%3E", "%22", "%27", "%3c", "%3e"]
+    static let markupMarkers = ["<", ">", "\"", "%3C", "%3E", "%22", "%3c", "%3e"]
 
     static func trimmedAtMarkup(_ url: URL) -> URL? {
         let text = url.absoluteString

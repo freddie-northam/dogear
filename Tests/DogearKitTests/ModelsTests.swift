@@ -29,12 +29,12 @@ private func makeBookmark(title: String, url: String) -> Bookmark {
 
 @Test func markdownLinkFormatsTitleAndURL() {
     let bookmark = makeBookmark(title: "Creamy pasta", url: "https://a.com/pasta")
-    #expect(bookmark.markdownLink == "[Creamy pasta](https://a.com/pasta)")
+    #expect(bookmark.markdownLink == "[Creamy pasta](<https://a.com/pasta>)")
 }
 
 @Test func markdownLinkReplacesSquareBracketsInTheTitle() {
     let bookmark = makeBookmark(title: "[2024] Best ramen [ranked]", url: "https://a.com/ramen")
-    #expect(bookmark.markdownLink == "[(2024) Best ramen (ranked)](https://a.com/ramen)")
+    #expect(bookmark.markdownLink == "[(2024) Best ramen (ranked)](<https://a.com/ramen>)")
 }
 
 @Test func markdownListProducesOneBulletPerBookmark() {
@@ -42,5 +42,15 @@ private func makeBookmark(title: String, url: String) -> Bookmark {
         makeBookmark(title: "A", url: "https://a.com/1"),
         makeBookmark(title: "B", url: "https://a.com/2"),
     ])
-    #expect(list == "- [A](https://a.com/1)\n- [B](https://a.com/2)")
+    #expect(list == "- [A](<https://a.com/1>)\n- [B](<https://a.com/2>)")
+}
+
+@Test func markdownLinkSurvivesParenthesesInURL() {
+    let bookmark = makeBookmark(title: "Title", url: "https://en.wikipedia.org/wiki/Swift_(programming_language)")
+    #expect(bookmark.markdownLink == "[Title](<https://en.wikipedia.org/wiki/Swift_(programming_language)>)")
+}
+
+@Test func markdownLinkFlattensNewlinesInTitle() {
+    let bookmark = makeBookmark(title: "Line one\nLine two", url: "https://a.com/x")
+    #expect(bookmark.markdownLink == "[Line one Line two](<https://a.com/x>)")
 }
