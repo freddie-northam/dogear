@@ -1,0 +1,32 @@
+import Foundation
+import Testing
+@testable import DogearKit
+
+@Test func extractsFirstURLFromText() {
+    let url = URLCleaner.firstHTTPURL(in: "check this out https://vm.tiktok.com/ZM2/ so good")
+    #expect(url?.absoluteString == "https://vm.tiktok.com/ZM2/")
+}
+
+@Test func acceptsBareHTTPSURL() {
+    #expect(URLCleaner.firstHTTPURL(in: "https://x.com/jack/status/20")?.host == "x.com")
+}
+
+@Test(arguments: ["javascript:alert(1)", "file:///etc/passwd", "data:text/html,hi", "ftp://host/x", "not a url"])
+func rejectsNonHTTPSchemes(text: String) {
+    #expect(URLCleaner.firstHTTPURL(in: text) == nil)
+}
+
+@Test func canonicalStripsTrackingParams() {
+    let url = URL(string: "https://a.com/p?utm_source=tw&id=5&utm_campaign=x&fbclid=z&igsh=q&si=r")!
+    #expect(URLCleaner.canonicalString(url) == "https://a.com/p?id=5")
+}
+
+@Test func canonicalStripsFragmentAndTrailingSlash() {
+    let url = URL(string: "https://a.com/p/#section")!
+    #expect(URLCleaner.canonicalString(url) == "https://a.com/p")
+}
+
+@Test func canonicalLowercasesHost() {
+    let url = URL(string: "https://X.com/Jack")!
+    #expect(URLCleaner.canonicalString(url) == "https://x.com/Jack")
+}
