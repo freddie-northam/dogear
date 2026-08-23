@@ -155,6 +155,36 @@ private final class InterceptingHTTPClient: HTTPClient, @unchecked Sendable {
     #expect(after.manuallyFiled)
 }
 
+// The categorizer guesses "Recipes" for generic-page.html. If that folder is deleted
+// during the thumbnail fetch (the second data(from:) call, after the guess was made but
+// before it lands), the bookmark must fall back to Unsorted, not resurrect a dead folder.
+@MainActor
+@Test func folderDeletedDuringThumbnailFetchFallsBackToUnsorted() async throws {
+    let pageURL = URL(string: "https://example.com/pasta")!
+    let html = try Data(contentsOf: Bundle.module.url(forResource: "generic-page", withExtension: "html", subdirectory: "Fixtures")!)
+    let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let store = try BookmarkStore(directory: dir)
+    let (bookmark, _) = store.add(url: pageURL)
+
+    let stub = StubHTTPClient(responses: [pageURL: html])
+    let client = InterceptingHTTPClient(inner: stub, triggerOnCall: 2) {
+        store.removeFolder("Recipes")
+    }
+    let service = EnrichmentService(
+        store: store,
+        metadata: MetadataService(client: client),
+        categorizer: KeywordCategorizer(),
+        thumbnails: try ThumbnailCache(directory: dir.appendingPathComponent("thumbnails")),
+        client: client
+    )
+
+    await service.enrich(id: bookmark.id)
+
+    let after = store.library.bookmarks[0]
+    #expect(after.folder == Library.unsorted)
+    #expect(!after.manuallyFiled)
+}
+
 @Test func redirectCollisionCollapsesDuplicate() async throws {
     let short = URL(string: "https://vm.tiktok.com/SHORT/")!
     let full = URL(string: "https://www.tiktok.com/@a/video/123")!
