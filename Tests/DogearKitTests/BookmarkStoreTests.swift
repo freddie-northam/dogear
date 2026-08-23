@@ -219,6 +219,18 @@ private func storeSeeded(folders: [String]) throws -> BookmarkStore {
     #expect(store.library.folders == Library.defaultFolders)
 }
 
+@Test func folderNamesAreTrimmed() throws {
+    let store = try BookmarkStore(directory: tempDir())
+    store.addFolder("  ")
+    #expect(store.library.folders == Library.defaultFolders)
+    store.renameFolder("Recipes", to: "  ")
+    #expect(store.library.folders == Library.defaultFolders)
+    store.renameFolder("Recipes", to: " Dishes ")
+    #expect(store.library.folders.contains("Dishes"))
+    store.addFolder(" Code ")
+    #expect(store.library.folders.contains("Code"))
+}
+
 @Test func removeFolderIgnoresAnUnknownName() throws {
     let store = try BookmarkStore(directory: tempDir())
     var changes = 0

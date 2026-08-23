@@ -112,6 +112,7 @@ public final class BookmarkStore {
     }
 
     public func addFolder(_ name: String) {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty, !library.folders.contains(name) else { return }
         // Insert before Unsorted wherever it sits: a loaded library may not have it last,
         // and an empty folder list would make a count-based index negative.
@@ -121,6 +122,7 @@ public final class BookmarkStore {
     }
 
     public func renameFolder(_ name: String, to newName: String) {
+        let newName = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard name != Library.unsorted, !newName.isEmpty,
               let index = library.folders.firstIndex(of: name),
               !library.folders.contains(newName) else { return }
