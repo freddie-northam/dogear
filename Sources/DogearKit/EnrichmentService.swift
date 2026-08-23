@@ -1,5 +1,6 @@
 import Foundation
 
+@MainActor
 public final class EnrichmentService {
     private let store: BookmarkStore
     private let metadata: MetadataService
@@ -17,11 +18,16 @@ public final class EnrichmentService {
     }
 
     public func enrich(id: UUID) async {
-        guard var bookmark = store.library.bookmarks.first(where: { $0.id == id }),
-              let url = URL(string: bookmark.url) else { return }
+        guard let started = store.library.bookmarks.first(where: { $0.id == id }),
+              let url = URL(string: started.url) else { return }
 
         let result = await metadata.fetch(for: url)
         let resolved = URLCleaner.canonicalString(result.resolvedURL)
+
+        // Re-read: the user may have refiled/edited/completed this bookmark while the
+        // network fetch was in flight. Apply enrichment onto the fresh state, never the
+        // pre-fetch snapshot, so a concurrent edit is never reverted.
+        guard var bookmark = store.library.bookmarks.first(where: { $0.id == id }) else { return }
 
         // Post-redirect dedupe: the resolved URL may match an existing bookmark.
         if let existing = store.library.bookmarks.first(where: { $0.url == resolved && $0.id != id }) {
