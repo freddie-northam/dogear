@@ -11,6 +11,19 @@ import Testing
     #expect(URLCleaner.firstHTTPURL(in: "https://x.com/jack/status/20")?.host == "x.com")
 }
 
+@Test func extractsAllURLsInOrderFromMixedText() {
+    let text = """
+    Recipes to try https://a.com/pasta and https://b.com/soup
+    mailto:someone@example.com then http://c.com/bread at the end
+    """
+    let urls = URLCleaner.allHTTPURLs(in: text).map(\.absoluteString)
+    #expect(urls == ["https://a.com/pasta", "https://b.com/soup", "http://c.com/bread"])
+}
+
+@Test func allHTTPURLsReturnsEmptyForJunk() {
+    #expect(URLCleaner.allHTTPURLs(in: "just words, no links at all").isEmpty)
+}
+
 @Test(arguments: ["javascript:alert(1)", "file:///etc/passwd", "data:text/html,hi", "ftp://host/x", "not a url"])
 func rejectsNonHTTPSchemes(text: String) {
     #expect(URLCleaner.firstHTTPURL(in: text) == nil)

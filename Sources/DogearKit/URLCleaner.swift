@@ -7,14 +7,19 @@ public enum URLCleaner {
     static let xHosts: Set<String> = ["x.com", "twitter.com"]
 
     public static func firstHTTPURL(in text: String) -> URL? {
+        allHTTPURLs(in: text).first
+    }
+
+    /// Every http(s) link in the text, in order of appearance. Other schemes are dropped.
+    public static func allHTTPURLs(in text: String) -> [URL] {
         let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
         let range = NSRange(text.startIndex..., in: text)
         let matches = detector?.matches(in: text, options: [], range: range) ?? []
-        for match in matches {
-            guard let url = match.url, let scheme = url.scheme?.lowercased() else { continue }
-            if scheme == "http" || scheme == "https" { return url }
+        return matches.compactMap { match in
+            guard let url = match.url, let scheme = url.scheme?.lowercased(),
+                  scheme == "http" || scheme == "https" else { return nil }
+            return url
         }
-        return nil
     }
 
     public static func canonicalString(_ url: URL) -> String {
