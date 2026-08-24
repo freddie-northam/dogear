@@ -1,5 +1,6 @@
 import DogearKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 enum NotesImportState: Equatable {
     case confirm
@@ -44,6 +45,7 @@ struct LibraryWindow: View {
     @State private var showingImport = false
     @State private var importState: NotesImportState = .confirm
     @State private var fileForMeResult: String?
+    @State private var importFileResult: String?
     @AppStorage("libraryView") private var viewRaw = "grid"
     @AppStorage("librarySort") private var sortRaw = LibrarySort.lastSaved.rawValue
     private let archiveID = "__archive__"
@@ -98,6 +100,14 @@ struct LibraryWindow: View {
             Button("OK") { fileForMeResult = nil }
         } message: {
             Text(fileForMeResult ?? "")
+        }
+        .alert("Import Bookmarks File", isPresented: Binding(
+            get: { importFileResult != nil },
+            set: { if !$0 { importFileResult = nil } }
+        )) {
+            Button("OK") { importFileResult = nil }
+        } message: {
+            Text(importFileResult ?? "")
         }
     }
 
@@ -240,6 +250,17 @@ struct LibraryWindow: View {
                     startImport()
                 } label: {
                     Label("Import from Notes...", systemImage: "square.and.arrow.down")
+                }
+                Button {
+                    importBookmarksFile()
+                } label: {
+                    Label("Import Bookmarks File...", systemImage: "doc.badge.plus")
+                }
+                Divider()
+                Button {
+                    exportLibrary()
+                } label: {
+                    Label("Export Library...", systemImage: "square.and.arrow.up")
                 }
             } label: {
                 Image(systemName: "plus")
@@ -404,6 +425,46 @@ struct LibraryWindow: View {
         }
     }
 
+    private func importBookmarksFile() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.html]
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let html: String
+        if let text = try? String(contentsOf: url, encoding: .utf8) {
+            html = text
+        } else if let data = try? Data(contentsOf: url) {
+            html = String(decoding: data, as: UTF8.self)
+        } else {
+            importFileResult = "No links found in that file."
+            return
+        }
+        let result = model.capture(urls: URLCleaner.allHTTPURLs(inHTML: html))
+        if result.total == 0 {
+            importFileResult = "No links found in that file."
+        } else if result.new == 0 {
+            importFileResult = "All \(result.total) were already saved."
+        } else {
+            importFileResult = result.new == 1
+                ? "Imported 1 link."
+                : "Imported \(result.new) links."
+        }
+    }
+
+    private func exportLibrary() {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "Dogear.md"
+        panel.allowedContentTypes = [UTType(filenameExtension: "md") ?? .plainText]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let markdown = exportMarkdown(model.store.library)
+        do {
+            try markdown.write(to: url, atomically: true, encoding: String.Encoding.utf8)
+        } catch {
+            model.storageError = "Dogear could not export your bookmarks: \(error.localizedDescription)"
+        }
+    }
+
     private func saveRename() {
         guard case .editing(let folder) = renameState else { return }
         let before = model.store.library.folders
@@ -443,6 +504,23 @@ func openBookmarkURL(_ string: String) {
 
 func hostName(_ bookmark: Bookmark) -> String {
     URL(string: bookmark.url)?.host ?? ""
+}
+
+/// A markdown export of the whole library: one `## <Folder>` section per
+/// non-empty folder, in `library.folders` order, then an `## Archive`
+/// section for done bookmarks if any exist.
+private func exportMarkdown(_ library: Library) -> String {
+    var sections: [String] = []
+    for folder in library.folders {
+        let items = library.bookmarks.filter { $0.folder == folder && !$0.isDone }
+        guard !items.isEmpty else { continue }
+        sections.append("## \(folder)\n\n\(Bookmark.markdownList(items))")
+    }
+    let archived = library.bookmarks.filter(\.isDone)
+    if !archived.isEmpty {
+        sections.append("## Archive\n\n\(Bookmark.markdownList(archived))")
+    }
+    return sections.joined(separator: "\n\n")
 }
 
 /// Reads every note body over Apple events, on the main thread: NSAppleScript
