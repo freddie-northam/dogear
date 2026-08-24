@@ -8,16 +8,16 @@ import Foundation
 /// field recomputes on every keystroke, so that is two dropped frames per
 /// character typed.
 ///
-/// This scans UTF-8 bytes instead, and it prepares the query once for the
-/// whole sweep rather than once per field.
+/// This scans UTF-8 bytes when both sides are plain ASCII, which is almost
+/// every search, and hands anything else to String, which is the only thing
+/// that knows two spellings of an accented word are the same text.
 enum TextSearch {
-    /// A query, prepared for repeated matching.
+    /// A query, prepared once for a whole sweep instead of once per field.
     struct Query {
         fileprivate let lowered: String
         fileprivate let bytes: [UInt8]
-        /// True when the query is pure ASCII, so a byte-level A-Z fold gives
-        /// the same answer Unicode lowercasing would. A query that carries any
-        /// other character takes the slower, fully correct path below.
+        /// True when the lowercased query is pure ASCII. A query with any
+        /// other character cannot be matched byte by byte.
         fileprivate let isASCII: Bool
 
         init(_ text: String) {
@@ -30,15 +30,18 @@ enum TextSearch {
     }
 
     /// True when `haystack` contains the query, ignoring case.
+    ///
+    /// The byte scan runs only when the query and the text are both ASCII,
+    /// where folding A-Z gives exactly the answer Unicode lowercasing gives.
+    /// Everything else goes to String. Bytes cannot tell that "cafe" plus a
+    /// combining accent is the same word as "café", and cannot tell that the
+    /// Kelvin sign lowercases to a plain "k", so a byte scan over text like
+    /// that would answer differently depending on how the page spelled it.
     static func matches(_ haystack: String, _ query: Query) -> Bool {
         guard !query.isEmpty else { return false }
-        if query.isASCII {
-            return scan(haystack, query.bytes)
+        if query.isASCII, let found = scanASCII(haystack, query.bytes) {
+            return found
         }
-        // A query that carries an accent needs more than case folding. Two
-        // spellings of the same word, "café" and "cafe" plus a combining
-        // accent, are equal text and different bytes, and only String knows
-        // that. Rare enough to pay full price for.
         return haystack.lowercased().contains(query.lowered)
     }
 
@@ -47,12 +50,19 @@ enum TextSearch {
         return matches(haystack, query)
     }
 
-    // ponytail: a plain O(haystack * needle) scan. Bookmark titles and URLs
-    // are short and search queries have almost no repeated prefix, so the
-    // worst case never arrives. Boyer-Moore if that ever stops being true.
-    private static func scan(_ haystack: String, _ needle: [UInt8]) -> Bool {
+    /// Scans `haystack` for `needle`, folding A-Z. Returns nil when the text
+    /// is not pure ASCII, which means the caller must use the String path.
+    ///
+    /// ponytail: a plain O(haystack * needle) scan. Titles are capped at
+    /// `OpenGraphParser.titleLimit` characters and a typed query is short, so
+    /// the quadratic worst case is bounded small. Boyer-Moore if either of
+    /// those stops being true.
+    private static func scanASCII(_ haystack: String, _ needle: [UInt8]) -> Bool? {
         var haystack = haystack
-        return haystack.withUTF8 { buffer in
+        return haystack.withUTF8 { buffer -> Bool? in
+            // One pass to reject non-ASCII text. Cheaper than the match below,
+            // and it keeps the byte path honest.
+            for byte in buffer where byte >= 0x80 { return nil }
             guard buffer.count >= needle.count else { return false }
             let limit = buffer.count - needle.count
             var start = 0

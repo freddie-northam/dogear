@@ -341,7 +341,10 @@ public final class BookmarkStore {
     /// hundred-link paste writes once, not a hundred times.
     private var pendingWrite: Library?
     private let pendingLock = NSLock()
-    private let writeQueue = DispatchQueue(label: "app.dogear.library-write", qos: .utility)
+    // userInitiated, not utility: a background-priority queue has no bound on
+    // how long the system may hold it, which would turn the small loss window
+    // below into an unbounded one under memory or disk pressure.
+    private let writeQueue = DispatchQueue(label: "app.dogear.library-write", qos: .userInitiated)
 
     private func scheduleWrite() {
         pendingLock.lock()
@@ -351,16 +354,25 @@ public final class BookmarkStore {
         // A queued write has not read its snapshot yet, so it will pick up the
         // one just stored. Only an empty queue needs a new job.
         guard !alreadyQueued else { return }
-        writeQueue.async { [weak self] in self?.drainPendingWrite() }
+        // Strong self on purpose: a store that goes away with a save still in
+        // the queue must finish that save. A weak capture would drop it.
+        writeQueue.async { self.drainPendingWrite() }
     }
 
+    /// Writes the newest snapshot. A failed write puts the snapshot back, so
+    /// the next mutation or `flush()` tries again instead of the change being
+    /// silently gone. A newer snapshot arrived in the meantime wins: it
+    /// already contains everything the failed one held.
     private func drainPendingWrite() {
         pendingLock.lock()
         let snapshot = pendingWrite
         pendingWrite = nil
         pendingLock.unlock()
         guard let snapshot else { return }
-        write(snapshot)
+        guard !write(snapshot) else { return }
+        pendingLock.lock()
+        if pendingWrite == nil { pendingWrite = snapshot }
+        pendingLock.unlock()
     }
 
     /// Blocks until every scheduled write has reached the disk. Call it before
@@ -381,13 +393,15 @@ public final class BookmarkStore {
         flush()
     }
 
-    private func write(_ snapshot: Library) {
+    /// Returns true when the snapshot reached the disk.
+    @discardableResult
+    private func write(_ snapshot: Library) -> Bool {
         let data: Data
         do {
             data = try JSONEncoder().encode(snapshot)
         } catch {
             report(error)
-            return
+            return false
         }
         if FileManager.default.fileExists(atPath: fileURL.path) {
             try? FileManager.default.removeItem(at: backupURL)
@@ -395,8 +409,10 @@ public final class BookmarkStore {
         }
         do {
             try data.write(to: fileURL, options: .atomic)
+            return true
         } catch {
             report(error)
+            return false
         }
     }
 

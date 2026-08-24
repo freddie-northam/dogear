@@ -31,12 +31,19 @@ private let benchWords = [
     "dive", "kubernetes", "garden", "tomato", "film", "criterion", "interview",
 ]
 
-private func benchLibrary(count: Int) -> Library {
+private func benchLibrary(count: Int, accentedShare: Int = 0) -> Library {
     var rng = SeededGenerator(seed: 0xD09E_A401)
     var bookmarks: [Bookmark] = []
     bookmarks.reserveCapacity(count)
     for i in 0..<count {
-        let title = (0..<6).map { _ in benchWords.randomElement(using: &rng)! }.joined(separator: " ")
+        var title = (0..<6).map { _ in benchWords.randomElement(using: &rng)! }.joined(separator: " ")
+        // Search has two paths: a byte scan for plain ASCII text, and String
+        // for anything else. `accentedShare` sets how much of the library
+        // takes the slower path, so the table shows both ends of the range a
+        // real library sits between.
+        if accentedShare > 0, i % accentedShare == 0 {
+            title = title.replacingOccurrences(of: "e", with: "\u{e9}")
+        }
         bookmarks.append(Bookmark(
             id: UUID(),
             url: "https://site\(i % 400).example.com/\(benchWords.randomElement(using: &rng)!)/\(i)",
@@ -86,6 +93,15 @@ private func benchReport(_ label: String, iterations: Int, _ body: () -> Void) {
         benchReport("toggleFavorite (1 click)", iterations: 10) { store.toggleFavorite(id: id) }
         benchReport("search hit", iterations: 20) { _ = store.search("carbonara") }
         benchReport("search miss", iterations: 20) { _ = store.search("zzzz") }
+
+        // The same searches over a library where one title in three carries an
+        // accent, so a third of the sweep takes the String path.
+        let mixedDir = TempDirectory()
+        let mixed = try JSONEncoder().encode(benchLibrary(count: count, accentedShare: 3))
+        try mixed.write(to: mixedDir.url.appendingPathComponent("library.json"))
+        let mixedStore = try BookmarkStore(directory: mixedDir.url)
+        benchReport("search hit (1/3 accented)", iterations: 20) { _ = mixedStore.search("carbonara") }
+        benchReport("search miss (1/3 accented)", iterations: 20) { _ = mixedStore.search("zzzz") }
         benchReport("counts()", iterations: 20) { _ = store.counts() }
         benchReport("bookmarks(in:)", iterations: 20) { _ = store.bookmarks(in: "Recipes") }
         benchReport("archive()", iterations: 10) { _ = store.archive() }

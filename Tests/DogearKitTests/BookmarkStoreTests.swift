@@ -474,7 +474,9 @@ import Testing
     // store stopped lowercasing every field and stopped writing on the calling
     // thread, so a return to either implementation fails here. Both leave a
     // wide margin over the measured cost: the point is to catch a regression,
-    // not to police a millisecond.
+    // not to police a millisecond. The search here runs over ASCII titles,
+    // which is the byte-scan path; `BENCH=1` also reports the accented mix,
+    // which is slower and has no ceiling because its cost is String's.
     if ProcessInfo.processInfo.environment["PERF"] != nil {
         #expect(elapsed < .milliseconds(200))
         #expect(searchElapsed < .milliseconds(3))
@@ -692,4 +694,43 @@ private final class WriteFailureLog: @unchecked Sendable {
     await MainActor.run {}
     #expect(failures.count >= 1)
     #expect(failures.everyReportWasOnTheMainThread)
+}
+
+@Test func aFailedWriteIsRetriedByTheNextFlush() throws {
+    let temp = TempDirectory()
+    let dir = temp.url
+    let store = try BookmarkStore(directory: dir)
+    _ = store.add(url: URL(string: "https://example.com/first")!)
+    store.flush()
+
+    // Make the directory unwritable, change the library, and let the write fail.
+    try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: dir.path)
+    _ = store.add(url: URL(string: "https://example.com/second")!)
+    store.flush()
+
+    // The change must not be gone: once the directory is writable again, the
+    // next flush has to land it.
+    try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dir.path)
+    store.flush()
+
+    let reloaded = try BookmarkStore(directory: dir)
+    #expect(reloaded.library.bookmarks.count == 2)
+}
+
+@Test func aStoreThatGoesAwayStillFinishesItsWrite() throws {
+    let temp = TempDirectory()
+    let dir = temp.url
+    do {
+        let store = try BookmarkStore(directory: dir)
+        _ = store.add(url: URL(string: "https://example.com/kept")!)
+        // No flush: the write is still queued when the store leaves scope.
+    }
+    // Give the write queue a moment to finish what it was handed.
+    let deadline = Date().addingTimeInterval(2)
+    var reloaded = try BookmarkStore(directory: dir)
+    while reloaded.library.bookmarks.isEmpty, Date() < deadline {
+        usleep(20_000)
+        reloaded = try BookmarkStore(directory: dir)
+    }
+    #expect(reloaded.library.bookmarks.count == 1)
 }

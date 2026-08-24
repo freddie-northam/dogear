@@ -111,3 +111,16 @@ private func fixture(_ name: String) throws -> String {
     // The author wrote the literal text "&#8217;", escaping the ampersand.
     #expect(OpenGraphParser.decodeEntities("&amp;#8217;") == "\u{2019}")
 }
+
+@Test func cappsARunawayTitle() {
+    let long = String(repeating: "a", count: 5000)
+    let parsed = OpenGraphParser.parse(html: "<title>\(long)</title>")
+    let title = try! #require(parsed.title)
+    #expect(title.count == OpenGraphParser.titleLimit + 1)
+    #expect(title.hasSuffix("\u{2026}"))
+}
+
+@Test func leavesANormalTitleAlone() {
+    let parsed = OpenGraphParser.parse(html: "<title>A short title</title>")
+    #expect(parsed.title == "A short title")
+}

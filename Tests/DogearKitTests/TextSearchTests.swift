@@ -44,8 +44,8 @@ private func matches(_ haystack: String, _ query: String) -> Bool {
     #expect(matches("Café København", "benhavn"))
 }
 
-// The byte scan folds A-Z only, so a query that carries an accent takes the
-// Unicode path. Both directions of case must still work there.
+// The byte scan runs only when both sides are ASCII. A query that carries an
+// accent takes the Unicode path. Both directions of case must still work.
 @Test func foldsCaseForNonASCIIQueries() {
     #expect(matches("CAFÉ NOIR", "café"))
     #expect(matches("café noir", "CAFÉ"))
@@ -71,3 +71,20 @@ private func matches(_ haystack: String, _ query: String) -> Bool {
     #expect(!matches("aaa", "aab"))
 }
 
+
+// The Kelvin sign lowercases to a plain "k". Bytes cannot see that, so text
+// carrying one must take the String path.
+@Test func findsALetterWhoseLowercaseIsASCII() {
+    #expect(matches("\u{212A}elvin scale", "k"))
+    #expect(matches("\u{212A}", "k"))
+}
+
+// The same accented word spelled two ways must give the same answer for the
+// same query, whichever way the page happened to encode it.
+@Test func answersTheSameForEitherSpellingOfAccentedText() {
+    let decomposed = "cafe\u{301} noir"
+    let precomposed = "caf\u{e9} noir"
+    #expect(matches(decomposed, "noir") == matches(precomposed, "noir"))
+    #expect(matches(decomposed, "cafe") == matches(precomposed, "cafe"))
+    #expect(matches(decomposed, "caf\u{e9}") == matches(precomposed, "caf\u{e9}"))
+}
