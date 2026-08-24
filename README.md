@@ -36,10 +36,6 @@ you open it.
 
 ## How it works
 
-<p align="center">
-  <img src="assets/screenshots/popover.png" width="360" alt="The Dogear menu bar popover: a field to paste a link, one bookmark waiting for you, and recent saves">
-</p>
-
 1. Copy a link. In TikTok or X on your iPhone, use Share, then Copy Link.
    Universal Clipboard carries it to your Mac.
 2. The bookmark icon in the menu bar fills when a link is ready.
@@ -55,10 +51,6 @@ When you cook the recipe or watch the show, mark it done. It moves to the
 Archive, which stays searchable. Undo with Command Z.
 
 ## The library
-
-<p align="center">
-  <img src="assets/screenshots/library-list.png" width="880" alt="The library in list view, grouped by date">
-</p>
 
 - Grid view or list view. Sort by last saved, oldest first, title, or site.
 - Your own folders, in the order you drag them into.
