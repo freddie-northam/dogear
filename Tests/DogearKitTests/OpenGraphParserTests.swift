@@ -26,6 +26,14 @@ private func fixture(_ name: String) throws -> String {
     _ = data
 }
 
+@Test func rejectsNonHTTPImageURL() {
+    let html = """
+    <html><head><meta property="og:image" content="file:///etc/hosts"></head></html>
+    """
+    let data = OpenGraphParser.parse(html: html)
+    #expect(data.imageURL == nil)
+}
+
 @Test func emptyInputYieldsNils() {
     let data = OpenGraphParser.parse(html: "")
     #expect(data.title == nil && data.description == nil && data.imageURL == nil)

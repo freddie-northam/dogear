@@ -25,7 +25,7 @@ public struct TikTokFetcher: MetadataFetcher {
             title: oembed.title?.trimmingCharacters(in: .whitespacesAndNewlines),
             author: oembed.author_name,
             description: oembed.title,
-            thumbnailURL: oembed.thumbnail_url.flatMap(URL.init(string:)),
+            thumbnailURL: oembed.thumbnail_url.flatMap(URL.init(string:)).flatMap { URLCleaner.isCapturable($0) ? $0 : nil },
             source: .tiktok
         )
     }

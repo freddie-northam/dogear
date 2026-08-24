@@ -81,4 +81,10 @@ public enum URLCleaner {
         }
         return parts.string ?? url.absoluteString
     }
+
+    /// The one rule for what may become or remain a bookmark URL.
+    public static func isCapturable(_ url: URL) -> Bool {
+        let scheme = url.scheme?.lowercased()
+        return scheme == "http" || scheme == "https"
+    }
 }
