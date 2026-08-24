@@ -647,3 +647,49 @@ private func storeSeeded(folders: [String]) throws -> BookmarkStore {
     #expect(store.removeFolder(Library.unsorted) == nil)
     #expect(store.removeFolder("Nope") == nil)
 }
+
+/// Collects what a write failure reported, from whichever thread reported it.
+private final class WriteFailureLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var errors: [Error] = []
+    private var mainThreadFlags: [Bool] = []
+
+    func record(_ error: Error) {
+        lock.lock()
+        errors.append(error)
+        mainThreadFlags.append(Thread.isMainThread)
+        lock.unlock()
+    }
+
+    var count: Int { lock.lock(); defer { lock.unlock() }; return errors.count }
+    var everyReportWasOnTheMainThread: Bool {
+        lock.lock(); defer { lock.unlock() }
+        return mainThreadFlags.allSatisfy { $0 }
+    }
+}
+
+@Test func aFailedWriteReportsOnTheMainThread() async throws {
+    let temp = TempDirectory()
+    let dir = temp.url
+    let store = try BookmarkStore(directory: dir)
+    _ = store.add(url: URL(string: "https://example.com/a")!)
+    store.flush()
+
+    // A directory the process cannot write to fails the atomic write: it has
+    // nowhere to put the temporary file it renames into place.
+    try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: dir.path)
+    defer {
+        try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dir.path)
+    }
+
+    let failures = WriteFailureLog()
+    store.onWriteFailure = { failures.record($0) }
+    _ = store.add(url: URL(string: "https://example.com/b")!)
+    store.flush()
+
+    // The write runs on a background queue, so its report is hopped to the
+    // main thread. Yield to the main queue before reading what arrived.
+    await MainActor.run {}
+    #expect(failures.count >= 1)
+    #expect(failures.everyReportWasOnTheMainThread)
+}
