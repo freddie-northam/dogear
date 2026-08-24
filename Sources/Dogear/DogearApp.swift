@@ -29,7 +29,7 @@ struct DogearApp: App {
     @AppStorage("hasLaunchedBefore") private var hasLaunchedBefore = false
     @Environment(\.openWindow) private var openWindow
     @State private var serviceProvider: ServiceProvider?
-    @NSApplicationDelegateAdaptor(DockDelegate.self) private var dockDelegate
+    @State private var dockObserver = DockReopenObserver()
 
     init() {
         // The Dock icon is a setting; LSUIElement only sets the initial state.
@@ -53,9 +53,8 @@ struct DogearApp: App {
                 // registration here also covers the launched-by-service path.
                 .task {
                     registerServiceProviderIfNeeded()
-                    dockDelegate.openLibrary = {
+                    dockObserver.start {
                         openWindow(id: "library")
-                        NSApp.activate()
                     }
                 }
         }

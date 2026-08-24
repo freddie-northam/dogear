@@ -59,7 +59,8 @@ private struct GeneralSettings: View {
 // MARK: - Library
 
 private struct LibrarySettings: View {
-    @EnvironmentObject var model: AppModel
+    // Resolved when the tab is shown, never at launch; see the Settings scene.
+    private var model: AppModel? { AppModel.shared }
     @State private var thumbnailBytes: Int64 = 0
     @State private var clearedThumbnails = false
 
@@ -69,15 +70,15 @@ private struct LibrarySettings: View {
     }
 
     var body: some View {
-        let counts = model.store.counts()
-        let total = model.store.library.bookmarks.count
+        let counts = model?.store.counts()
+        let total = model?.store.library.bookmarks.count ?? 0
         Form {
             Section("Your library") {
                 LabeledContent("Bookmarks", value: "\(total)")
-                LabeledContent("Waiting", value: "\(total - counts.archived)")
-                LabeledContent("Archived", value: "\(counts.archived)")
-                LabeledContent("Favourites", value: "\(counts.favorites)")
-                LabeledContent("Folders", value: "\(model.store.library.folders.count)")
+                LabeledContent("Waiting", value: "\(total - (counts?.archived ?? 0))")
+                LabeledContent("Archived", value: "\(counts?.archived ?? 0)")
+                LabeledContent("Favourites", value: "\(counts?.favorites ?? 0)")
+                LabeledContent("Folders", value: "\(model?.store.library.folders.count ?? 0)")
             }
             Section("Storage") {
                 LabeledContent("Location") {
@@ -114,6 +115,7 @@ private struct LibrarySettings: View {
     }
 
     private func clearThumbnails() {
+        guard let model else { return }
         for bookmark in model.store.library.bookmarks where bookmark.hasThumbnail {
             model.thumbnails.remove(for: bookmark.id)
             var cleared = bookmark
