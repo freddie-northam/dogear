@@ -17,9 +17,16 @@ public struct MetadataService: Sendable {
     }
 
     public func fetch(for url: URL) async -> (resolvedURL: URL, metadata: FetchedMetadata?) {
-        let resolved = (try? await client.resolvedURL(for: url)) ?? url
-        let fetcher = Self.fetcher(forHost: resolved.host)
-        let metadata = try? await fetcher.fetch(resolved, client: client)
-        return (resolved, metadata)
+        guard let fetched = try? await client.fetch(url, limit: FetchLimit.html) else {
+            return (url, nil)
+        }
+        let fetcher = Self.fetcher(forHost: fetched.finalURL.host)
+        let metadata: FetchedMetadata?
+        if type(of: fetcher).parsesPageBody {
+            metadata = try? fetcher.parse(body: fetched.data, url: fetched.finalURL)
+        } else {
+            metadata = try? await fetcher.fetch(fetched.finalURL, client: client)
+        }
+        return (fetched.finalURL, metadata)
     }
 }
