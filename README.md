@@ -70,7 +70,7 @@ an ad-hoc signature. macOS may ask you to confirm the first launch. Or build
 from source:
 
 ```bash
-git clone https://github.com/northamf/dogear
+git clone https://github.com/freddie-northam/dogear
 cd dogear
 Scripts/make-app.sh
 open build/Dogear.app

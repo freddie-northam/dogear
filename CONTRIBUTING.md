@@ -5,7 +5,7 @@ Thank you for your help.
 ## Setup
 
 ```bash
-git clone https://github.com/northamf/dogear
+git clone https://github.com/freddie-northam/dogear
 cd dogear
 swift test
 ```

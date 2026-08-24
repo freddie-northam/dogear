@@ -29,7 +29,7 @@ The repository is about to go public under MIT and the README is its front door.
 
 ## Current state
 
-- `README.md` (53 lines): sections How it works / Move your links from Apple Notes (manual select-all-copy flow) / Install (release download + `git clone https://github.com/northamf/dogear`) / Privacy / License, plus a trailing "See ROADMAP.md for what comes next." Folder list in the intro: "recipes, restaurants, shows, articles".
+- `README.md` (53 lines): sections How it works / Move your links from Apple Notes (manual select-all-copy flow) / Install (release download + `git clone https://github.com/freddie-northam/dogear`) / Privacy / License, plus a trailing "See ROADMAP.md for what comes next." Folder list in the intro: "recipes, restaurants, shows, articles".
 - `ROADMAP.md`: "Shipped (v1.x)" ends at "Import from Apple Notes"; "Next up: Nothing is scheduled"; Deferred list; Principles (no notifications, zero deps, local-only).
 - `CONTRIBUTING.md` line 19: "The design spec lives in `docs/superpowers/specs/`. Read it before large changes." Line ~21+: "Live canaries ... CI runs these daily".
 - `docs/superpowers/specs/2026-08-23-dogear-design.md` line 4: `Status: approved design, ready for implementation planning`. Known drifts vs code: §3 says macOS 15 (code: 15.4) and "Xcode project" (code: SwiftPM); §4 describes the original popover (code: v4 redesign); §6 specifies `@Generable` (code: free-text plus validation, awaiting Xcode 26); §7 first-run Launch at Login offer and §8 custom-folder symbol palette (both deferred in ROADMAP); §2 export out of scope (code: markdown export ships); §9 README screenshots (none exist); §3 "notarized DMG" (code: ad-hoc signing); default folders list lacks Music; cards no longer show source domain.
