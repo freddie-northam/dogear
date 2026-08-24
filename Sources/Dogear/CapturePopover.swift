@@ -228,7 +228,12 @@ struct CapturePopover: View {
                         .lineLimit(1)
                 }
             }
+            // Identity follows the bookmark so a new pick is a new view: the
+            // old row fades out and the new one fades in, instead of the text
+            // and badge snapping in place.
             pickRow(pick)
+                .id(pick.id)
+                .transition(.opacity)
         }
     }
 
@@ -260,11 +265,15 @@ struct CapturePopover: View {
             // and each names itself through its own hover color.
             if isPickHovering {
                 HoverIconButton(symbol: "checkmark", label: "Mark done", hoverColor: .green) {
-                    model.markDone(pick.id, undoManager: undoManager)
-                    self.pick = model.store.pick(excluding: pick.id)
+                    withAnimation(Motion.reveal) {
+                        model.markDone(pick.id, undoManager: undoManager)
+                        self.pick = model.store.pick(excluding: pick.id)
+                    }
                 }
                 HoverIconButton(symbol: "arrow.clockwise", label: "Show another", hoverColor: .primary) {
-                    self.pick = model.store.pick(excluding: pick.id)
+                    withAnimation(Motion.reveal) {
+                        self.pick = model.store.pick(excluding: pick.id)
+                    }
                 }
             }
         }
