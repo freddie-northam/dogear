@@ -20,7 +20,7 @@ next, and what the team chose to leave out.
 - Import from Apple Notes: read your notes locally and save every link found.
   macOS asks for permission first. You pick which folders to read, and a
   second import reads only what changed since the last import.
-- List view and sorting: switch between grid and list, and sort by last
+- List view and sort order: switch between grid and list, and sort by last
   saved, oldest first, title, or site.
 - Music folder: a default folder for songs, albums, and playlists.
 - Refresh Metadata: re-fetch title, author, and thumbnail for one bookmark.
