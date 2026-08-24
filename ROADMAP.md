@@ -18,7 +18,17 @@ next, and what the team chose to leave out.
 - QR code on cards: show a QR code for a bookmark, so you can open the link
   on your phone.
 - Import from Apple Notes: read your notes locally and save every link found.
-  macOS asks for permission first.
+  macOS asks for permission first. You pick which folders to read, and a
+  second import reads only what changed since the last import.
+- List view and sorting: switch between grid and list, and sort by last
+  saved, oldest first, title, or site.
+- Music folder: a default folder for songs, albums, and playlists.
+- Refresh Metadata: re-fetch title, author, and thumbnail for one bookmark.
+- File These for Me: run auto-filing over the Unsorted folder on demand.
+- Services menu capture: select a link in any app, then choose Services,
+  Save to Dogear.
+- Browser bookmarks import and Markdown export: import a bookmarks file
+  from a browser, and export the library to a Markdown file.
 
 ## Next up
 
@@ -26,6 +36,8 @@ Nothing is scheduled. New ideas start as deferred decisions below.
 
 ## Deferred by decision
 
+- Notarized releases: gated on an Apple Developer ID; releases are ad-hoc
+  signed today.
 - Custom-folder symbol palette: a picker for a custom icon per folder.
 - First-run launch-at-login offer: an offer to enable launch at login on
   first run.
