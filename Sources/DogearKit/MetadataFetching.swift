@@ -18,5 +18,18 @@ public struct FetchedMetadata: Equatable, Sendable {
 }
 
 public protocol MetadataFetcher: Sendable {
+    // Whether this fetcher's metadata comes from the page body itself (true, the
+    // default) or from its own separate endpoint (false, e.g. TikTok's oEmbed).
+    static var parsesPageBody: Bool { get }
+
     func fetch(_ url: URL, client: HTTPClient) async throws -> FetchedMetadata
+    func parse(body: Data, url: URL) throws -> FetchedMetadata
+}
+
+public extension MetadataFetcher {
+    static var parsesPageBody: Bool { true }
+
+    func parse(body: Data, url: URL) throws -> FetchedMetadata {
+        throw HTTPClientError.noResponse
+    }
 }
