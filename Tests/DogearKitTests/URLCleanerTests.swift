@@ -95,6 +95,22 @@ func rejectsNonHTTPSchemes(text: String) {
     #expect(urls[1].absoluteString.contains("'") || urls[1].absoluteString.contains("%27"))
 }
 
+@Test func extractsLinksFromANetscapeBookmarkFile() {
+    let html = """
+    <!DOCTYPE NETSCAPE-Bookmark-file-1>
+    <TITLE>Bookmarks</TITLE>
+    <DL><p>
+        <DT><H3>Reading</H3>
+        <DL><p>
+            <DT><A HREF="https://a.com/one?x=1&amp;y=2" ADD_DATE="1700000000">One</A>
+            <DT><A HREF="https://b.com/two">Two</A>
+        </DL><p>
+    </DL><p>
+    """
+    let urls = URLCleaner.allHTTPURLs(inHTML: html).map(\.absoluteString)
+    #expect(urls == ["https://a.com/one?x=1&y=2", "https://b.com/two"])
+}
+
 @Test func canonicalUnifiesTwitterHostsToX() {
     let a = URLCleaner.canonicalString(URL(string: "https://twitter.com/jack/status/20")!)
     let b = URLCleaner.canonicalString(URL(string: "https://x.com/jack/status/20")!)
