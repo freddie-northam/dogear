@@ -327,9 +327,9 @@ public final class BookmarkStore {
     // MARK: Persistence
 
     /// Encoding the whole library and rotating the backup costs about 70 ms
-    /// on a 20,000 bookmark library. Done on the caller's thread that is four
-    /// dropped frames for every star click, so a mutation now hands the write
-    /// to `writeQueue` and returns. `onChange` still fires first and in place:
+    /// on a 20,000 bookmark library. On the caller's thread that is four
+    /// dropped frames for every star click, so a mutation hands the write to
+    /// `writeQueue` and returns. `onChange` still fires first and in place:
     /// the UI redraws from memory and never waits on the disk.
     private func mutated() {
         onChange?()
@@ -400,14 +400,15 @@ public final class BookmarkStore {
         }
     }
 
-    /// A failed write reports on the main thread whoever noticed it, so the
-    /// handler can touch the UI without a hop of its own.
+    /// Reports a failed write on the main thread. The handler belongs to the
+    /// main thread: the app sets it there and it touches the UI. So the hop
+    /// happens before the property is read, never after. Reading it here on
+    /// the write queue would race the app setting it.
     private func report(_ error: Error) {
-        guard let onWriteFailure else { return }
         if Thread.isMainThread {
-            onWriteFailure(error)
+            onWriteFailure?(error)
         } else {
-            DispatchQueue.main.async { onWriteFailure(error) }
+            DispatchQueue.main.async { [weak self] in self?.onWriteFailure?(error) }
         }
     }
 
