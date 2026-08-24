@@ -7,6 +7,15 @@ enum NotesImportState: Equatable {
     case finished(String)
 }
 
+/// One alert, one state: the collision message replaces the rename prompt's
+/// content in place instead of a second `.alert` firing from the first's
+/// own dismissal, which SwiftUI can drop silently.
+enum RenameState: Equatable {
+    case idle
+    case editing(folder: String)
+    case collided(folder: String)
+}
+
 enum LibrarySort: String, CaseIterable, Identifiable {
     case lastSaved
     case oldestFirst
@@ -30,9 +39,8 @@ struct LibraryWindow: View {
     @State private var selection: String = Library.unsorted
     @State private var query = ""
     @State private var pasteFailed = false
-    @State private var renamingFolder: String?
+    @State private var renameState: RenameState = .idle
     @State private var renameDraft = ""
-    @State private var renameCollided = false
     @State private var showingImport = false
     @State private var importState: NotesImportState = .confirm
     @State private var fileForMeResult: String?
@@ -67,18 +75,13 @@ struct LibraryWindow: View {
         } message: {
             Text("The clipboard holds no web link. Dogear saves http and https links.")
         }
-        .alert("Rename Folder", isPresented: Binding(
-            get: { renamingFolder != nil },
-            set: { if !$0 { renamingFolder = nil } }
+        .alert(renameAlertTitle, isPresented: Binding(
+            get: { renameState != .idle },
+            set: { if !$0 { renameState = .idle } }
         )) {
-            TextField("Name", text: $renameDraft)
-            Button("Save") { saveRename() }
-            Button("Cancel", role: .cancel) {}
-        }
-        .alert("Folder Name in Use", isPresented: $renameCollided) {
-            Button("OK") {}
+            renameAlertActions
         } message: {
-            Text("A folder with this name exists.")
+            renameAlertMessage
         }
         .alert("Storage Error", isPresented: Binding(
             get: { model.storageError != nil },
@@ -95,6 +98,34 @@ struct LibraryWindow: View {
             Button("OK") { fileForMeResult = nil }
         } message: {
             Text(fileForMeResult ?? "")
+        }
+    }
+
+    // MARK: Rename alert
+
+    private var renameAlertTitle: String {
+        if case .collided = renameState { return "Folder Name in Use" }
+        return "Rename Folder"
+    }
+
+    @ViewBuilder private var renameAlertActions: some View {
+        switch renameState {
+        case .idle:
+            EmptyView()
+        case .editing:
+            TextField("Name", text: $renameDraft)
+            Button("Save") { saveRename() }
+            Button("Cancel", role: .cancel) {}
+        case .collided:
+            Button("OK") { renameState = .idle }
+        }
+    }
+
+    @ViewBuilder private var renameAlertMessage: some View {
+        if case .collided = renameState {
+            Text("A folder with this name exists.")
+        } else {
+            EmptyView()
         }
     }
 
@@ -158,7 +189,7 @@ struct LibraryWindow: View {
                 if folder != Library.unsorted {
                     Button {
                         renameDraft = folder
-                        renamingFolder = folder
+                        renameState = .editing(folder: folder)
                     } label: {
                         Label("Rename Folder", systemImage: "pencil")
                     }
@@ -344,12 +375,13 @@ struct LibraryWindow: View {
 
     private func runNotesImport() {
         importState = .running
+        // NSAppleScript is documented main-thread-only (Apple's Thread
+        // Safety Summary, Foundation framework), so this runs on the main
+        // actor and blocks the UI for the duration of the Apple event.
         // ponytail: reads every note serially in one AppleScript call;
         // per-folder selection and incremental import can come later.
-        Task.detached {
-            let bodies = readNotesBodies()
-            await MainActor.run { finishImport(with: bodies) }
-        }
+        let bodies = readNotesBodies()
+        finishImport(with: bodies)
     }
 
     private func finishImport(with bodies: String?) {
@@ -373,17 +405,25 @@ struct LibraryWindow: View {
     }
 
     private func saveRename() {
-        guard let folder = renamingFolder else { return }
+        guard case .editing(let folder) = renameState else { return }
         let before = model.store.library.folders
         model.store.renameFolder(folder, to: renameDraft)
         let trimmed = renameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         if model.store.library.folders != before {
             // The rename went through; keep the renamed folder selected.
             if selection == folder { selection = trimmed }
+            renameState = .idle
         } else if !trimmed.isEmpty, trimmed != folder {
-            // Refused because another folder holds this name. An empty or
-            // unchanged name closes silently: that reads as a cancel.
-            renameCollided = true
+            // Refused because another folder holds this name. The Save
+            // action runs before SwiftUI writes isPresented back to false
+            // (that write reaches our setter after this closure returns and
+            // would immediately idle a `.collided` set here), so defer the
+            // transition to the next run loop turn. That reads as a clean
+            // dismiss-then-represent of this same alert, not a second one.
+            DispatchQueue.main.async { renameState = .collided(folder: folder) }
+        } else {
+            // Empty or unchanged name: that reads as a cancel.
+            renameState = .idle
         }
     }
 }
@@ -405,8 +445,9 @@ func hostName(_ bookmark: Bookmark) -> String {
     URL(string: bookmark.url)?.host ?? ""
 }
 
-/// Reads every note body over Apple events, off the main thread. Returns nil
-/// when Notes cannot be read: permission denied or Notes unavailable.
+/// Reads every note body over Apple events, on the main thread: NSAppleScript
+/// is documented main-thread-only. Returns nil when Notes cannot be read:
+/// permission denied or Notes unavailable.
 private func readNotesBodies() -> String? {
     let source = "tell application \"Notes\" to get body of every note"
     var errorInfo: NSDictionary?
@@ -442,6 +483,10 @@ private struct NotesImportSheet: View {
                 }
             case .running:
                 ProgressView("Reading your notes...")
+                // Cancel cannot interrupt the in-flight Apple event (the
+                // call is synchronous on the main actor); it only lets the
+                // user dismiss once the event has returned.
+                Button("Cancel") { state = .confirm }
             case .finished(let message):
                 Text(message)
                     .font(.callout)
