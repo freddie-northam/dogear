@@ -58,6 +58,7 @@ struct LibraryWindow: View {
     @AppStorage("libraryView") private var viewRaw = "grid"
     @AppStorage("librarySort") private var sortRaw = LibrarySort.lastSaved.rawValue
     @AppStorage("notesImportSelection") private var selectionJSON = ""
+    @AppStorage("notesImportCursors") private var cursorsJSON = "{}"
     private let archiveID = "__archive__"
     private let favoritesID = "__favorites__"
 
@@ -419,6 +420,11 @@ struct LibraryWindow: View {
             return
         }
         selectedFolderIDs = loadSelection(validFolderIDs: Set(folders.map(\.id)))
+        // Cursors for folders that no longer exist (deleted or renamed away)
+        // are dead weight; drop them against the folder list we just read.
+        var cursors = loadCursors()
+        cursors.prune(keeping: Set(folders.map(\.id)))
+        saveCursors(cursors)
         importState = .choosing(folders)
     }
 
@@ -436,22 +442,42 @@ struct LibraryWindow: View {
         selectionJSON = json
     }
 
+    private func loadCursors() -> NotesImportCursors {
+        guard let data = cursorsJSON.data(using: .utf8),
+              let cursors = try? JSONDecoder().decode(NotesImportCursors.self, from: data)
+        else { return NotesImportCursors() }
+        return cursors
+    }
+
+    private func saveCursors(_ cursors: NotesImportCursors) {
+        guard let data = try? JSONEncoder().encode(cursors),
+              let json = String(data: data, encoding: .utf8) else { return }
+        cursorsJSON = json
+    }
+
     private func runNotesImport() {
         guard case .choosing(let folders) = importState else { return }
         let ticked = folders.filter { selectedFolderIDs.contains($0.id) }
+        var cursors = loadCursors()
         var combinedBodies = ""
         var failedFolders = 0
+        let now = Date()
         // NSAppleScript is documented main-thread-only (Apple's Thread
         // Safety Summary, Foundation framework), so each read runs on the
         // main actor and blocks the UI for the duration of its Apple event.
         for folder in ticked {
             importState = .running("Reading \(folder.name)...")
-            if let body = readNotesBody(folderID: folder.id) {
+            let secondsSince = cursors.secondsSince(folderID: folder.id, now: now)
+            if let body = readNotesBody(folderID: folder.id, secondsSince: secondsSince) {
                 combinedBodies += body + "\n"
+                // Recorded only on success: a failed folder keeps its old
+                // cursor and is re-read in full (or from its old cursor) next time.
+                cursors.record(folderID: folder.id, at: now)
             } else {
                 failedFolders += 1
             }
         }
+        saveCursors(cursors)
         finishImport(with: combinedBodies, failedFolders: failedFolders)
     }
 
@@ -605,14 +631,23 @@ private func readNotesFolders() -> [NotesFolder]? {
 }
 
 /// Reads every non-password-protected note body in one folder, over Apple
-/// events, on the main thread. Returns nil when the folder cannot be read.
-private func readNotesBody(folderID: String) -> String? {
+/// events, on the main thread. When `secondsSince` is given, only notes
+/// modified within that many seconds of now are read (an incremental read);
+/// nil means a full read. Returns nil when the folder cannot be read.
+private func readNotesBody(folderID: String, secondsSince: Int?) -> String? {
     let escapedID = folderID
         .replacingOccurrences(of: "\\", with: "\\\\")
         .replacingOccurrences(of: "\"", with: "\\\"")
+    var whose = "password protected is false"
+    var cutoffLine = ""
+    if let secondsSince {
+        cutoffLine = "set cutoff to (current date) - \(secondsSince)\n"
+        whose += " and modification date > cutoff"
+    }
     let source = "tell application \"Notes\"\n" +
         "set f to first folder whose id is \"\(escapedID)\"\n" +
-        "get body of every note of f whose password protected is false\n" +
+        cutoffLine +
+        "get body of every note of f whose \(whose)\n" +
         "end tell"
     var errorInfo: NSDictionary?
     guard let descriptor = NSAppleScript(source: source)?.executeAndReturnError(&errorInfo),
