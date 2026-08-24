@@ -9,7 +9,7 @@ next, and what the team chose to leave out.
 - Enrichment: fetch title, author, and thumbnail for a saved link.
 - Auto-filing: file a new link into a folder automatically.
 - Archive: mark a bookmark done and move it to a searchable archive.
-- Resurfacing pick: show one saved bookmark at random.
+- Pick: the popover shows one saved bookmark that waits for you.
 - Multi-link paste: save every link found in a block of pasted text.
 - Notes: attach a note to a bookmark.
 - Favourites: mark a bookmark as a favourite.
@@ -57,8 +57,8 @@ Nothing is scheduled. New ideas start as deferred decisions below.
 
 ## Principles
 
-- No notifications, ever. Resurfacing is pull-based: you open the app to see
-  a pick, the app never pushes one to you.
+- No notifications, ever. You open the app to see a pick. The app never
+  pushes one to you.
 - Zero third-party dependencies. Dogear uses only Apple's frameworks.
 - Local-only data. Dogear stores your library on your Mac, with no server
   and no account.

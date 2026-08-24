@@ -1,6 +1,6 @@
-# Contributing to Dogear
+# Contribute to Dogear
 
-Thanks for helping.
+Thank you for your help.
 
 ## Setup
 
@@ -10,7 +10,7 @@ cd dogear
 swift test
 ```
 
-All logic lives in `Sources/DogearKit` and is unit-tested. The SwiftUI app in
+All logic lives in `Sources/DogearKit`, with unit tests. The SwiftUI app in
 `Sources/Dogear` stays thin. Zero third-party dependencies is a hard rule.
 
 ## Rules
@@ -38,8 +38,8 @@ Implement `MetadataFetcher` (`Sources/DogearKit/MetadataFetching.swift`):
 `MetadataService.fetcher(forHost:)` (`Sources/DogearKit/MetadataService.swift`).
 A fetcher either parses the page body or calls its own endpoint; see
 `parsesPageBody` on `MetadataFetcher`. Add a fixture test under
-`Tests/DogearKitTests/Fixtures`, following `TikTokFetcherTests.swift` or
-`XFetcherTests.swift`.
+`Tests/DogearKitTests/Fixtures`. Use `TikTokFetcherTests.swift` or
+`XFetcherTests.swift` as the pattern.
 
 ### Add a categorizer
 
