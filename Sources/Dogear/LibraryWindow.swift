@@ -462,6 +462,10 @@ struct LibraryWindow: View {
         var combinedBodies = ""
         var failedFolders = 0
         let now = Date()
+        // Checked before the loop records any new cursor, so this reflects
+        // whether the read was incremental (a cursor already existed), not
+        // whether this run happened to succeed.
+        let hadIncrementalRead = ticked.contains { cursors.secondsSince(folderID: $0.id, now: now) != nil }
         // NSAppleScript is documented main-thread-only (Apple's Thread
         // Safety Summary, Foundation framework), so each read runs on the
         // main actor and blocks the UI for the duration of its Apple event.
@@ -478,16 +482,18 @@ struct LibraryWindow: View {
             }
         }
         saveCursors(cursors)
-        finishImport(with: combinedBodies, failedFolders: failedFolders)
+        finishImport(with: combinedBodies, failedFolders: failedFolders, hadIncrementalRead: hadIncrementalRead)
     }
 
-    private func finishImport(with bodies: String, failedFolders: Int) {
+    private func finishImport(with bodies: String, failedFolders: Int, hadIncrementalRead: Bool) {
         let existing = Set(model.store.library.bookmarks.map(\.url))
         let found = URLCleaner.allHTTPURLs(inHTML: bodies)
         let fresh = NotesImportPlanning.freshURLs(found, existing: existing)
         var message: String
         if found.isEmpty {
-            message = "No links found in your notes."
+            message = hadIncrementalRead
+                ? "No new links since your last import."
+                : "No links found in your notes."
         } else if fresh.isEmpty {
             message = found.count == 1
                 ? "All 1 link was already saved."
@@ -529,7 +535,9 @@ struct LibraryWindow: View {
         if result.total == 0 {
             importFileResult = "No links found in that file."
         } else if result.new == 0 {
-            importFileResult = "All \(result.total) were already saved."
+            importFileResult = result.total == 1
+                ? "This link was already saved."
+                : "All \(result.total) were already saved."
         } else {
             importFileResult = result.new == 1
                 ? "Imported 1 link."
@@ -709,8 +717,8 @@ private struct NotesImportSheet: View {
                 }
                 .frame(maxHeight: 220)
                 HStack {
-                    Button("Select All") { selectedFolderIDs = Set(folders.map(\.id)) }
-                    Button("Select None") { selectedFolderIDs = [] }
+                    Button("Select all") { selectedFolderIDs = Set(folders.map(\.id)) }
+                    Button("Select none") { selectedFolderIDs = [] }
                     Spacer()
                 }
                 HStack {
