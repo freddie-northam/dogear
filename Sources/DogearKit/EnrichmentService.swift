@@ -5,7 +5,7 @@ public final class EnrichmentService {
     private let store: BookmarkStore
     private let metadata: MetadataService
     private let categorizer: Categorizer
-    private let thumbnails: ThumbnailCache
+    let thumbnails: ThumbnailCache
     private let client: HTTPClient
 
     public init(store: BookmarkStore, metadata: MetadataService, categorizer: Categorizer,
@@ -29,14 +29,6 @@ public final class EnrichmentService {
         // pre-fetch snapshot, so a concurrent edit is never reverted.
         guard var bookmark = store.library.bookmarks.first(where: { $0.id == id }) else { return }
 
-        // Post-redirect dedupe: the resolved URL may match an existing bookmark.
-        if store.library.bookmarks.contains(where: { $0.url == resolved && $0.id != id }) {
-            store.remove(id: id)
-            // Re-add the survivor through add(): its re-add path clears doneAt and bumps the
-            // bookmark to the top, so re-sharing a short link surfaces it like any re-add.
-            store.add(url: result.resolvedURL)
-            return
-        }
         bookmark.url = resolved
 
         guard let fetched = result.metadata else {
@@ -72,6 +64,39 @@ public final class EnrichmentService {
         latest.hasThumbnail = bookmark.hasThumbnail
         if !latest.manuallyFiled {
             latest.folder = store.library.folders.contains(bookmark.folder) ? bookmark.folder : Library.unsorted
+        }
+
+        // Post-redirect dedupe: the resolved URL may match an existing bookmark. Checked
+        // here, immediately before the write, so no suspension point separates the check
+        // from the write and a concurrent enrichment cannot land the same URL in between.
+        // Merge into the survivor rather than deleting `latest`: a bookmark reached via
+        // "Refresh Metadata" long after capture may carry a note, a star, a manually
+        // chosen folder, or an earlier save date, none of which should be discarded.
+        if var survivor = store.library.bookmarks.first(where: { $0.url == latest.url && $0.id != id }) {
+            survivor.note = survivor.note ?? latest.note
+            survivor.favoritedAt = survivor.favoritedAt ?? latest.favoritedAt
+            if latest.manuallyFiled && !survivor.manuallyFiled {
+                survivor.folder = latest.folder
+                survivor.manuallyFiled = true
+            }
+            // createdAt is a `let`: rebuild via the memberwise initializer to backdate it to
+            // whichever bookmark is older, with every other field taken from the survivor
+            // (already gap-filled above).
+            let merged = Bookmark(
+                id: survivor.id, url: survivor.url, title: survivor.title, author: survivor.author,
+                note: survivor.note, folder: survivor.folder, source: survivor.source,
+                createdAt: min(survivor.createdAt, latest.createdAt), doneAt: nil,
+                hasThumbnail: survivor.hasThumbnail, manuallyFiled: survivor.manuallyFiled,
+                favoritedAt: survivor.favoritedAt
+            )
+            store.remove(id: latest.id)
+            thumbnails.remove(for: latest.id)
+            // Write the merged fields onto the survivor, then re-add it: add()'s re-add path
+            // finds the existing record by canonical url, clears doneAt, and bumps it to the
+            // top, so the surviving bookmark surfaces like any re-add.
+            store.update(merged)
+            store.add(url: URL(string: merged.url)!)
+            return
         }
         store.update(latest)
     }
