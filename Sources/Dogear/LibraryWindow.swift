@@ -4,8 +4,16 @@ import UniformTypeIdentifiers
 
 enum NotesImportState: Equatable {
     case confirm
-    case running
+    case running(String)
+    case choosing([NotesFolder])
     case finished(String)
+}
+
+/// One Notes folder, as returned by the Notes scripting dictionary: a
+/// read-only id (stable across renames) and a display name.
+struct NotesFolder: Identifiable, Equatable {
+    let id: String
+    let name: String
 }
 
 /// One alert, one state: the collision message replaces the rename prompt's
@@ -44,10 +52,13 @@ struct LibraryWindow: View {
     @State private var renameDraft = ""
     @State private var showingImport = false
     @State private var importState: NotesImportState = .confirm
+    @State private var selectedFolderIDs: Set<String> = []
     @State private var fileForMeResult: String?
     @State private var importFileResult: String?
     @AppStorage("libraryView") private var viewRaw = "grid"
     @AppStorage("librarySort") private var sortRaw = LibrarySort.lastSaved.rawValue
+    @AppStorage("notesImportSelection") private var selectionJSON = ""
+    @AppStorage("notesImportCursors") private var cursorsJSON = "{}"
     private let archiveID = "__archive__"
     private let favoritesID = "__favorites__"
 
@@ -70,8 +81,13 @@ struct LibraryWindow: View {
         .navigationTitle("Dogear")
         .toolbar { toolbarContent }
         .sheet(isPresented: $showingImport) {
-            NotesImportSheet(state: $importState, run: runNotesImport)
+            NotesImportSheet(
+                state: $importState,
+                selectedFolderIDs: $selectedFolderIDs,
+                continueToFolders: continueToFolders,
+                run: runNotesImport)
         }
+        .onChange(of: selectedFolderIDs) { _, ids in saveSelection(ids) }
         .alert("No Link Found", isPresented: $pasteFailed) {
             Button("OK") {}
         } message: {
@@ -394,35 +410,104 @@ struct LibraryWindow: View {
         showingImport = true
     }
 
-    private func runNotesImport() {
-        importState = .running
-        // NSAppleScript is documented main-thread-only (Apple's Thread
-        // Safety Summary, Foundation framework), so this runs on the main
-        // actor and blocks the UI for the duration of the Apple event.
-        // ponytail: reads every note serially in one AppleScript call;
-        // per-folder selection and incremental import can come later.
-        let bodies = readNotesBodies()
-        finishImport(with: bodies)
-    }
-
-    private func finishImport(with bodies: String?) {
-        guard let bodies else {
+    /// Consent step: list folders before any note body is read. A nil result
+    /// means Notes denied the Apple event outright.
+    private func continueToFolders() {
+        importState = .running("Finding your folders...")
+        guard let folders = readNotesFolders() else {
             importState = .finished(
                 "Dogear could not read Notes. Open System Settings, Privacy and Security, Automation, and allow Dogear to control Notes.")
             return
         }
-        let result = model.capture(urls: URLCleaner.allHTTPURLs(inHTML: bodies))
-        if result.total == 0 {
-            importState = .finished("No links found in your notes.")
-        } else if result.new == 0 {
-            importState = .finished(result.total == 1
-                ? "This link was already saved."
-                : "All \(result.total) were already saved.")
-        } else {
-            importState = .finished(result.total == 1
-                ? "Imported 1 link."
-                : "Imported \(result.total) links.")
+        selectedFolderIDs = loadSelection(validFolderIDs: Set(folders.map(\.id)))
+        // Cursors for folders that no longer exist (deleted or renamed away)
+        // are dead weight; drop them against the folder list we just read.
+        var cursors = loadCursors()
+        cursors.prune(keeping: Set(folders.map(\.id)))
+        saveCursors(cursors)
+        importState = .choosing(folders)
+    }
+
+    private func loadSelection(validFolderIDs: Set<String>) -> Set<String> {
+        guard !selectionJSON.isEmpty,
+              let data = selectionJSON.data(using: .utf8),
+              let saved = try? JSONDecoder().decode([String].self, from: data)
+        else { return validFolderIDs }
+        return Set(saved).intersection(validFolderIDs)
+    }
+
+    private func saveSelection(_ ids: Set<String>) {
+        guard let data = try? JSONEncoder().encode(Array(ids)),
+              let json = String(data: data, encoding: .utf8) else { return }
+        selectionJSON = json
+    }
+
+    private func loadCursors() -> NotesImportCursors {
+        guard let data = cursorsJSON.data(using: .utf8),
+              let cursors = try? JSONDecoder().decode(NotesImportCursors.self, from: data)
+        else { return NotesImportCursors() }
+        return cursors
+    }
+
+    private func saveCursors(_ cursors: NotesImportCursors) {
+        guard let data = try? JSONEncoder().encode(cursors),
+              let json = String(data: data, encoding: .utf8) else { return }
+        cursorsJSON = json
+    }
+
+    private func runNotesImport() {
+        guard case .choosing(let folders) = importState else { return }
+        let ticked = folders.filter { selectedFolderIDs.contains($0.id) }
+        var cursors = loadCursors()
+        var combinedBodies = ""
+        var failedFolders = 0
+        let now = Date()
+        // NSAppleScript is documented main-thread-only (Apple's Thread
+        // Safety Summary, Foundation framework), so each read runs on the
+        // main actor and blocks the UI for the duration of its Apple event.
+        for folder in ticked {
+            importState = .running("Reading \(folder.name)...")
+            let secondsSince = cursors.secondsSince(folderID: folder.id, now: now)
+            if let body = readNotesBody(folderID: folder.id, secondsSince: secondsSince) {
+                combinedBodies += body + "\n"
+                // Recorded only on success: a failed folder keeps its old
+                // cursor and is re-read in full (or from its old cursor) next time.
+                cursors.record(folderID: folder.id, at: now)
+            } else {
+                failedFolders += 1
+            }
         }
+        saveCursors(cursors)
+        finishImport(with: combinedBodies, failedFolders: failedFolders)
+    }
+
+    private func finishImport(with bodies: String, failedFolders: Int) {
+        let existing = Set(model.store.library.bookmarks.map(\.url))
+        let found = URLCleaner.allHTTPURLs(inHTML: bodies)
+        let fresh = NotesImportPlanning.freshURLs(found, existing: existing)
+        var message: String
+        if found.isEmpty {
+            message = "No links found in your notes."
+        } else if fresh.isEmpty {
+            message = found.count == 1
+                ? "All 1 link was already saved."
+                : "All \(found.count) links were already saved."
+        } else {
+            let result = model.capture(urls: fresh)
+            let alreadySaved = found.count - result.new
+            message = result.new == 1 ? "Imported 1 link." : "Imported \(result.new) links."
+            if alreadySaved > 0 {
+                message += alreadySaved == 1
+                    ? " 1 was already saved."
+                    : " \(alreadySaved) were already saved."
+            }
+        }
+        if failedFolders > 0 {
+            message += failedFolders == 1
+                ? " Dogear could not read 1 folder."
+                : " Dogear could not read \(failedFolders) folders."
+        }
+        importState = .finished(message)
     }
 
     private func importBookmarksFile() {
@@ -523,16 +608,52 @@ private func exportMarkdown(_ library: Library) -> String {
     return sections.joined(separator: "\n\n")
 }
 
-/// Reads every note body over Apple events, on the main thread: NSAppleScript
-/// is documented main-thread-only. Returns nil when Notes cannot be read:
-/// permission denied or Notes unavailable.
-private func readNotesBodies() -> String? {
-    let source = "tell application \"Notes\" to get body of every note"
+/// Lists every Notes folder across every account, on the main thread:
+/// NSAppleScript is documented main-thread-only. This is the first Apple
+/// event of an import, so it is also the consent trigger. Returns nil when
+/// Notes cannot be read: permission denied or Notes unavailable.
+private func readNotesFolders() -> [NotesFolder]? {
+    let source = "tell application \"Notes\" to get {id of every folder, name of every folder}"
+    var errorInfo: NSDictionary?
+    guard let descriptor = NSAppleScript(source: source)?.executeAndReturnError(&errorInfo),
+          errorInfo == nil,
+          descriptor.numberOfItems == 2,
+          let ids = descriptor.atIndex(1),
+          let names = descriptor.atIndex(2),
+          ids.numberOfItems == names.numberOfItems else { return nil }
+    let count = ids.numberOfItems
+    guard count > 0 else { return [] }
+    return (1...count).compactMap { index -> NotesFolder? in
+        guard let id = ids.atIndex(index)?.stringValue,
+              let name = names.atIndex(index)?.stringValue else { return nil }
+        return NotesFolder(id: id, name: name)
+    }
+}
+
+/// Reads every non-password-protected note body in one folder, over Apple
+/// events, on the main thread. When `secondsSince` is given, only notes
+/// modified within that many seconds of now are read (an incremental read);
+/// nil means a full read. Returns nil when the folder cannot be read.
+private func readNotesBody(folderID: String, secondsSince: Int?) -> String? {
+    let escapedID = folderID
+        .replacingOccurrences(of: "\\", with: "\\\\")
+        .replacingOccurrences(of: "\"", with: "\\\"")
+    var whose = "password protected is false"
+    var cutoffLine = ""
+    if let secondsSince {
+        cutoffLine = "set cutoff to (current date) - \(secondsSince)\n"
+        whose += " and modification date > cutoff"
+    }
+    let source = "tell application \"Notes\"\n" +
+        "set f to first folder whose id is \"\(escapedID)\"\n" +
+        cutoffLine +
+        "get body of every note of f whose \(whose)\n" +
+        "end tell"
     var errorInfo: NSDictionary?
     guard let descriptor = NSAppleScript(source: source)?.executeAndReturnError(&errorInfo),
           errorInfo == nil else { return nil }
-    // A list descriptor is 1-indexed. Zero items covers both an empty Notes
-    // account and a scalar result, whose text still comes back as stringValue.
+    // A list descriptor is 1-indexed. Zero items covers both an empty folder
+    // and a scalar result, whose text still comes back as stringValue.
     guard descriptor.numberOfItems > 0 else { return descriptor.stringValue ?? "" }
     return (1...descriptor.numberOfItems)
         .compactMap { descriptor.atIndex($0)?.stringValue }
@@ -541,12 +662,19 @@ private func readNotesBodies() -> String? {
 
 private struct NotesImportSheet: View {
     @Binding var state: NotesImportState
+    @Binding var selectedFolderIDs: Set<String>
+    let continueToFolders: () -> Void
     let run: () -> Void
     @Environment(\.dismiss) private var dismiss
 
+    private var title: String {
+        if case .choosing = state { return "Which folders?" }
+        return "Import from Notes"
+    }
+
     var body: some View {
         VStack(spacing: 12) {
-            Text("Import from Notes").font(.headline)
+            Text(title).font(.headline)
             switch state {
             case .confirm:
                 Text("Dogear reads your notes on this Mac to find links. macOS asks you for permission one time. Nothing leaves your Mac.")
@@ -555,16 +683,44 @@ private struct NotesImportSheet: View {
                 HStack {
                     Button("Cancel") { dismiss() }
                     Spacer()
-                    Button("Import", action: run)
+                    Button("Continue", action: continueToFolders)
                         .buttonStyle(.borderedProminent)
                         .keyboardShortcut(.defaultAction)
                 }
-            case .running:
-                ProgressView("Reading your notes...")
+            case .running(let label):
+                ProgressView(label)
                 // Cancel cannot interrupt the in-flight Apple event (the
                 // call is synchronous on the main actor); it only lets the
                 // user dismiss once the event has returned.
                 Button("Cancel") { state = .confirm }
+            case .choosing(let folders):
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(folders) { folder in
+                            Toggle(folder.name, isOn: Binding(
+                                get: { selectedFolderIDs.contains(folder.id) },
+                                set: { isOn in
+                                    if isOn { selectedFolderIDs.insert(folder.id) }
+                                    else { selectedFolderIDs.remove(folder.id) }
+                                }
+                            ))
+                        }
+                    }
+                }
+                .frame(maxHeight: 220)
+                HStack {
+                    Button("Select All") { selectedFolderIDs = Set(folders.map(\.id)) }
+                    Button("Select None") { selectedFolderIDs = [] }
+                    Spacer()
+                }
+                HStack {
+                    Button("Cancel") { dismiss() }
+                    Spacer()
+                    Button("Import", action: run)
+                        .buttonStyle(.borderedProminent)
+                        .keyboardShortcut(.defaultAction)
+                        .disabled(selectedFolderIDs.isEmpty)
+                }
             case .finished(let message):
                 Text(message)
                     .font(.callout)
