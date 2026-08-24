@@ -430,6 +430,24 @@ import Testing
     #expect(store.library.schemaVersion == Library.currentSchemaVersion)
 }
 
+@Test func migrationRemovesCredentialsFromStoredURLs() throws {
+    let temp = TempDirectory()
+    let file = temp.url.appendingPathComponent("library.json")
+    let json = """
+    {"folders":["Unsorted"],"bookmarks":[{
+    "id":"00000000-0000-0000-0000-000000000001",
+    "url":"https://user:secret@example.com/private","title":"Private",
+    "folder":"Unsorted","source":"web","createdAt":0,
+    "hasThumbnail":false,"manuallyFiled":false}],"schemaVersion":2}
+    """
+    try Data(json.utf8).write(to: file)
+
+    let store = try BookmarkStore(directory: temp.url)
+
+    #expect(store.library.bookmarks.first?.url == "https://example.com/private")
+    #expect(String(decoding: try Data(contentsOf: file), as: UTF8.self).contains("secret") == false)
+}
+
 @Test func folderAdoptionRunsOnce() throws {
     let temp = TempDirectory()
     let dir = temp.url

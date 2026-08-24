@@ -80,9 +80,18 @@ struct LibraryWindow: View {
                     // re-add its own bookmark: that would un-archive and
                     // reorder silently. Only URLs new to the store count.
                     let existing = Set(model.store.library.bookmarks.map(\.url))
-                    let fresh = urls.filter { !existing.contains(URLCleaner.canonicalString($0)) }
+                    let fresh = urls.filter {
+                        $0.user != nil || $0.password != nil
+                            || !existing.contains(URLCleaner.canonicalString($0))
+                    }
                     guard !fresh.isEmpty else { return false }
-                    return model.capture(urls: fresh).total > 0
+                    let result = model.capture(urls: fresh)
+                    if result.rejectedCredentials > 0 {
+                        pasteFailure = result.total > 0
+                            ? "Saved valid links. Skipped links that include usernames or passwords."
+                            : "Remove the username or password from this link before saving it."
+                    }
+                    return result.total > 0
                 }
         }
         .searchable(text: $query, prompt: "Search bookmarks")
@@ -107,7 +116,7 @@ struct LibraryWindow: View {
                 run: runNotesImport)
         }
         .onChange(of: selectedFolderIDs) { _, ids in saveSelection(ids) }
-        .alert("Could Not Save", isPresented: Binding(
+        .alert("Save Links", isPresented: Binding(
             get: { pasteFailure != nil },
             set: { if !$0 { pasteFailure = nil } }
         )) {
@@ -482,10 +491,13 @@ struct LibraryWindow: View {
     private func pasteFromClipboard() {
         let text = NSPasteboard.general.string(forType: .string) ?? ""
         let result = model.capture(text: text)
-        guard result.total == 0 else { return }
-        pasteFailure = result.rejectedCredentials > 0
-            ? "Remove the username or password from this link before saving it."
-            : "The clipboard holds no web link. Dogear saves http and https links."
+        if result.rejectedCredentials > 0 {
+            pasteFailure = result.total > 0
+                ? "Saved valid links. Skipped links that include usernames or passwords."
+                : "Remove the username or password from this link before saving it."
+        } else if result.total == 0 {
+            pasteFailure = "The clipboard holds no web link. Dogear saves http and https links."
+        }
     }
 
     private func startImport() {

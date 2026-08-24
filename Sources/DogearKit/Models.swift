@@ -77,7 +77,7 @@ public struct Library: Codable, Equatable, Sendable {
 
     public static let defaultFolders = ["Recipes", "Restaurants", "Shows", "Music", "Articles", "Unsorted"]
     public static let unsorted = "Unsorted"
-    public static let currentSchemaVersion = 2
+    public static let currentSchemaVersion = 3
 
     public init(folders: [String], bookmarks: [Bookmark], schemaVersion: Int? = nil) {
         self.folders = folders

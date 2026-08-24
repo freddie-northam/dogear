@@ -75,6 +75,8 @@ public enum URLCleaner {
         }
         parts.scheme = parts.scheme?.lowercased()
         parts.host = parts.host?.lowercased()
+        parts.user = nil
+        parts.password = nil
         // The same tweet arrives as twitter.com or x.com depending on where
         // the link was copied; one host keeps them one bookmark.
         if let host = parts.host,

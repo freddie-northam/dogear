@@ -275,19 +275,15 @@ struct CapturePopover: View {
             .buttonStyle(.pressable(scale: 0.98))
             .pointerStyle(.link)
             Spacer(minLength: 8)
-            // The actions appear with the row hover, Control Center style,
-            // and each names itself through its own hover color.
-            if isPickHovering {
-                HoverIconButton(symbol: "checkmark", label: "Mark done", hoverColor: .green) {
-                    withAnimation(Motion.reveal) {
-                        model.markDone(pick.id, undoManager: undoManager)
-                        self.pick = model.store.pick(excluding: pick.id)
-                    }
+            HoverIconButton(symbol: "checkmark", label: "Mark done", hoverColor: .green) {
+                withAnimation(Motion.reveal) {
+                    model.markDone(pick.id, undoManager: undoManager)
+                    self.pick = model.store.pick(excluding: pick.id)
                 }
-                HoverIconButton(symbol: "arrow.clockwise", label: "Show another", hoverColor: .primary) {
-                    withAnimation(Motion.reveal) {
-                        self.pick = model.store.pick(excluding: pick.id)
-                    }
+            }
+            HoverIconButton(symbol: "arrow.clockwise", label: "Show another", hoverColor: .primary) {
+                withAnimation(Motion.reveal) {
+                    self.pick = model.store.pick(excluding: pick.id)
                 }
             }
         }
