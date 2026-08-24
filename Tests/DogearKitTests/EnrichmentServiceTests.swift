@@ -103,14 +103,19 @@ private final class InterceptingHTTPClient: HTTPClient, @unchecked Sendable {
         self.onTrigger = onTrigger
     }
 
-    func data(from url: URL, limit: Int) async throws -> Data {
+    private func bumpAndMaybeTrigger() async {
         count += 1
         if count == triggerOnCall { await onTrigger() }
+    }
+
+    func data(from url: URL, limit: Int) async throws -> Data {
+        await bumpAndMaybeTrigger()
         return try await inner.data(from: url, limit: limit)
     }
 
-    func resolvedURL(for url: URL) async throws -> URL {
-        try await inner.resolvedURL(for: url)
+    func fetch(_ url: URL, limit: Int) async throws -> (data: Data, finalURL: URL) {
+        await bumpAndMaybeTrigger()
+        return try await inner.fetch(url, limit: limit)
     }
 }
 
@@ -241,7 +246,9 @@ private final class InterceptingHTTPClient: HTTPClient, @unchecked Sendable {
     let short = URL(string: "https://vm.tiktok.com/SHORT/")!
     let full = URL(string: "https://www.tiktok.com/@a/video/123")!
     let oembed = try Data(contentsOf: Bundle.module.url(forResource: "tiktok-oembed", withExtension: "json", subdirectory: "Fixtures")!)
-    var client = StubHTTPClient(responses: [TikTokFetcher.oembedURL(for: full): oembed])
+    // The TikTok page body itself is irrelevant, but the single-fetch flow still GETs
+    // it to learn the resolved host, so it must be stubbed too.
+    var client = StubHTTPClient(responses: [full: Data(), TikTokFetcher.oembedURL(for: full): oembed])
     client.redirects = [short: full]
     let (store, service) = try await makeEnvironment(client: client)
 
@@ -274,7 +281,9 @@ private final class InterceptingHTTPClient: HTTPClient, @unchecked Sendable {
     let short = URL(string: "https://vm.tiktok.com/SHORT/")!
     let full = URL(string: "https://www.tiktok.com/@a/video/123")!
     let oembed = try Data(contentsOf: Bundle.module.url(forResource: "tiktok-oembed", withExtension: "json", subdirectory: "Fixtures")!)
-    var client = StubHTTPClient(responses: [TikTokFetcher.oembedURL(for: full): oembed])
+    // The TikTok page body itself is irrelevant, but the single-fetch flow still GETs
+    // it to learn the resolved host, so it must be stubbed too.
+    var client = StubHTTPClient(responses: [full: Data(), TikTokFetcher.oembedURL(for: full): oembed])
     client.redirects = [short: full]
     let (store, service) = try await makeEnvironment(client: client)
 
@@ -302,7 +311,9 @@ private final class InterceptingHTTPClient: HTTPClient, @unchecked Sendable {
     let short = URL(string: "https://vm.tiktok.com/SHORT/")!
     let full = URL(string: "https://www.tiktok.com/@a/video/123")!
     let oembed = try Data(contentsOf: Bundle.module.url(forResource: "tiktok-oembed", withExtension: "json", subdirectory: "Fixtures")!)
-    var client = StubHTTPClient(responses: [TikTokFetcher.oembedURL(for: full): oembed])
+    // The TikTok page body itself is irrelevant, but the single-fetch flow still GETs
+    // it to learn the resolved host, so it must be stubbed too.
+    var client = StubHTTPClient(responses: [full: Data(), TikTokFetcher.oembedURL(for: full): oembed])
     client.redirects = [short: full]
     let (store, service) = try await makeEnvironment(client: client)
 
@@ -322,7 +333,9 @@ private final class InterceptingHTTPClient: HTTPClient, @unchecked Sendable {
     let short = URL(string: "https://vm.tiktok.com/SHORT/")!
     let full = URL(string: "https://www.tiktok.com/@a/video/123")!
     let oembed = try Data(contentsOf: Bundle.module.url(forResource: "tiktok-oembed", withExtension: "json", subdirectory: "Fixtures")!)
-    var client = StubHTTPClient(responses: [TikTokFetcher.oembedURL(for: full): oembed])
+    // The TikTok page body itself is irrelevant, but the single-fetch flow still GETs
+    // it to learn the resolved host, so it must be stubbed too.
+    var client = StubHTTPClient(responses: [full: Data(), TikTokFetcher.oembedURL(for: full): oembed])
     client.redirects = [short: full]
     let (store, service) = try await makeEnvironment(client: client)
 

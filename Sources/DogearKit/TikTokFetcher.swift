@@ -1,6 +1,8 @@
 import Foundation
 
 public struct TikTokFetcher: MetadataFetcher {
+    public static let parsesPageBody = false
+
     public init() {}
 
     static func oembedURL(for url: URL) -> URL {
