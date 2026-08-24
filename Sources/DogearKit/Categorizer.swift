@@ -128,8 +128,8 @@ public struct KeywordCategorizer: Categorizer {
         // a figure of speech, so a single hit there is already a strong signal,
         // and holding them to two leaves most of a developer's library in
         // Unsorted. Measured on a 212 link library: two hits filed 39% of it,
-        // this rule files 63%, and dropping the bar everywhere files 66% by
-        // guessing on exactly the words that are ambiguous.
+        // this rule files 66%, and dropping the bar for every folder also files
+        // 66%, by guessing on exactly the words that are ambiguous.
         var best: (folder: String, score: Int)?
         for folder in folders where folder != Library.unsorted {
             let literalFolder = Self.literalKeywordFolders.contains(folder)
