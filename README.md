@@ -27,8 +27,8 @@ to the Archive, which stays searchable.
 3. Click Import.
 
 macOS asks for permission one time. Dogear reads your notes on this Mac and
-saves every link it finds. Pasting a block of text with many links into the
-popover works the same way: Dogear saves every link it finds in the text.
+saves every link it finds. You can also paste a block of text with many
+links into the popover. Dogear saves every link it finds in the text.
 
 ## In the library
 
@@ -45,8 +45,8 @@ popover works the same way: Dogear saves every link it finds in the text.
 ## From any app
 
 Select a link anywhere, then choose Services, Save to Dogear from the
-right-click menu. If the option is missing, enable it in System Settings,
-Keyboard, Keyboard Shortcuts, Services.
+right-click menu. If you do not see the option, enable it in System
+Settings, Keyboard, Keyboard Shortcuts, Services.
 
 ## Install
 
