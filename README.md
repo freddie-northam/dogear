@@ -12,6 +12,9 @@ app, turn off "Show icon in Dock" in Settings.
 
 ## How it works
 
+On first launch, Dogear shows a short welcome and offers to import your
+links. Settings, then Help, shows the same guide at any time.
+
 1. Copy a link. On your iPhone too: Universal Clipboard carries it to your Mac.
 2. The bookmark icon in the menu bar fills when a link is on the clipboard.
 3. Click the icon and press Return. Done.
@@ -23,6 +26,12 @@ bookmark yourself.
 
 When you cook the recipe or watch the show, mark the bookmark done. It moves
 to the Archive, which stays searchable.
+
+## Save from TikTok and X
+
+In TikTok or X on your iPhone, use Share, then Copy Link. Universal
+Clipboard carries the link to your Mac. Dogear fetches the caption, the
+author, and a thumbnail, and files the link.
 
 ## Import your links from Apple Notes
 

@@ -7,6 +7,8 @@ struct CapturePopover: View {
     @EnvironmentObject var clipboard: ClipboardWatcher
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.undoManager) private var undoManager
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var text = ""
     @State private var hint: String?
@@ -16,7 +18,6 @@ struct CapturePopover: View {
     // reports. Held as state and updated per edit, not recomputed per render.
     @State private var detectedURLCount = 0
     @AppStorage("popoverListTab") private var listTab = "recents"
-    @State private var isHoveringLibrary = false
     @State private var isHoveringMore = false
 
     var body: some View {
@@ -25,6 +26,7 @@ struct CapturePopover: View {
             captureRow
             if let hint {
                 Text(hint).font(.caption).foregroundStyle(.secondary)
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
             if let pick {
                 Divider()
@@ -42,6 +44,7 @@ struct CapturePopover: View {
         }
         .padding(14)
         .frame(width: 350)
+        .animation(.smooth(duration: 0.18), value: hint)
         .onAppear {
             pick = model.store.pick()
             Task { await prefill() }
@@ -84,30 +87,26 @@ struct CapturePopover: View {
             }
             .accessibilityLabel("Dogear")
             Spacer()
-            Button {
-                openWindow(id: "library")
-                dismiss()
-            } label: {
-                Image(systemName: "square.grid.2x2")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(isHoveringLibrary ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
-                    .frame(width: 22, height: 22)
-                    .background(.quaternary.opacity(isHoveringLibrary ? 1 : 0), in: Circle())
-            }
-            .buttonStyle(.plain)
-            .pointerStyle(.link)
-            .onHover { isHoveringLibrary = $0 }
-            .help("Open Library")
-            .accessibilityLabel("Open Library")
+            // One menu, three line items, each with a real icon. SwiftUI drops
+            // SF Symbols from menu rows on macOS unless the image is built as
+            // an NSImage first; the Label helper below does that.
             Menu {
+                Button {
+                    openWindow(id: "library")
+                    dismiss()
+                } label: {
+                    menuLabel("Open Library", symbol: "square.grid.2x2")
+                }
+                .keyboardShortcut("l")
                 SettingsLink {
-                    Label("Settings...", systemImage: "gearshape")
+                    menuLabel("Settings...", symbol: "gearshape")
                 }
                 .keyboardShortcut(",")
+                Divider()
                 Button {
                     NSApp.terminate(nil)
                 } label: {
-                    Label("Quit Dogear", systemImage: "power")
+                    menuLabel("Quit Dogear", symbol: "power")
                 }
                 .keyboardShortcut("q")
             } label: {
@@ -120,6 +119,7 @@ struct CapturePopover: View {
             .buttonStyle(.plain)
             .pointerStyle(.link)
             .onHover { isHoveringMore = $0 }
+            .animation(.smooth(duration: 0.15), value: isHoveringMore)
             .menuIndicator(.hidden)
             .fixedSize()
             .help("More")
@@ -127,28 +127,58 @@ struct CapturePopover: View {
         }
     }
 
+    /// A menu row with an icon that macOS actually renders: an NSImage-backed
+    /// symbol, sized as a menu item glyph.
+    private func menuLabel(_ title: String, symbol: String) -> some View {
+        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: title)?
+            .withSymbolConfiguration(.init(pointSize: 13, weight: .regular))
+        return Label {
+            Text(title)
+        } icon: {
+            if let image {
+                Image(nsImage: image)
+            } else {
+                Image(systemName: symbol)
+            }
+        }
+    }
+
     // MARK: Capture
 
     private var captureRow: some View {
-        HStack(spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: "link")
-                    .foregroundStyle(.secondary)
-                TextField("Paste a link", text: $text)
-                    .textFieldStyle(.plain)
-                    .onSubmit(save)
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
-            // The button exists only when there is something to save. An empty
-            // field shows no dead disabled slab; Return still submits.
+        // Return saves; there is no button to duplicate it. When the field
+        // holds a link (typed or prefilled from the clipboard) a quiet return
+        // glyph on the trailing edge says so, with a count when it holds many.
+        HStack(spacing: 6) {
+            Image(systemName: "link")
+                .foregroundStyle(.secondary)
+            TextField("Paste a link", text: $text)
+                .textFieldStyle(.plain)
+                .onSubmit(save)
             if detectedURLCount > 0 {
-                Button(detectedURLCount > 1 ? "Save \(detectedURLCount)" : "Save", action: save)
-                    .buttonStyle(.borderedProminent)
-                    .keyboardShortcut(.defaultAction)
+                HStack(spacing: 4) {
+                    if detectedURLCount > 1 {
+                        Text("\(detectedURLCount)")
+                            .font(.caption.weight(.semibold))
+                            .monospacedDigit()
+                    }
+                    Image(systemName: "return")
+                        .font(.caption.weight(.semibold))
+                }
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(.quaternary, in: RoundedRectangle(cornerRadius: 5))
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.9)))
+                .accessibilityLabel(detectedURLCount > 1
+                    ? "Press Return to save \(detectedURLCount) links"
+                    : "Press Return to save")
             }
         }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+        .animation(.smooth(duration: 0.15), value: detectedURLCount > 0)
     }
 
     private func prefill() async {
@@ -230,7 +260,7 @@ struct CapturePopover: View {
             // and each names itself through its own hover color.
             if isPickHovering {
                 HoverIconButton(symbol: "checkmark", label: "Mark done", hoverColor: .green) {
-                    model.store.markDone(id: pick.id)
+                    model.markDone(pick.id, undoManager: undoManager)
                     self.pick = model.store.pick(excluding: pick.id)
                 }
                 HoverIconButton(symbol: "arrow.clockwise", label: "Show another", hoverColor: .primary) {
@@ -243,6 +273,7 @@ struct CapturePopover: View {
             .quaternary.opacity(isPickHovering ? 1 : 0),
             in: RoundedRectangle(cornerRadius: 8)
         )
+        .animation(.smooth(duration: 0.15), value: isPickHovering)
         .onHover { isPickHovering = $0 }
     }
 
