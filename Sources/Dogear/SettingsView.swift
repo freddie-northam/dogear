@@ -214,7 +214,7 @@ private struct AboutSettings: View {
             Text("Free and open source under the MIT license.\nNo account, no server, no telemetry.")
                 .font(.caption).foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-            Link("Dogear on GitHub", destination: URL(string: "https://github.com/northamf/dogear")!)
+            Link("Dogear on GitHub", destination: URL(string: "https://github.com/freddie-northam/dogear")!)
                 .font(.caption)
         }
         .padding(28)
