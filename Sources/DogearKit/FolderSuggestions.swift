@@ -54,25 +54,34 @@ public enum FolderSuggestions {
         }
         guard !waiting.isEmpty else { return [] }
 
+        let candidates = knownFolders.filter { !folders.contains($0) }
+        guard !candidates.isEmpty else { return [] }
+
+        // Every candidate is offered at once, and each bookmark goes to the
+        // one folder it fits best. Scoring the candidates separately counted
+        // a link about a typescript agent under both Developer and AI, so the
+        // numbers could add up to more than the folder holds, and it cost one
+        // pass over the library per candidate instead of one in total.
+        var matched: [String: [Bookmark]] = [:]
+        let offered = folders.filter { $0 != Library.unsorted } + candidates
+        for bookmark in waiting {
+            guard let url = URL(string: bookmark.url) else { continue }
+            let metadata = FetchedMetadata(
+                title: bookmark.title, author: bookmark.author,
+                description: bookmark.note, source: bookmark.source
+            )
+            guard let guess = await categorizer.categorize(metadata, url: url, folders: offered),
+                  candidates.contains(guess) else { continue }
+            matched[guess, default: []].append(bookmark)
+        }
+
         var suggestions: [FolderSuggestion] = []
-        for candidate in knownFolders where !folders.contains(candidate) {
-            var matched: [Bookmark] = []
-            for bookmark in waiting {
-                guard let url = URL(string: bookmark.url) else { continue }
-                let metadata = FetchedMetadata(
-                    title: bookmark.title, author: bookmark.author,
-                    description: bookmark.note, source: bookmark.source
-                )
-                let guess = await categorizer.categorize(
-                    metadata, url: url, folders: folders + [candidate]
-                )
-                if guess == candidate { matched.append(bookmark) }
-            }
-            guard !matched.isEmpty else { continue }
+        for candidate in candidates {
+            guard let found = matched[candidate], !found.isEmpty else { continue }
             suggestions.append(FolderSuggestion(
                 name: candidate,
-                count: matched.count,
-                examples: matched.prefix(exampleLimit).map(\.title)
+                count: found.count,
+                examples: found.prefix(exampleLimit).map(\.title)
             ))
         }
         // Largest first, then by name, so the order never depends on how a

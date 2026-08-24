@@ -89,3 +89,18 @@ private func waiting(_ url: String, title: String = "", source: Source = .web) -
     #expect(FolderSuggestions.knownFolders.contains("Music"))
     #expect(!FolderSuggestions.knownFolders.contains(Library.unsorted))
 }
+
+// Scoring each candidate on its own counted one bookmark under several
+// folders, so the suggested counts could add up to more than were waiting.
+@Test func neverCountsOneBookmarkUnderTwoFolders() async {
+    // A title that scores for more than one of the candidate folders.
+    let bookmarks = [
+        waiting("https://example.com/1", title: "Building a typescript agent with a design system"),
+        waiting("https://example.com/2", title: "A react component library and an llm prompt"),
+    ]
+    let suggestions = await FolderSuggestions.suggest(
+        for: bookmarks, folders: Library.defaultFolders
+    )
+    let counted = suggestions.reduce(0) { $0 + $1.count }
+    #expect(counted <= bookmarks.count)
+}

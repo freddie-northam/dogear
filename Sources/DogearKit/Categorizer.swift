@@ -85,9 +85,33 @@ public struct KeywordCategorizer: Categorizer {
         return false
     }
 
+    /// The keyword tables, prepared for byte matching once at first use
+    /// rather than on every bookmark. Filing a folder of 5,000 links ran the
+    /// preparation 5,000 times over; there are only ever these few hundred.
+    static let preparedKeywords: [String: [TextSearch.Query]] = keywords.mapValues {
+        $0.map(TextSearch.Query.init)
+    }
+
+    /// Folder names as queries, for the same reason. Cached on first use per
+    /// name, because folder names come from the user and are not known here.
+    private static let preparedNames = NameCache()
+
+    final class NameCache: @unchecked Sendable {
+        private let lock = NSLock()
+        private var cache: [String: TextSearch.Query] = [:]
+        func query(for name: String) -> TextSearch.Query {
+            lock.lock(); defer { lock.unlock() }
+            if let found = cache[name] { return found }
+            let made = TextSearch.Query(name)
+            cache[name] = made
+            return made
+        }
+    }
+
     public func categorize(_ metadata: FetchedMetadata, url: URL, folders: [String]) async -> String? {
-        let haystack = [metadata.title, metadata.description, metadata.author]
-            .compactMap { $0 }.joined(separator: " ").lowercased()
+        let text = [metadata.title, metadata.description, metadata.author]
+            .compactMap { $0 }.joined(separator: " ")
+        let haystack = TextSearch.Haystack(text)
 
         if let host = url.host?.lowercased() {
             for (domain, folder) in Self.domainHints
@@ -110,11 +134,15 @@ public struct KeywordCategorizer: Categorizer {
         for folder in folders where folder != Library.unsorted {
             let literalFolder = Self.literalKeywordFolders.contains(folder)
             let minimumScore = (metadata.source == .x && !literalFolder) ? 2 : 1
-            var score = Self.keywords[folder, default: []].filter { haystack.contains($0) }.count
+            var score = 0
+            for keyword in Self.preparedKeywords[folder, default: []]
+            where TextSearch.matches(haystack, keyword) { score += 1 }
             // The folder's own name counts as a keyword, but only as a whole
             // word: a folder named "AI" used to score on "email" and
             // "available", which filed half a library into it.
-            if Self.containsWord(folder.lowercased(), in: haystack) { score += 1 }
+            if TextSearch.containsWord(Self.preparedNames.query(for: folder), in: haystack) {
+                score += 1
+            }
             if score >= minimumScore, score > (best?.score ?? 0) { best = (folder, score) }
         }
         return best?.folder
