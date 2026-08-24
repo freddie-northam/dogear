@@ -45,12 +45,16 @@ enum LibrarySort: String, CaseIterable, Identifiable {
 
 struct LibraryWindow: View {
     @EnvironmentObject var model: AppModel
+    @Environment(\.undoManager) private var undoManager
+    @State private var folderPendingDeletion: String?
     @State private var selection: String = Library.unsorted
     @State private var query = ""
     @State private var pasteFailed = false
     @State private var renameState: RenameState = .idle
     @State private var renameDraft = ""
     @State private var showingImport = false
+    @AppStorage("hasSeenWelcome") private var hasSeenWelcome = false
+    @State private var showingWelcome = false
     @State private var importState: NotesImportState = .confirm
     @State private var selectedFolderIDs: Set<String> = []
     @State private var fileForMeResult: String?
@@ -80,6 +84,17 @@ struct LibraryWindow: View {
         .searchable(text: $query, prompt: "Search bookmarks")
         .navigationTitle("Dogear")
         .toolbar { toolbarContent }
+        .sheet(isPresented: $showingWelcome) {
+            WelcomeSheet(pasteFromClipboard: pasteFromClipboard, importFromNotes: startImport)
+        }
+        .onAppear {
+            // Onboarding shows once, and only to an empty library: a user who
+            // already has bookmarks has already learned the model.
+            if !hasSeenWelcome {
+                hasSeenWelcome = true
+                if model.store.library.bookmarks.isEmpty { showingWelcome = true }
+            }
+        }
         .sheet(isPresented: $showingImport) {
             NotesImportSheet(
                 state: $importState,
@@ -157,6 +172,33 @@ struct LibraryWindow: View {
 
     // MARK: Sidebar
 
+    private func deleteFolder(_ folder: String) {
+        model.deleteFolder(folder, undoManager: undoManager)
+        if selection == folder { selection = Library.unsorted }
+    }
+
+    /// A populated folder asks before it goes. The dialog names the count and
+    /// promises undo, so the choice is informed rather than alarming.
+    private var folderDeletionDialog: some View {
+        EmptyView().confirmationDialog(
+            "Delete \"\(folderPendingDeletion ?? "")\"?",
+            isPresented: Binding(
+                get: { folderPendingDeletion != nil },
+                set: { if !$0 { folderPendingDeletion = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Delete Folder", role: .destructive) {
+                if let folder = folderPendingDeletion { deleteFolder(folder) }
+                folderPendingDeletion = nil
+            }
+            Button("Cancel", role: .cancel) { folderPendingDeletion = nil }
+        } message: {
+            let count = folderPendingDeletion.map { model.store.counts().byFolder[$0, default: 0] } ?? 0
+            Text("Its \(count) bookmark\(count == 1 ? "" : "s") move to Unsorted. You can undo this.")
+        }
+    }
+
     private var sidebar: some View {
         let counts = model.store.counts()
         return List(selection: $selection) {
@@ -192,6 +234,7 @@ struct LibraryWindow: View {
                 NewFolderRow()
                     .selectionDisabled()
             }
+            .background(folderDeletionDialog)
             Section {
                 Label {
                     Text("Archive")
@@ -230,8 +273,13 @@ struct LibraryWindow: View {
                         Label("Rename Folder", systemImage: "pencil")
                     }
                     Button(role: .destructive) {
-                        model.store.removeFolder(folder)
-                        selection = Library.unsorted
+                        // A populated folder asks first; an empty one just goes,
+                        // and Undo brings either back.
+                        if counts.byFolder[folder, default: 0] > 0 {
+                            folderPendingDeletion = folder
+                        } else {
+                            deleteFolder(folder)
+                        }
                     } label: {
                         Label("Delete Folder", systemImage: "trash")
                     }
@@ -808,6 +856,7 @@ private struct NewFolderRow: View {
 /// presentation shares, so the grid card and the list row behave the same.
 struct BookmarkActions: ViewModifier {
     @EnvironmentObject var model: AppModel
+    @Environment(\.undoManager) private var undoManager
     let bookmark: Bookmark
     @State private var isEditingTitle = false
     @State private var draftTitle = ""
@@ -850,7 +899,7 @@ struct BookmarkActions: ViewModifier {
             }
         } else {
             Button {
-                model.store.markDone(id: bookmark.id)
+                model.markDone(bookmark.id, undoManager: undoManager)
             } label: {
                 Label("Mark Done", systemImage: "checkmark.circle")
             }
@@ -914,8 +963,7 @@ struct BookmarkActions: ViewModifier {
         }
         Divider()
         Button(role: .destructive) {
-            model.thumbnails.remove(for: bookmark.id)
-            model.store.remove(id: bookmark.id)
+            model.deleteBookmark(bookmark, undoManager: undoManager)
         } label: {
             Label("Delete", systemImage: "trash")
         }
@@ -964,6 +1012,7 @@ private struct QRPopover: View {
 // MARK: - Grid
 
 struct BookmarkGrid: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let bookmarks: [Bookmark]
 
     private let columns = [GridItem(.adaptive(minimum: 220), spacing: 16)]
@@ -973,17 +1022,26 @@ struct BookmarkGrid: View {
             LazyVGrid(columns: columns, spacing: 16) {
                 ForEach(bookmarks) { bookmark in
                     BookmarkCard(bookmark: bookmark)
+                        // A card that is marked done or deleted leaves toward the
+                        // sidebar, where Archive lives, so the motion says where
+                        // it went. Reduced motion keeps the fade only.
+                        .transition(reduceMotion
+                            ? .opacity
+                            : .opacity.combined(with: .move(edge: .leading)))
                 }
             }
             .padding(16)
+            .animation(.smooth(duration: 0.25), value: bookmarks.map(\.id))
         }
     }
 }
 
 struct BookmarkCard: View {
     @EnvironmentObject var model: AppModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let bookmark: Bookmark
     @State private var isHovering = false
+    @State private var isPressed = false
 
     var body: some View {
         if let url = URL(string: bookmark.url) {
@@ -997,9 +1055,8 @@ struct BookmarkCard: View {
         VStack(alignment: .leading, spacing: 6) {
             thumbnail
                 .overlay(alignment: .topTrailing) {
-                    if isHovering || bookmark.isFavorite {
-                        FavoriteStar(bookmark: bookmark)
-                    }
+                    FavoriteStar(bookmark: bookmark)
+                        .opacity(isHovering || bookmark.isFavorite ? 1 : 0)
                 }
             Text(bookmark.title)
                 .font(.headline)
@@ -1029,8 +1086,20 @@ struct BookmarkCard: View {
         .padding(12)
         .background(isHovering ? .quaternary : .quinary, in: RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.separator, lineWidth: 0.5))
+        // Response lives on pointer-down, not release: the card gives a little
+        // under the pointer the instant it is pressed. Critically damped, no
+        // bounce; nothing here is a throw. Reduced motion keeps the color
+        // change and drops the scale.
+        .scaleEffect(isPressed && !reduceMotion ? 0.98 : 1)
+        .animation(.smooth(duration: 0.15), value: isHovering)
+        .animation(.spring(response: 0.2, dampingFraction: 1), value: isPressed)
         .onHover { isHovering = $0 }
         .pointerStyle(.link)
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in isPressed = true }
+                .onEnded { _ in isPressed = false }
+        )
         .onTapGesture(count: 2) { open() }
         .bookmarkActions(bookmark)
     }

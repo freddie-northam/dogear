@@ -69,6 +69,7 @@ struct DogearApp: App {
 
         Settings {
             SettingsView()
+                .environmentObject(model)
         }
     }
 
