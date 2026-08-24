@@ -44,7 +44,7 @@ struct CapturePopover: View {
         }
         .padding(14)
         .frame(width: 350)
-        .animation(.smooth(duration: 0.18), value: hint)
+        .animation(Motion.reveal, value: hint)
         .onAppear {
             pick = model.store.pick()
             Task { await prefill() }
@@ -119,7 +119,7 @@ struct CapturePopover: View {
             .buttonStyle(.plain)
             .pointerStyle(.link)
             .onHover { isHoveringMore = $0 }
-            .animation(.smooth(duration: 0.15), value: isHoveringMore)
+            .animation(Motion.hover, value: isHoveringMore)
             .menuIndicator(.hidden)
             .fixedSize()
             .help("More")
@@ -178,7 +178,7 @@ struct CapturePopover: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
-        .animation(.smooth(duration: 0.15), value: detectedURLCount > 0)
+        .animation(Motion.hover, value: detectedURLCount > 0)
     }
 
     private func prefill() async {
@@ -253,7 +253,7 @@ struct CapturePopover: View {
                 }
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.pressable(scale: 0.98))
             .pointerStyle(.link)
             Spacer(minLength: 8)
             // The actions appear with the row hover, Control Center style,
@@ -273,7 +273,7 @@ struct CapturePopover: View {
             .quaternary.opacity(isPickHovering ? 1 : 0),
             in: RoundedRectangle(cornerRadius: 8)
         )
-        .animation(.smooth(duration: 0.15), value: isPickHovering)
+        .animation(Motion.hover, value: isPickHovering)
         .onHover { isPickHovering = $0 }
     }
 
@@ -396,7 +396,7 @@ private struct PopoverListRow: View {
             }
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressable(scale: 0.98))
         .pointerStyle(.link)
         .onHover { isHovering = $0 }
     }
@@ -419,7 +419,7 @@ struct HoverIconButton: View {
                 .frame(width: 24, height: 24)
                 .background(.quaternary.opacity(isHovering ? 1 : 0), in: Circle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressable)
         .pointerStyle(.link)
         .onHover { isHovering = $0 }
         .help(label)

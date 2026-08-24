@@ -1042,7 +1042,7 @@ struct BookmarkGrid: View {
                 }
             }
             .padding(16)
-            .animation(.smooth(duration: 0.25), value: sortRaw)
+            .animation(Motion.shuffle, value: sortRaw)
         }
     }
 }
@@ -1098,12 +1098,12 @@ struct BookmarkCard: View {
         .background(isHovering ? .quaternary : .quinary, in: RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.separator, lineWidth: 0.5))
         // Response lives on pointer-down, not release: the card gives a little
-        // under the pointer the instant it is pressed. Critically damped, no
-        // bounce; nothing here is a throw. Reduced motion keeps the color
-        // change and drops the scale.
+        // under the pointer the instant it is pressed. The same press curve as
+        // every button in the app; nothing here is a throw. Reduced motion
+        // keeps the color change and drops the scale.
         .scaleEffect(isPressed && !reduceMotion ? 0.98 : 1)
-        .animation(.smooth(duration: 0.15), value: isHovering)
-        .animation(.spring(response: 0.2, dampingFraction: 1), value: isPressed)
+        .animation(Motion.hover, value: isHovering)
+        .animation(Motion.press, value: isPressed)
         .onHover { isHovering = $0 }
         .pointerStyle(.link)
         .simultaneousGesture(
