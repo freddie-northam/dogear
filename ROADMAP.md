@@ -17,6 +17,8 @@ next, and what the team chose to leave out.
 - Drag in/out: drag a link into Dogear, and drag a bookmark out to another app.
 - QR code on cards: show a QR code for a bookmark, so you can open the link
   on your phone.
+- Dock icon: on by default, so the app stays reachable when a full menu bar
+  hides its item. A click opens the library. A setting turns it off.
 - Import from Apple Notes: read your notes locally and save every link found.
   macOS asks for permission first. You pick which folders to read, and a
   second import reads only what changed since the last import.

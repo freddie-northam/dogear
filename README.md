@@ -2,9 +2,13 @@
 
 <img src="assets/logo-glyph.png" width="80" align="right" alt="Dogear logo">
 
-Dogear is a small macOS menu bar app. It saves links from TikTok, X, and the
-web, and files them into folders: recipes to make, restaurants to visit,
-shows to watch, music to hear, articles to read.
+Dogear is a small macOS app that lives in your menu bar and your Dock. It
+saves links from TikTok, X, and the web, and files them into folders:
+recipes to make, restaurants to visit, shows to watch, music to hear,
+articles to read.
+
+Click the Dock icon to open the library. If you prefer a menu bar only
+app, turn off "Show icon in Dock" in Settings.
 
 ## How it works
 

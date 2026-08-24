@@ -15,10 +15,15 @@ struct SettingsView: View {
 
 private struct GeneralSettings: View {
     @AppStorage("detectCopiedLinks") private var detectCopiedLinks = true
+    @AppStorage(DockPresence.defaultsKey) private var showDockIcon = true
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
 
     var body: some View {
         Form {
+            Toggle("Show icon in Dock", isOn: $showDockIcon)
+                .onChange(of: showDockIcon) { _, _ in DockPresence.apply() }
+            Text("With the Dock icon off, Dogear lives only in the menu bar.")
+                .font(.caption).foregroundStyle(.secondary)
             Toggle("Detect copied links", isOn: $detectCopiedLinks)
             Text("Dogear checks if the clipboard holds a link. It reads the clipboard only when you save.")
                 .font(.caption).foregroundStyle(.secondary)
