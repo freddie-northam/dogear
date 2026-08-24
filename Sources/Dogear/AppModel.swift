@@ -11,6 +11,10 @@ struct CaptureResult {
 
 @MainActor
 final class AppModel: ObservableObject {
+    /// The one live model, for scenes that must not eagerly build their view
+    /// tree (Settings). Set once by DogearApp; nil only before the app exists.
+    static weak var shared: AppModel?
+
     let store: BookmarkStore
     let enrichment: EnrichmentService
     let thumbnails: ThumbnailCache
@@ -36,6 +40,7 @@ final class AppModel: ObservableObject {
             client: client
         )
         store.onChange = { [weak self] in self?.revision += 1 }
+        AppModel.shared = self
         store.onWriteFailure = { [weak self] error in
             self?.storageError = "Dogear could not save your bookmarks: \(error.localizedDescription)"
         }
