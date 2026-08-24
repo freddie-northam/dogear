@@ -3,5 +3,3 @@ build/
 .DS_Store
 *.xcodeproj
 .swiftpm/
-plans/
-docs/superpowers/
