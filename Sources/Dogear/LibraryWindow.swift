@@ -393,6 +393,14 @@ func copyToPasteboard(_ string: String) {
     NSPasteboard.general.setString(string, forType: .string)
 }
 
+/// The one place a stored URL becomes a system open. Refuses anything that
+/// is not http(s): NSWorkspace dispatches any scheme to whichever app
+/// claims it, and stored data must not carry that authority.
+func openBookmarkURL(_ string: String) {
+    guard let url = URL(string: string), URLCleaner.isCapturable(url) else { return }
+    NSWorkspace.shared.open(url)
+}
+
 func hostName(_ bookmark: Bookmark) -> String {
     URL(string: bookmark.url)?.host ?? ""
 }
@@ -754,7 +762,7 @@ struct BookmarkCard: View {
     }
 
     private func open() {
-        if let url = URL(string: bookmark.url) { NSWorkspace.shared.open(url) }
+        openBookmarkURL(bookmark.url)
     }
 }
 
@@ -905,6 +913,6 @@ struct BookmarkListRow: View {
     }
 
     private func open() {
-        if let url = URL(string: bookmark.url) { NSWorkspace.shared.open(url) }
+        openBookmarkURL(bookmark.url)
     }
 }

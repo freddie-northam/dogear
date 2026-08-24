@@ -25,6 +25,15 @@ import Testing
     }
 }
 
+@Test func rejectsNonHTTPThumbnailURL() async throws {
+    let videoURL = URL(string: "https://www.tiktok.com/@x/video/2")!
+    let stub = StubHTTPClient(responses: [
+        TikTokFetcher.oembedURL(for: videoURL): Data(#"{"title":"A video","thumbnail_url":"file:///etc/hosts"}"#.utf8)
+    ])
+    let metadata = try await TikTokFetcher().fetch(videoURL, client: stub)
+    #expect(metadata.thumbnailURL == nil)
+}
+
 @Test func buildsOEmbedURLWithTheVideoURLAsAQueryValue() {
     let url = TikTokFetcher.oembedURL(for: URL(string: "https://www.tiktok.com/@a/video/1")!)
     #expect(url.absoluteString == "https://www.tiktok.com/oembed?url=https://www.tiktok.com/@a/video/1")

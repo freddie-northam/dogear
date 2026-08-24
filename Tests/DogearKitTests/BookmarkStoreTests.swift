@@ -18,7 +18,7 @@ private func tempDir() -> URL {
 @Test func addPersistsAcrossReload() throws {
     let dir = tempDir()
     let store = try BookmarkStore(directory: dir)
-    let (bookmark, isNew) = store.add(url: URL(string: "https://example.com/a")!)
+    let (bookmark, isNew) = store.add(url: URL(string: "https://example.com/a")!)!
     #expect(isNew)
     #expect(bookmark.folder == Library.unsorted)
     let reloaded = try BookmarkStore(directory: dir)
@@ -27,18 +27,34 @@ private func tempDir() -> URL {
 
 @Test func addDedupesOnCanonicalURL() throws {
     let store = try BookmarkStore(directory: tempDir())
-    let (first, _) = store.add(url: URL(string: "https://a.com/p?utm_source=x")!)
-    let (second, isNew) = store.add(url: URL(string: "https://A.com/p/")!)
+    let (first, _) = store.add(url: URL(string: "https://a.com/p?utm_source=x")!)!
+    let (second, isNew) = store.add(url: URL(string: "https://A.com/p/")!)!
     #expect(!isNew)
     #expect(second.id == first.id)
     #expect(store.library.bookmarks.count == 1)
 }
 
+@Test func addRejectsNonHTTPSchemes() throws {
+    let store = try BookmarkStore(directory: tempDir())
+    let result = store.add(url: URL(string: "file:///etc/hosts")!)
+    #expect(result == nil)
+    #expect(store.library.bookmarks.isEmpty)
+}
+
+@Test func updateRefusesToStoreANonHTTPURL() throws {
+    let store = try BookmarkStore(directory: tempDir())
+    let (bookmark, _) = store.add(url: URL(string: "https://a.com/original")!)!
+    var mutated = bookmark
+    mutated.url = "javascript:alert(1)"
+    store.update(mutated)
+    #expect(store.library.bookmarks[0].url == "https://a.com/original")
+}
+
 @Test func reAddBumpsToTopOfFolderListing() throws {
     let store = try BookmarkStore(directory: tempDir())
-    let (first, _) = store.add(url: URL(string: "https://a.com/1")!)
-    let (second, _) = store.add(url: URL(string: "https://a.com/2")!)
-    let (bumped, isNew) = store.add(url: URL(string: "https://a.com/1")!)
+    let (first, _) = store.add(url: URL(string: "https://a.com/1")!)!
+    let (second, _) = store.add(url: URL(string: "https://a.com/2")!)!
+    let (bumped, isNew) = store.add(url: URL(string: "https://a.com/1")!)!
     #expect(!isNew)
     #expect(bumped.id == first.id)
     #expect(store.bookmarks(in: Library.unsorted).map(\.id) == [first.id, second.id])
@@ -46,7 +62,7 @@ private func tempDir() -> URL {
 
 @Test func doneMovesToArchiveAndBack() throws {
     let store = try BookmarkStore(directory: tempDir())
-    let (bookmark, _) = store.add(url: URL(string: "https://a.com/1")!)
+    let (bookmark, _) = store.add(url: URL(string: "https://a.com/1")!)!
     store.markDone(id: bookmark.id)
     #expect(store.bookmarks(in: Library.unsorted).isEmpty)
     #expect(store.archive().map(\.id) == [bookmark.id])
@@ -57,7 +73,7 @@ private func tempDir() -> URL {
 
 @Test func refileSetsManuallyFiled() throws {
     let store = try BookmarkStore(directory: tempDir())
-    let (bookmark, _) = store.add(url: URL(string: "https://a.com/1")!)
+    let (bookmark, _) = store.add(url: URL(string: "https://a.com/1")!)!
     store.refile(id: bookmark.id, to: "Recipes")
     let updated = store.library.bookmarks[0]
     #expect(updated.folder == "Recipes")
@@ -66,9 +82,9 @@ private func tempDir() -> URL {
 
 @Test func autoFileBatchWritesOnce() throws {
     let store = try BookmarkStore(directory: tempDir())
-    let (a, _) = store.add(url: URL(string: "https://a.com/1")!)
-    let (b, _) = store.add(url: URL(string: "https://a.com/2")!)
-    let (c, _) = store.add(url: URL(string: "https://a.com/3")!)
+    let (a, _) = store.add(url: URL(string: "https://a.com/1")!)!
+    let (b, _) = store.add(url: URL(string: "https://a.com/2")!)!
+    let (c, _) = store.add(url: URL(string: "https://a.com/3")!)!
     var changes = 0
     store.onChange = { changes += 1 }
     let applied = store.autoFile([
@@ -83,9 +99,9 @@ private func tempDir() -> URL {
 
 @Test func autoFileSkipsManuallyFiledAndMoved() throws {
     let store = try BookmarkStore(directory: tempDir())
-    let (a, _) = store.add(url: URL(string: "https://a.com/1")!)
-    let (b, _) = store.add(url: URL(string: "https://a.com/2")!)
-    let (c, _) = store.add(url: URL(string: "https://a.com/3")!)
+    let (a, _) = store.add(url: URL(string: "https://a.com/1")!)!
+    let (b, _) = store.add(url: URL(string: "https://a.com/2")!)!
+    let (c, _) = store.add(url: URL(string: "https://a.com/3")!)!
     store.refile(id: a.id, to: "Shows")
     let applied = store.autoFile([
         (id: a.id, folder: "Recipes"),
@@ -100,7 +116,7 @@ private func tempDir() -> URL {
 
 @Test func autoFileSkipsUnknownFolder() throws {
     let store = try BookmarkStore(directory: tempDir())
-    let (a, _) = store.add(url: URL(string: "https://a.com/1")!)
+    let (a, _) = store.add(url: URL(string: "https://a.com/1")!)!
     var changes = 0
     store.onChange = { changes += 1 }
     let applied = store.autoFile([(id: a.id, folder: "Not A Real Folder")])
@@ -111,7 +127,7 @@ private func tempDir() -> URL {
 
 @Test func removeFolderMovesBookmarksToUnsorted() throws {
     let store = try BookmarkStore(directory: tempDir())
-    let (bookmark, _) = store.add(url: URL(string: "https://a.com/1")!)
+    let (bookmark, _) = store.add(url: URL(string: "https://a.com/1")!)!
     store.refile(id: bookmark.id, to: "Recipes")
     store.removeFolder("Recipes")
     #expect(!store.library.folders.contains("Recipes"))
@@ -121,18 +137,18 @@ private func tempDir() -> URL {
 @Test func countsMatchExistingAccessors() throws {
     let store = try BookmarkStore(directory: tempDir())
     // Filed: refiled into Recipes.
-    let (filed, _) = store.add(url: URL(string: "https://a.com/1")!)
+    let (filed, _) = store.add(url: URL(string: "https://a.com/1")!)!
     store.refile(id: filed.id, to: "Recipes")
     // Unsorted: left in place.
     store.add(url: URL(string: "https://a.com/2")!)
     // Done: filed then marked done, so it should count toward archive but
     // not toward its folder's not-done count.
-    let (done, _) = store.add(url: URL(string: "https://a.com/3")!)
+    let (done, _) = store.add(url: URL(string: "https://a.com/3")!)!
     store.refile(id: done.id, to: "Recipes")
     store.markDone(id: done.id)
     // Favorited and done: favorites() includes done bookmarks (a lens, not a
     // queue), so this must count toward favorites even though it is archived.
-    let (favoriteDone, _) = store.add(url: URL(string: "https://a.com/4")!)
+    let (favoriteDone, _) = store.add(url: URL(string: "https://a.com/4")!)!
     store.toggleFavorite(id: favoriteDone.id)
     store.markDone(id: favoriteDone.id)
 
@@ -146,7 +162,7 @@ private func tempDir() -> URL {
 
 @Test func searchMatchesTitleAuthorURLIncludingArchive() throws {
     let store = try BookmarkStore(directory: tempDir())
-    let (a, _) = store.add(url: URL(string: "https://a.com/pasta")!)
+    let (a, _) = store.add(url: URL(string: "https://a.com/pasta")!)!
     var updated = store.library.bookmarks[0]
     updated.title = "Creamy garlic pasta"
     updated.author = "Gordon"
@@ -160,7 +176,7 @@ private func tempDir() -> URL {
 
 @Test func batchAddSavesOnceAndDedupes() throws {
     let store = try BookmarkStore(directory: tempDir())
-    let (existing, _) = store.add(url: URL(string: "https://a.com/old")!)
+    let (existing, _) = store.add(url: URL(string: "https://a.com/old")!)!
     store.markDone(id: existing.id)
     var changes = 0
     store.onChange = { changes += 1 }
@@ -191,7 +207,7 @@ private func tempDir() -> URL {
 
 @Test func toggleFavoriteSetsAndClears() throws {
     let store = try BookmarkStore(directory: tempDir())
-    let (bookmark, _) = store.add(url: URL(string: "https://a.com/1")!)
+    let (bookmark, _) = store.add(url: URL(string: "https://a.com/1")!)!
     store.toggleFavorite(id: bookmark.id)
     #expect(store.library.bookmarks[0].isFavorite)
     store.toggleFavorite(id: bookmark.id)
@@ -200,9 +216,9 @@ private func tempDir() -> URL {
 
 @Test func favoritesIncludeDoneAndSortNewestFirst() throws {
     let store = try BookmarkStore(directory: tempDir())
-    let (a, _) = store.add(url: URL(string: "https://a.com/1")!)
-    let (b, _) = store.add(url: URL(string: "https://a.com/2")!)
-    let (c, _) = store.add(url: URL(string: "https://a.com/3")!)
+    let (a, _) = store.add(url: URL(string: "https://a.com/1")!)!
+    let (b, _) = store.add(url: URL(string: "https://a.com/2")!)!
+    let (c, _) = store.add(url: URL(string: "https://a.com/3")!)!
     for (id, seconds) in [(a.id, 100.0), (b.id, 200.0), (c.id, 300.0)] {
         var bookmark = store.library.bookmarks.first { $0.id == id }!
         bookmark.favoritedAt = Date(timeIntervalSince1970: seconds)
@@ -230,8 +246,8 @@ private func tempDir() -> URL {
 
 @Test func pickNeverReturnsADoneBookmark() throws {
     let store = try BookmarkStore(directory: tempDir())
-    let (done, _) = store.add(url: URL(string: "https://a.com/1")!)
-    let (waiting, _) = store.add(url: URL(string: "https://a.com/2")!)
+    let (done, _) = store.add(url: URL(string: "https://a.com/1")!)!
+    let (waiting, _) = store.add(url: URL(string: "https://a.com/2")!)!
     store.markDone(id: done.id)
     for _ in 0..<20 {
         #expect(store.pick()?.id == waiting.id)
@@ -240,8 +256,8 @@ private func tempDir() -> URL {
 
 @Test func pickExcludesTheGivenIDWhenAnotherCandidateExists() throws {
     let store = try BookmarkStore(directory: tempDir())
-    let (a, _) = store.add(url: URL(string: "https://a.com/1")!)
-    let (b, _) = store.add(url: URL(string: "https://a.com/2")!)
+    let (a, _) = store.add(url: URL(string: "https://a.com/1")!)!
+    let (b, _) = store.add(url: URL(string: "https://a.com/2")!)!
     for _ in 0..<20 {
         #expect(store.pick(excluding: a.id)?.id == b.id)
     }
@@ -249,7 +265,7 @@ private func tempDir() -> URL {
 
 @Test func pickFallsBackToTheExcludedBookmarkWhenItIsTheOnlyOne() throws {
     let store = try BookmarkStore(directory: tempDir())
-    let (only, _) = store.add(url: URL(string: "https://a.com/1")!)
+    let (only, _) = store.add(url: URL(string: "https://a.com/1")!)!
     #expect(store.pick(excluding: only.id)?.id == only.id)
 }
 
@@ -437,7 +453,7 @@ private func storeSeeded(folders: [String]) throws -> BookmarkStore {
     for i in 0..<30 {
         _ = store.addForTesting(urlString: "https://example.com/u/\(i)")
     }
-    let (filed, _) = store.add(url: URL(string: "https://example.com/filed")!)
+    let (filed, _) = store.add(url: URL(string: "https://example.com/filed")!)!
     store.refile(id: filed.id, to: "Recipes")
     for _ in 0..<20 {
         let picked = store.pick()

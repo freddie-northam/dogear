@@ -79,8 +79,8 @@ public final class BookmarkStore {
     // MARK: Mutations
 
     @discardableResult
-    public func add(url: URL) -> (bookmark: Bookmark, isNew: Bool) {
-        let result = insert(url: url)
+    public func add(url: URL) -> (bookmark: Bookmark, isNew: Bool)? {
+        guard let result = insert(url: url) else { return nil }
         mutated()
         return result
     }
@@ -96,7 +96,7 @@ public final class BookmarkStore {
         // Insert back to front: each insert lands at index 0, so the batch ends
         // up at the top of the list in paste order, first pasted link first.
         for url in urls.reversed() {
-            let (bookmark, isNew) = insert(url: url)
+            guard let (bookmark, isNew) = insert(url: url) else { continue }
             touched.insert(bookmark.id)
             if isNew { new.append(bookmark) }
         }
@@ -107,7 +107,8 @@ public final class BookmarkStore {
 
     /// Shared insert path: dedupe on the canonical URL, bump a duplicate to
     /// the top and clear its done state. Does not save; callers call mutated().
-    private func insert(url: URL) -> (bookmark: Bookmark, isNew: Bool) {
+    private func insert(url: URL) -> (bookmark: Bookmark, isNew: Bool)? {
+        guard URLCleaner.isCapturable(url) else { return nil }
         let canonical = URLCleaner.canonicalString(url)
         if let index = library.bookmarks.firstIndex(where: { $0.url == canonical }) {
             var existing = library.bookmarks.remove(at: index)
@@ -130,6 +131,7 @@ public final class BookmarkStore {
         if let url = URL(string: bookmark.url) {
             bookmark.url = URLCleaner.canonicalString(url)
         }
+        guard URL(string: bookmark.url).map(URLCleaner.isCapturable) == true else { return }
         library.bookmarks[index] = bookmark
         mutated()
     }

@@ -205,7 +205,7 @@ struct CapturePopover: View {
     private func pickRow(_ pick: Bookmark) -> some View {
         HStack(spacing: 8) {
             Button {
-                if let url = URL(string: pick.url) { NSWorkspace.shared.open(url) }
+                openBookmarkURL(pick.url)
                 dismiss()
             } label: {
                 HStack(spacing: 8) {
@@ -343,7 +343,7 @@ private struct PopoverListRow: View {
 
     var body: some View {
         Button {
-            if let url = URL(string: bookmark.url) { NSWorkspace.shared.open(url) }
+            openBookmarkURL(bookmark.url)
             dismiss()
         } label: {
             HStack(spacing: 8) {

@@ -47,7 +47,7 @@ public enum OpenGraphParser {
         return OpenGraphData(
             title: title,
             description: properties["og:description"],
-            imageURL: properties["og:image"].flatMap(URL.init(string:)),
+            imageURL: properties["og:image"].flatMap(URL.init(string:)).flatMap { URLCleaner.isCapturable($0) ? $0 : nil },
             siteName: properties["og:site_name"]
         )
     }

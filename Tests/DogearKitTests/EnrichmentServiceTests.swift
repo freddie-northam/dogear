@@ -21,7 +21,7 @@ private func makeEnvironment(client: StubHTTPClient) throws -> (BookmarkStore, E
     let html = try Data(contentsOf: Bundle.module.url(forResource: "generic-page", withExtension: "html", subdirectory: "Fixtures")!)
     let (store, service) = try await makeEnvironment(client: StubHTTPClient(responses: [pageURL: html]))
 
-    let (bookmark, _) = store.add(url: pageURL)
+    let (bookmark, _) = store.add(url: pageURL)!
     await service.enrich(id: bookmark.id)
 
     let enriched = store.library.bookmarks[0]
@@ -35,7 +35,7 @@ private func makeEnvironment(client: StubHTTPClient) throws -> (BookmarkStore, E
     client.failEverything = true
     let (store, service) = try await makeEnvironment(client: client)
 
-    let (bookmark, _) = store.add(url: URL(string: "https://example.com/gone")!)
+    let (bookmark, _) = store.add(url: URL(string: "https://example.com/gone")!)!
     await service.enrich(id: bookmark.id)
 
     let after = store.library.bookmarks[0]
@@ -50,7 +50,7 @@ private func makeEnvironment(client: StubHTTPClient) throws -> (BookmarkStore, E
     let html = try Data(contentsOf: Bundle.module.url(forResource: "generic-page", withExtension: "html", subdirectory: "Fixtures")!)
     let (store, service) = try await makeEnvironment(client: StubHTTPClient(responses: [pageURL: html]))
 
-    let (bookmark, _) = store.add(url: pageURL)
+    let (bookmark, _) = store.add(url: pageURL)!
     store.refile(id: bookmark.id, to: "Articles")
     await service.enrich(id: bookmark.id)
 
@@ -63,7 +63,7 @@ private func makeEnvironment(client: StubHTTPClient) throws -> (BookmarkStore, E
     let (store, service) = try await makeEnvironment(client: StubHTTPClient(responses: [pageURL: html]))
     store.removeFolder("Recipes")
 
-    let (bookmark, _) = store.add(url: pageURL)
+    let (bookmark, _) = store.add(url: pageURL)!
     await service.enrich(id: bookmark.id)
 
     #expect(store.library.bookmarks[0].folder == Library.unsorted)
@@ -104,7 +104,7 @@ private final class InterceptingHTTPClient: HTTPClient, @unchecked Sendable {
     let html = try Data(contentsOf: Bundle.module.url(forResource: "generic-page", withExtension: "html", subdirectory: "Fixtures")!)
     let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     let store = try BookmarkStore(directory: dir)
-    let (bookmark, _) = store.add(url: pageURL)
+    let (bookmark, _) = store.add(url: pageURL)!
 
     let stub = StubHTTPClient(responses: [pageURL: html])
     let client = InterceptingHTTPClient(inner: stub, triggerOnCall: 1) {
@@ -134,7 +134,7 @@ private final class InterceptingHTTPClient: HTTPClient, @unchecked Sendable {
     let html = try Data(contentsOf: Bundle.module.url(forResource: "generic-page", withExtension: "html", subdirectory: "Fixtures")!)
     let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     let store = try BookmarkStore(directory: dir)
-    let (bookmark, _) = store.add(url: pageURL)
+    let (bookmark, _) = store.add(url: pageURL)!
 
     let stub = StubHTTPClient(responses: [pageURL: html])
     let client = InterceptingHTTPClient(inner: stub, triggerOnCall: 2) {
@@ -164,7 +164,7 @@ private final class InterceptingHTTPClient: HTTPClient, @unchecked Sendable {
     let html = try Data(contentsOf: Bundle.module.url(forResource: "generic-page", withExtension: "html", subdirectory: "Fixtures")!)
     let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     let store = try BookmarkStore(directory: dir)
-    let (bookmark, _) = store.add(url: pageURL)
+    let (bookmark, _) = store.add(url: pageURL)!
 
     let stub = StubHTTPClient(responses: [pageURL: html])
     let client = InterceptingHTTPClient(inner: stub, triggerOnCall: 2) {
@@ -193,9 +193,9 @@ private final class InterceptingHTTPClient: HTTPClient, @unchecked Sendable {
     client.redirects = [short: full]
     let (store, service) = try await makeEnvironment(client: client)
 
-    let (existing, _) = store.add(url: full)
+    let (existing, _) = store.add(url: full)!
     await service.enrich(id: existing.id)
-    let (viaShort, isNew) = store.add(url: short)
+    let (viaShort, isNew) = store.add(url: short)!
     #expect(isNew) // the short link does not match before resolution
     await service.enrich(id: viaShort.id)
 
@@ -211,15 +211,15 @@ private final class InterceptingHTTPClient: HTTPClient, @unchecked Sendable {
     client.redirects = [short: full]
     let (store, service) = try await makeEnvironment(client: client)
 
-    let (existing, _) = store.add(url: full)
+    let (existing, _) = store.add(url: full)!
     await service.enrich(id: existing.id)
     // Enrichment filed the survivor by category, so compare inside that folder.
     let folder = store.library.bookmarks.first { $0.id == existing.id }!.folder
-    let (other, _) = store.add(url: URL(string: "https://example.com/other")!)
+    let (other, _) = store.add(url: URL(string: "https://example.com/other")!)!
     store.refile(id: other.id, to: folder)
     #expect(store.bookmarks(in: folder).map(\.id) == [other.id, existing.id])
 
-    let (viaShort, _) = store.add(url: short)
+    let (viaShort, _) = store.add(url: short)!
     await service.enrich(id: viaShort.id)
 
     #expect(store.bookmarks(in: folder).map(\.id) == [existing.id, other.id])
