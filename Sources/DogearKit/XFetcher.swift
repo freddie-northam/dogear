@@ -5,7 +5,11 @@ public struct XFetcher: MetadataFetcher {
 
     public func fetch(_ url: URL, client: HTTPClient) async throws -> FetchedMetadata {
         let data = try await client.data(from: url, limit: FetchLimit.html)
-        let html = String(decoding: data, as: UTF8.self)
+        return try parse(body: data, url: url)
+    }
+
+    public func parse(body: Data, url: URL) throws -> FetchedMetadata {
+        let html = String(decoding: body, as: UTF8.self)
         let og = OpenGraphParser.parse(html: html)
         guard let text = og.description, !text.isEmpty else {
             throw HTTPClientError.noResponse

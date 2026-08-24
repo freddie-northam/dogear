@@ -22,12 +22,32 @@ import Testing
     let short = URL(string: "https://vm.tiktok.com/ZM2/")!
     let full = URL(string: "https://www.tiktok.com/@a/video/123")!
     let fixtureURL = Bundle.module.url(forResource: "tiktok-oembed", withExtension: "json", subdirectory: "Fixtures")!
-    var stub = StubHTTPClient(responses: [TikTokFetcher.oembedURL(for: full): try Data(contentsOf: fixtureURL)])
+    // The TikTok page body itself is irrelevant (TikTokFetcher doesn't parse it, it
+    // calls the oEmbed endpoint), but the single-fetch flow still GETs it to learn the
+    // resolved host, so it must be stubbed too.
+    var stub = StubHTTPClient(responses: [
+        full: Data(),
+        TikTokFetcher.oembedURL(for: full): try Data(contentsOf: fixtureURL),
+    ])
     stub.redirects = [short: full]
 
     let result = await MetadataService(client: stub).fetch(for: short)
     #expect(result.resolvedURL == full)
     #expect(result.metadata?.source == .tiktok)
+}
+
+@Test func fetchesTheResolvedPageExactlyOnce() async throws {
+    let short = URL(string: "https://short.example/a")!
+    let page = URL(string: "https://target.example/page")!
+    let fixtureURL = Bundle.module.url(forResource: "generic-page", withExtension: "html", subdirectory: "Fixtures")!
+    var stub = StubHTTPClient(responses: [page: try Data(contentsOf: fixtureURL)])
+    stub.redirects = [short: page]
+
+    let result = await MetadataService(client: stub).fetch(for: short)
+    #expect(result.resolvedURL == page)
+    #expect(result.metadata?.title == "How to Make Fresh Pasta 'Properly'")
+    let requested = await stub.requestedURLs()
+    #expect(requested.filter { $0 == page }.count == 1)
 }
 
 @Test func failureYieldsNilMetadataNotAnError() async {

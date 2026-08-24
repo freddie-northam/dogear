@@ -30,3 +30,40 @@ import Testing
         _ = try await stub.data(from: url, limit: 1_000)
     }
 }
+
+// Serves a canned 2,000-byte body for any request, so the real client's cap
+// enforcement can be tested without hitting the network.
+private final class StubURLProtocol: URLProtocol {
+    static let canned = Data(repeating: 0x41, count: 2_000)
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Self.canned)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+}
+
+private func stubbedClient() -> URLSessionHTTPClient {
+    let config = URLSessionConfiguration.ephemeral
+    config.protocolClasses = [StubURLProtocol.self]
+    return URLSessionHTTPClient(configuration: config)
+}
+
+@Test func realClientThrowsTooLargePastTheLimit() async throws {
+    let client = stubbedClient()
+    await #expect(throws: HTTPClientError.tooLarge) {
+        _ = try await client.data(from: URL(string: "https://stub.example/x")!, limit: 1_000)
+    }
+}
+
+@Test func realClientReturnsTheWholeBodyUnderTheLimit() async throws {
+    let client = stubbedClient()
+    let data = try await client.data(from: URL(string: "https://stub.example/x")!, limit: 10_000)
+    #expect(data.count == 2_000)
+}
