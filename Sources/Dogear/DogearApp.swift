@@ -29,10 +29,11 @@ struct DogearApp: App {
     @AppStorage("hasLaunchedBefore") private var hasLaunchedBefore = false
     @Environment(\.openWindow) private var openWindow
     @State private var serviceProvider: ServiceProvider?
+    @NSApplicationDelegateAdaptor(DockDelegate.self) private var dockDelegate
 
     init() {
-        // No dock icon: menu bar app. Replaces LSUIElement when run outside a bundle.
-        NSApplication.shared.setActivationPolicy(.accessory)
+        // The Dock icon is a setting; LSUIElement only sets the initial state.
+        DockPresence.apply()
     }
 
     var body: some Scene {
@@ -50,7 +51,13 @@ struct DogearApp: App {
             Image(nsImage: clipboard.linkDetected ? linkDetectedIcon : idleIcon)
                 // The label renders at launch, unlike the popover content, so
                 // registration here also covers the launched-by-service path.
-                .task { registerServiceProviderIfNeeded() }
+                .task {
+                    registerServiceProviderIfNeeded()
+                    dockDelegate.openLibrary = {
+                        openWindow(id: "library")
+                        NSApp.activate()
+                    }
+                }
         }
         .menuBarExtraStyle(.window)
 
