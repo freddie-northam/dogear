@@ -26,7 +26,9 @@ jobs:
         with:
           persist-credentials: false
       - name: Run performance benchmarks
-        run: PERF=1 swift test --filter BookmarkStoreTests
+        run: |
+          PERF=1 swift test --filter BookmarkStoreTests
+          PERF=1 swift test --filter ThumbnailCacheTests
   package:
     runs-on: macos-15
     timeout-minutes: 30
