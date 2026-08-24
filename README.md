@@ -36,6 +36,7 @@ links into the popover. Dogear saves every link it finds in the text.
 
 ## In the library
 
+- Make your own folders, and drag folders into the order you want.
 - Switch between grid view and list view.
 - Sort by last saved, oldest first, title, or site.
 - Star a bookmark as a favourite.
