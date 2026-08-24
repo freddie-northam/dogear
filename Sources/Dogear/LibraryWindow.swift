@@ -180,7 +180,17 @@ struct LibraryWindow: View {
                     }
                     .badge(counts.byFolder[folder, default: 0])
                     .tag(folder)
+                    // Unsorted is an inbox; it stays pinned last and does not drag.
+                    .moveDisabled(folder == Library.unsorted)
                 }
+                .onMove { source, destination in
+                    model.store.moveFolders(fromOffsets: source, toOffset: destination)
+                }
+                // The affordance to add a folder is the last row of the list it
+                // adds to, like Finder and Reminders, not a control floating in
+                // the window corner.
+                NewFolderRow()
+                    .selectionDisabled()
             }
             Section {
                 Label {
@@ -227,9 +237,6 @@ struct LibraryWindow: View {
                     }
                 }
             }
-        }
-        .safeAreaInset(edge: .bottom) {
-            NewFolderButton()
         }
     }
 
@@ -743,18 +750,20 @@ private struct NotesImportSheet: View {
     }
 }
 
-private struct NewFolderButton: View {
+private struct NewFolderRow: View {
     @EnvironmentObject var model: AppModel
     @State private var isAdding = false
     @State private var name = ""
-    @State private var isHoveringNewFolder = false
+    @State private var isHovering = false
     @FocusState private var isFieldFocused: Bool
 
     var body: some View {
-        HStack {
-            if isAdding {
+        if isAdding {
+            // Same icon column and text inset as a folder row, so the field
+            // reads as "this row is becoming a folder", not as a form.
+            Label {
                 TextField("Folder name", text: $name)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.plain)
                     .focused($isFieldFocused)
                     .onSubmit {
                         model.store.addFolder(name)
@@ -765,21 +774,26 @@ private struct NewFolderButton: View {
                         if !focused { cancel() }
                     }
                     .onAppear { isFieldFocused = true }
-            } else {
-                Button {
-                    isAdding = true
-                } label: {
-                    Label("New Folder", systemImage: "plus")
-                }
-                .buttonStyle(.plain)
-                .pointerStyle(.link)
-                .foregroundStyle(isHoveringNewFolder ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
-                .onHover { isHoveringNewFolder = $0 }
-                Spacer()
+            } icon: {
+                Image(systemName: "folder.badge.plus")
+                    .foregroundStyle(.secondary)
             }
+        } else {
+            Button {
+                isAdding = true
+            } label: {
+                Label {
+                    Text("New Folder")
+                } icon: {
+                    Image(systemName: "plus.circle")
+                }
+                .foregroundStyle(isHovering ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+            }
+            .buttonStyle(.plain)
+            .pointerStyle(.link)
+            .onHover { isHovering = $0 }
+            .accessibilityLabel("New Folder")
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
     }
 
     private func cancel() {
