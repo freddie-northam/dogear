@@ -1,3 +1,4 @@
+import AppKit
 import DogearKit
 import Foundation
 import SwiftUI
@@ -50,6 +51,14 @@ final class AppModel: ObservableObject {
         AppModel.shared = self
         store.onWriteFailure = { [weak self] error in
             self?.storageError = "Dogear could not save your bookmarks: \(error.localizedDescription)"
+        }
+        // The store writes on a background queue so a click never waits on the
+        // disk. Quit is the one moment that must wait: without this, the last
+        // few changes would still be in the queue when the process ends.
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.store.flush() }
         }
     }
 

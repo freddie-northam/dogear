@@ -326,17 +326,67 @@ public final class BookmarkStore {
 
     // MARK: Persistence
 
+    /// Encoding the whole library and rotating the backup costs about 70 ms
+    /// on a 20,000 bookmark library. Done on the caller's thread that is four
+    /// dropped frames for every star click, so a mutation now hands the write
+    /// to `writeQueue` and returns. `onChange` still fires first and in place:
+    /// the UI redraws from memory and never waits on the disk.
     private func mutated() {
-        saveNow()
         onChange?()
+        scheduleWrite()
     }
 
+    /// The newest library still to reach the disk. A burst of mutations
+    /// replaces this snapshot instead of queueing one write each, so a
+    /// hundred-link paste writes once, not a hundred times.
+    private var pendingWrite: Library?
+    private let pendingLock = NSLock()
+    private let writeQueue = DispatchQueue(label: "app.dogear.library-write", qos: .utility)
+
+    private func scheduleWrite() {
+        pendingLock.lock()
+        let alreadyQueued = pendingWrite != nil
+        pendingWrite = library
+        pendingLock.unlock()
+        // A queued write has not read its snapshot yet, so it will pick up the
+        // one just stored. Only an empty queue needs a new job.
+        guard !alreadyQueued else { return }
+        writeQueue.async { [weak self] in self?.drainPendingWrite() }
+    }
+
+    private func drainPendingWrite() {
+        pendingLock.lock()
+        let snapshot = pendingWrite
+        pendingWrite = nil
+        pendingLock.unlock()
+        guard let snapshot else { return }
+        write(snapshot)
+    }
+
+    /// Blocks until every scheduled write has reached the disk. Call it before
+    /// the app quits, and from a test that reopens the store.
+    ///
+    /// ponytail: a crash or a force quit can still lose the changes made in
+    /// the last few milliseconds. A write-ahead log would close that window;
+    /// a menu bar app that saves links does not need one.
+    public func flush() {
+        writeQueue.sync { self.drainPendingWrite() }
+    }
+
+    /// Writes the library now and waits for it. Every write goes through
+    /// `writeQueue`, including this one: two threads writing `library.json` at
+    /// once could land the older snapshot last.
     public func saveNow() {
+        scheduleWrite()
+        flush()
+    }
+
+    private func write(_ snapshot: Library) {
         let data: Data
         do {
-            data = try JSONEncoder().encode(library)
+            data = try JSONEncoder().encode(snapshot)
         } catch {
-            onWriteFailure?(error)
+            report(error)
             return
         }
         if FileManager.default.fileExists(atPath: fileURL.path) {
@@ -346,7 +396,18 @@ public final class BookmarkStore {
         do {
             try data.write(to: fileURL, options: .atomic)
         } catch {
-            onWriteFailure?(error)
+            report(error)
+        }
+    }
+
+    /// A failed write reports on the main thread whoever noticed it, so the
+    /// handler can touch the UI without a hop of its own.
+    private func report(_ error: Error) {
+        guard let onWriteFailure else { return }
+        if Thread.isMainThread {
+            onWriteFailure(error)
+        } else {
+            DispatchQueue.main.async { onWriteFailure(error) }
         }
     }
 

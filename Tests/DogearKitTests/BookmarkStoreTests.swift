@@ -16,6 +16,7 @@ import Testing
     let (bookmark, isNew) = store.add(url: URL(string: "https://example.com/a")!)!
     #expect(isNew)
     #expect(bookmark.folder == Library.unsorted)
+    store.flush()
     let reloaded = try BookmarkStore(directory: dir)
     #expect(reloaded.library.bookmarks.map(\.id) == [bookmark.id])
 }
@@ -314,7 +315,9 @@ import Testing
     let dir = temp.url
     let store = try BookmarkStore(directory: dir)
     _ = store.add(url: URL(string: "https://a.com/1")!)
+    store.flush()
     _ = store.add(url: URL(string: "https://a.com/2")!)
+    store.flush()
     // The second add rotated a .bak that contains the first bookmark.
     try Data("{corrupt".utf8).write(to: dir.appendingPathComponent("library.json"))
     let recovered = try BookmarkStore(directory: dir)
@@ -327,7 +330,9 @@ import Testing
     let dir = temp.url
     let store = try BookmarkStore(directory: dir)
     _ = store.add(url: URL(string: "https://a.com/1")!)
+    store.flush()
     _ = store.add(url: URL(string: "https://a.com/2")!)
+    store.flush()
     // .bak now holds the single-bookmark state. Corrupt library.json and recover from it.
     try Data("{corrupt".utf8).write(to: dir.appendingPathComponent("library.json"))
     _ = try BookmarkStore(directory: dir)
@@ -344,7 +349,9 @@ import Testing
     let dir = temp.url
     let store = try BookmarkStore(directory: dir)
     _ = store.add(url: URL(string: "https://a.com/1")!)
+    store.flush()
     _ = store.add(url: URL(string: "https://a.com/2")!)
+    store.flush()
     // The second add rotated a .bak that contains the first bookmark.
     try FileManager.default.removeItem(at: dir.appendingPathComponent("library.json"))
     let recovered = try BookmarkStore(directory: dir)
@@ -357,7 +364,9 @@ import Testing
     let dir = temp.url
     let store = try BookmarkStore(directory: dir)
     _ = store.add(url: URL(string: "https://a.com/1")!)
+    store.flush()
     _ = store.add(url: URL(string: "https://a.com/2")!)
+    store.flush()
     // .bak now holds the single-bookmark state. Delete library.json and recover from it.
     try FileManager.default.removeItem(at: dir.appendingPathComponent("library.json"))
     let recovered = try BookmarkStore(directory: dir)
@@ -365,7 +374,9 @@ import Testing
     // recovery write had clobbered the good .bak instead, this chain would still
     // look fine here but fail the corrupt-and-recover below.
     _ = recovered.add(url: URL(string: "https://a.com/3")!)
+    recovered.flush()
     _ = recovered.add(url: URL(string: "https://a.com/4")!)
+    recovered.flush()
     try Data("{corrupt".utf8).write(to: dir.appendingPathComponent("library.json"))
     let recoveredAgain = try BookmarkStore(directory: dir)
     #expect(!recoveredAgain.library.bookmarks.isEmpty)
@@ -402,6 +413,7 @@ import Testing
     try Data(json.utf8).write(to: dir.appendingPathComponent("library.json"))
     let store = try BookmarkStore(directory: dir)
     store.removeFolder("Music")
+    store.flush()
     let reloaded = try BookmarkStore(directory: dir)
     #expect(!reloaded.library.folders.contains("Music"))
 }
@@ -444,13 +456,53 @@ import Testing
     let searchElapsed = ContinuousClock.now - searchStart
     #expect(results.contains { $0.url == "https://example.com/item/49" })
 
-    // The spec's benchmark table (load and search timings) is verified by
-    // `PERF=1 swift test`, not on every PR: shared CI runners are noisy, and a
-    // slow neighbour would fail these for reasons unrelated to the diff.
+    // A single click must not block on the disk. The library is written on a
+    // background queue, so this measures the caller's share of the work.
+    let id = reloaded.library.bookmarks[2500].id
+    let mutateStart = ContinuousClock.now
+    reloaded.toggleFavorite(id: id)
+    let mutateElapsed = ContinuousClock.now - mutateStart
+    reloaded.flush()
+
+    // The spec's benchmark table is verified by `PERF=1 swift test -c release
+    // -Xswiftc -enable-testing`, not on every PR: shared CI runners are noisy,
+    // and a slow neighbour would fail these for reasons unrelated to the diff.
+    // Release, because that is what a user runs.
+    //
+    // The mutation ceiling sits far below what a click cost while the store
+    // wrote on the calling thread, so a return to that fails here. It leaves a
+    // wide margin over the measured cost: the point is to catch a regression,
+    // not to police a millisecond.
     if ProcessInfo.processInfo.environment["PERF"] != nil {
         #expect(elapsed < .milliseconds(200))
         #expect(searchElapsed < .milliseconds(100))
+        #expect(mutateElapsed < .milliseconds(3))
     }
+}
+
+@Test func flushWritesEveryPendingChange() throws {
+    let temp = TempDirectory()
+    let dir = temp.url
+    let store = try BookmarkStore(directory: dir)
+    // A burst: the store coalesces these into far fewer writes than mutations,
+    // so the reload below is the only proof that none of them was dropped.
+    for i in 0..<200 {
+        _ = store.add(url: URL(string: "https://example.com/\(i)")!)
+    }
+    store.addFolder("Trips")
+    store.flush()
+
+    let reloaded = try BookmarkStore(directory: dir)
+    #expect(reloaded.library.bookmarks.count == 200)
+    #expect(reloaded.library.folders.contains("Trips"))
+}
+
+@Test func flushIsSafeWithNothingPending() throws {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    store.flush()
+    store.flush()
+    #expect(store.library.bookmarks.isEmpty)
 }
 
 // Writes a library.json into a fresh temp directory, so a test can open a store on a
@@ -538,6 +590,7 @@ private func storeSeeded(folders: [String]) throws -> BookmarkStore {
     let temp = TempDirectory()
     let store = try BookmarkStore(directory: temp.url)
     store.moveFolders(fromOffsets: IndexSet(integer: 4), toOffset: 0)
+    store.flush()
     let reloaded = try BookmarkStore(directory: temp.url)
     #expect(reloaded.library.folders.first == "Articles")
     #expect(reloaded.library.folders.last == "Unsorted")
