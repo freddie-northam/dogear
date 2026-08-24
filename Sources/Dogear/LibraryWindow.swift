@@ -414,10 +414,13 @@ struct LibraryWindow: View {
             if selection == folder { selection = trimmed }
             renameState = .idle
         } else if !trimmed.isEmpty, trimmed != folder {
-            // Refused because another folder holds this name. Swap this same
-            // alert's content to the collision message instead of firing a
-            // second .alert, which SwiftUI can silently drop mid-dismissal.
-            renameState = .collided(folder: folder)
+            // Refused because another folder holds this name. The Save
+            // action runs before SwiftUI writes isPresented back to false
+            // (that write reaches our setter after this closure returns and
+            // would immediately idle a `.collided` set here), so defer the
+            // transition to the next run loop turn. That reads as a clean
+            // dismiss-then-represent of this same alert, not a second one.
+            DispatchQueue.main.async { renameState = .collided(folder: folder) }
         } else {
             // Empty or unchanged name: that reads as a cancel.
             renameState = .idle
