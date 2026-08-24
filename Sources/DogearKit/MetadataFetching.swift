@@ -1,6 +1,16 @@
 import Foundation
 
 public struct FetchedMetadata: Equatable, Sendable {
+    /// The longest title or author Dogear keeps. A page controls both, and
+    /// nothing else bounds them: the fetch cap covers the whole document, so
+    /// a megabyte of title arrives intact and then sits in every list row,
+    /// every search sweep and the library file. Two hundred characters is
+    /// longer than any title a person reads.
+    ///
+    /// The cap lives here because every fetcher returns one of these, so one
+    /// guard covers the oEmbed endpoints and the page parser alike.
+    public static let fieldLimit = 200
+
     public var title: String?
     public var author: String?
     public var description: String?
@@ -9,11 +19,16 @@ public struct FetchedMetadata: Equatable, Sendable {
 
     public init(title: String? = nil, author: String? = nil, description: String? = nil,
                 thumbnailURL: URL? = nil, source: Source = .web) {
-        self.title = title
-        self.author = author
+        self.title = title.map(Self.capped)
+        self.author = author.map(Self.capped)
         self.description = description
         self.thumbnailURL = thumbnailURL
         self.source = source
+    }
+
+    private static func capped(_ text: String) -> String {
+        guard text.count > fieldLimit else { return text }
+        return String(text.prefix(fieldLimit)) + "\u{2026}"
     }
 }
 

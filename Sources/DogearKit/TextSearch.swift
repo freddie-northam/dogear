@@ -54,7 +54,7 @@ enum TextSearch {
     /// is not pure ASCII, which means the caller must use the String path.
     ///
     /// ponytail: a plain O(haystack * needle) scan. Titles are capped at
-    /// `OpenGraphParser.titleLimit` characters and a typed query is short, so
+    /// `FetchedMetadata.fieldLimit` characters and a typed query is short, so
     /// the quadratic worst case is bounded small. Boyer-Moore if either of
     /// those stops being true.
     private static func scanASCII(_ haystack: String, _ needle: [UInt8]) -> Bool? {

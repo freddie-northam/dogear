@@ -346,13 +346,21 @@ public final class BookmarkStore {
     // below into an unbounded one under memory or disk pressure.
     private let writeQueue = DispatchQueue(label: "app.dogear.library-write", qos: .userInitiated)
 
+    /// True while a job is sitting on `writeQueue` that has not yet taken the
+    /// snapshot. Tracked apart from `pendingWrite`, because a failed write
+    /// leaves a snapshot behind with no job to write it: reading "a snapshot
+    /// exists" as "a job is coming" would leave that change on the floor
+    /// until something else called `flush()`.
+    private var writeQueued = false
+
     private func scheduleWrite() {
         pendingLock.lock()
-        let alreadyQueued = pendingWrite != nil
+        let alreadyQueued = writeQueued
         pendingWrite = library
+        writeQueued = true
         pendingLock.unlock()
-        // A queued write has not read its snapshot yet, so it will pick up the
-        // one just stored. Only an empty queue needs a new job.
+        // A queued job has not read its snapshot yet, so it picks up the one
+        // just stored. Only an idle queue needs a new job.
         guard !alreadyQueued else { return }
         // Strong self on purpose: a store that goes away with a save still in
         // the queue must finish that save. A weak capture would drop it.
@@ -361,12 +369,13 @@ public final class BookmarkStore {
 
     /// Writes the newest snapshot. A failed write puts the snapshot back, so
     /// the next mutation or `flush()` tries again instead of the change being
-    /// silently gone. A newer snapshot arrived in the meantime wins: it
+    /// silently gone. A newer snapshot that arrived in the meantime wins: it
     /// already contains everything the failed one held.
     private func drainPendingWrite() {
         pendingLock.lock()
         let snapshot = pendingWrite
         pendingWrite = nil
+        writeQueued = false
         pendingLock.unlock()
         guard let snapshot else { return }
         guard !write(snapshot) else { return }

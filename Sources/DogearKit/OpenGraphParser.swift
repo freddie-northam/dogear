@@ -45,23 +45,11 @@ public enum OpenGraphParser {
         }
 
         return OpenGraphData(
-            title: title.map(capped),
+            title: title,
             description: properties["og:description"],
             imageURL: properties["og:image"].flatMap(URL.init(string:)).flatMap { URLCleaner.isCapturable($0) ? $0 : nil },
             siteName: properties["og:site_name"]
         )
-    }
-
-    /// The longest title Dogear stores. A page controls its own title, and
-    /// nothing else bounds it: the fetch cap is on the whole document, so a
-    /// megabyte of title arrives intact. Every list row, every search sweep
-    /// and every saved library then carries it. Two hundred characters is
-    /// longer than any title a person reads.
-    static let titleLimit = 200
-
-    private static func capped(_ title: String) -> String {
-        guard title.count > titleLimit else { return title }
-        return String(title.prefix(titleLimit)) + "\u{2026}"
     }
 
     static func decodeEntities(_ text: String) -> String {

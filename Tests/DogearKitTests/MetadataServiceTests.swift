@@ -77,3 +77,30 @@ import Testing
         _ = try await GenericFetcher().fetch(pageURL, client: stub)
     }
 }
+
+// A page controls its own title and site name. Both are capped where every
+// fetcher returns them, so no fetcher can be the one that forgets.
+@Test func capsARunawayTitleAndAuthor() {
+    let long = String(repeating: "a", count: 5000)
+    let metadata = FetchedMetadata(title: long, author: long, source: .web)
+    let title = try! #require(metadata.title)
+    let author = try! #require(metadata.author)
+    #expect(title.count == FetchedMetadata.fieldLimit + 1)
+    #expect(author.count == FetchedMetadata.fieldLimit + 1)
+    #expect(title.hasSuffix("\u{2026}"))
+}
+
+@Test func leavesNormalMetadataAlone() {
+    let metadata = FetchedMetadata(title: "A short title", author: "example.com", source: .web)
+    #expect(metadata.title == "A short title")
+    #expect(metadata.author == "example.com")
+}
+
+@Test func capsMetadataFromAnOEmbedEndpointToo() {
+    // TikTok and X build their metadata from their own endpoints, not from a
+    // parsed page, so the cap has to hold for them by construction.
+    let long = String(repeating: "b", count: 5000)
+    let metadata = FetchedMetadata(title: long, author: long, source: .tiktok)
+    #expect(metadata.title?.count == FetchedMetadata.fieldLimit + 1)
+    #expect(metadata.author?.count == FetchedMetadata.fieldLimit + 1)
+}

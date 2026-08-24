@@ -725,12 +725,45 @@ private final class WriteFailureLog: @unchecked Sendable {
         _ = store.add(url: URL(string: "https://example.com/kept")!)
         // No flush: the write is still queued when the store leaves scope.
     }
-    // Give the write queue a moment to finish what it was handed.
+    // Give the write queue a moment to finish what it was handed. Read the
+    // file rather than opening a store: opening one mid-write is its own
+    // race, and this test is about the write landing, not about loading.
+    #expect(waitForBookmarkCount(1, in: dir))
+}
+
+@Test func aMutationAfterAFailedWriteStillReachesTheDiskOnItsOwn() throws {
+    let temp = TempDirectory()
+    let dir = temp.url
+    let store = try BookmarkStore(directory: dir)
+    _ = store.add(url: URL(string: "https://example.com/first")!)
+    store.flush()
+
+    try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: dir.path)
+    _ = store.add(url: URL(string: "https://example.com/second")!)
+    store.flush() // fails, snapshot goes back
+    try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dir.path)
+
+    // A later mutation must schedule its own write. Nothing calls flush here:
+    // that is the point. A save the user made has to land on its own.
+    _ = store.add(url: URL(string: "https://example.com/third")!)
+
+    #expect(waitForBookmarkCount(3, in: dir))
+}
+
+
+/// Polls library.json until it holds `count` bookmarks, up to two seconds.
+/// Returns false on timeout. A decode failure just means the write has not
+/// landed yet, so it keeps waiting rather than failing the test outright.
+private func waitForBookmarkCount(_ count: Int, in directory: URL) -> Bool {
+    let file = directory.appendingPathComponent("library.json")
     let deadline = Date().addingTimeInterval(2)
-    var reloaded = try BookmarkStore(directory: dir)
-    while reloaded.library.bookmarks.isEmpty, Date() < deadline {
+    repeat {
+        if let data = try? Data(contentsOf: file),
+           let library = try? JSONDecoder().decode(Library.self, from: data),
+           library.bookmarks.count == count {
+            return true
+        }
         usleep(20_000)
-        reloaded = try BookmarkStore(directory: dir)
-    }
-    #expect(reloaded.library.bookmarks.count == 1)
+    } while Date() < deadline
+    return false
 }
