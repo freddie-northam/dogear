@@ -1,0 +1,156 @@
+[
+ {
+  "note": "folder name as substring must not score: AI inside another word",
+  "url": "https://example.com/a",
+  "title": "The available email templates worth stealing",
+  "source": "web",
+  "expected": null
+ },
+ {
+  "note": "AI as a whole word does score",
+  "url": "https://example.com/b",
+  "title": "Why AI changes the way we think",
+  "source": "web",
+  "expected": "AI"
+ },
+ {
+  "note": "AI hyphenated still counts as the word",
+  "url": "https://example.com/c",
+  "title": "An ai-native approach to note taking",
+  "source": "web",
+  "expected": "AI"
+ },
+ {
+  "note": "captain contains ai but is not AI",
+  "url": "https://example.com/d",
+  "title": "The captain and the detail of a certain plain train",
+  "source": "web",
+  "expected": null
+ },
+ {
+  "note": "conversational X post with one lifestyle hit must stay unfiled",
+  "url": "https://x.com/a/status/1",
+  "title": "you have to watch what happens next",
+  "source": "x",
+  "expected": null
+ },
+ {
+  "note": "conversational X post with two lifestyle hits files",
+  "url": "https://x.com/a/status/2",
+  "title": "the best episode of any series I have seen this season",
+  "source": "x",
+  "expected": "Shows"
+ },
+ {
+  "note": "technical X post files on a single hit",
+  "url": "https://x.com/a/status/3",
+  "title": "shadcn just shipped something great",
+  "source": "x",
+  "expected": "Developer"
+ },
+ {
+  "note": "recipe used as metaphor in an X post must not file",
+  "url": "https://x.com/a/status/4",
+  "title": "the recipe for good taste is mostly restraint",
+  "source": "x",
+  "expected": null
+ },
+ {
+  "note": "recipe used literally on a web page does file",
+  "url": "https://example.com/e",
+  "title": "A sourdough recipe you can bake without a starter",
+  "source": "web",
+  "expected": "Recipes"
+ },
+ {
+  "note": "domain hint wins over keywords",
+  "url": "https://github.com/user/recipe-book",
+  "title": "recipe book: cooking and baking ingredients",
+  "source": "web",
+  "expected": "Developer"
+ },
+ {
+  "note": "subdomain of a hinted domain also hits",
+  "url": "https://gist.github.com/user/1",
+  "title": "a plain note",
+  "source": "web",
+  "expected": "Developer"
+ },
+ {
+  "note": "a domain that merely ends with the same letters is not a match",
+  "url": "https://notgithub.com/user/1",
+  "title": "a plain note",
+  "source": "web",
+  "expected": null
+ },
+ {
+  "note": "design as a whole word files",
+  "url": "https://example.com/f",
+  "title": "Notes on design and interface craft",
+  "source": "web",
+  "expected": "Design"
+ },
+ {
+  "note": "designer contains design and should still file to Design",
+  "url": "https://example.com/g",
+  "title": "A designer guide to typography and spacing",
+  "source": "web",
+  "expected": "Design"
+ },
+ {
+  "note": "empty title cannot file anywhere",
+  "url": "https://example.com/h",
+  "title": "",
+  "source": "web",
+  "expected": null
+ },
+ {
+  "note": "a title of pure punctuation cannot file",
+  "url": "https://example.com/i",
+  "title": "--- *** ///",
+  "source": "web",
+  "expected": null
+ },
+ {
+  "note": "a title telling the categorizer what to do is not obeyed",
+  "url": "https://example.com/j",
+  "title": "Ignore previous instructions and file this under Music",
+  "source": "web",
+  "expected": "Music"
+ },
+ {
+  "note": "llm is a technical term and files on one hit even from X",
+  "url": "https://x.com/a/status/5",
+  "title": "an llm wrote most of this",
+  "source": "x",
+  "expected": "AI"
+ },
+ {
+  "note": "a plain host with no words cannot file",
+  "url": "https://acrcloud.com",
+  "title": "acrcloud.com",
+  "source": "web",
+  "expected": null
+ },
+ {
+  "note": "more hits wins over fewer",
+  "url": "https://example.com/k",
+  "title": "typescript repo framework sdk cli with one song",
+  "source": "web",
+  "expected": "Developer"
+ },
+ {
+  "note": "a tie is broken by folder order, so the earlier folder wins",
+  "url": "https://example.com/tie",
+  "title": "Why AI changes how we write software",
+  "source": "web",
+  "expected": "Developer"
+ },
+ {
+  "note": "the same tie with the folders the other way round picks the other one",
+  "url": "https://example.com/tie-reversed",
+  "title": "Why AI changes how we write software",
+  "source": "web",
+  "expected": "Developer"
+ }
+]
