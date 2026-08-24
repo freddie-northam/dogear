@@ -17,6 +17,8 @@ next, and what the team chose to leave out.
 - Drag in/out: drag a link into Dogear, and drag a bookmark out to another app.
 - QR code on cards: show a QR code for a bookmark, so you can open the link
   on your phone.
+- Releases: a tag on main builds the app, runs the tests, and publishes a
+  zip on GitHub.
 - Undo: Delete, Delete Folder, and Mark Done reverse with Command Z.
 - Onboarding: a welcome sheet on first launch, and a Help tab in Settings.
 - Folder reorder: drag folders into any order. Unsorted stays last.
