@@ -49,6 +49,21 @@ private final class StubURLProtocol: URLProtocol {
     override func stopLoading() {}
 }
 
+private final class PrivateRedirectURLProtocol: URLProtocol {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        let target = URL(string: "http://127.0.0.1/private")!
+        let response = HTTPURLResponse(
+            url: request.url!, statusCode: 302, httpVersion: nil,
+            headerFields: ["Location": target.absoluteString])!
+        client?.urlProtocol(self, wasRedirectedTo: URLRequest(url: target), redirectResponse: response)
+    }
+
+    override func stopLoading() {}
+}
+
 private func stubbedClient() -> URLSessionHTTPClient {
     let config = URLSessionConfiguration.ephemeral
     config.protocolClasses = [StubURLProtocol.self]
@@ -75,10 +90,21 @@ private func stubbedClient() -> URLSessionHTTPClient {
     "http://192.168.1.1/private",
     "http://[::1]/private",
     "http://[fd00::1]/private",
+    "http://[fec0::1]/private",
+    "http://[64:ff9b:1::1]/private",
 ])
 func blocksPrivateNetworkDestinations(url: String) async {
     let client = stubbedClient()
     await #expect(throws: HTTPClientError.unsafeDestination) {
         _ = try await client.data(from: URL(string: url)!, limit: 10_000)
+    }
+}
+
+@Test func blocksRedirectsToPrivateNetworkDestinations() async {
+    let config = URLSessionConfiguration.ephemeral
+    config.protocolClasses = [PrivateRedirectURLProtocol.self]
+    let client = URLSessionHTTPClient(configuration: config)
+    await #expect(throws: HTTPClientError.unsafeDestination) {
+        _ = try await client.data(from: URL(string: "https://1.1.1.1/start")!, limit: 10_000)
     }
 }

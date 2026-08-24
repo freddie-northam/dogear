@@ -359,6 +359,26 @@ import Testing
     #expect(recoveredAgain.didRecoverFromBackup)
 }
 
+@Test func saveDoesNotRotateReadableCorruptionOverTheBackup() throws {
+    let temp = TempDirectory()
+    let dir = temp.url
+    let store = try BookmarkStore(directory: dir)
+    _ = store.add(url: URL(string: "https://a.com/1")!)
+    _ = store.add(url: URL(string: "https://a.com/2")!)
+    let backupURL = dir.appendingPathComponent("library.json.bak")
+    let goodBackup = try Data(contentsOf: backupURL)
+    try Data("{}".utf8).write(to: dir.appendingPathComponent("library.json"))
+    var reportedBackupFailure = false
+    store.onWriteFailure = { error in
+        if case BookmarkStoreWriteError.backup = error { reportedBackupFailure = true }
+    }
+
+    store.saveNow()
+
+    #expect(reportedBackupFailure)
+    #expect(try Data(contentsOf: backupURL) == goodBackup)
+}
+
 @Test func recoversFromBackupWhenMainFileIsMissing() throws {
     let temp = TempDirectory()
     let dir = temp.url

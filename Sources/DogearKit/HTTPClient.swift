@@ -49,7 +49,10 @@ public struct URLSessionHTTPClient: HTTPClient {
     // A `URLSessionDataDelegate` is the only API that exposes chunk-level delivery;
     // one delegate per session, so each call gets its own ephemeral session.
     private func load(_ url: URL, limit: Int) async throws -> (data: Data, finalURL: URL) {
-        guard NetworkDestinationPolicy.allows(url) else { throw HTTPClientError.unsafeDestination }
+        // ponytail: URLSession resolves again after this preflight. Move enrichment
+        // into a sandboxed helper if DNS rebinding becomes a demonstrated risk.
+        let allowed = await Task.detached { NetworkDestinationPolicy.allows(url) }.value
+        guard allowed else { throw HTTPClientError.unsafeDestination }
         let delegate = BufferingDelegate(limit: limit)
         let session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
         defer { session.finishTasksAndInvalidate() }
@@ -185,13 +188,15 @@ enum NetworkDestinationPolicy {
         if bytes.allSatisfy({ $0 == 0 }) || bytes.dropLast().allSatisfy({ $0 == 0 }) && bytes.last == 1 {
             return false
         }
-        if bytes[0] & 0xFE == 0xFC || (bytes[0] == 0xFE && bytes[1] & 0xC0 == 0x80) || bytes[0] == 0xFF {
+        if bytes[0] & 0xFE == 0xFC || bytes[0] == 0xFF { return false }
+        if bytes[0] == 0xFE && (bytes[1] & 0xC0 == 0x80 || bytes[1] & 0xC0 == 0xC0) {
             return false
         }
         if bytes.prefix(12) == Array(repeating: 0, count: 10) + [0xFF, 0xFF] {
             return isPublicIPv4(Array(bytes.suffix(4)))
         }
         if Array(bytes.prefix(4)) == [0x20, 0x01, 0x0D, 0xB8] { return false }
+        if Array(bytes.prefix(6)) == [0x00, 0x64, 0xFF, 0x9B, 0x00, 0x01] { return false }
         return true
     }
 }

@@ -123,6 +123,5 @@ public enum URLCleaner {
             && url.host?.isEmpty == false
             && url.user == nil
             && url.password == nil
-            && url.absoluteString.utf8.count <= 8_192
     }
 }

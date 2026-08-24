@@ -7,6 +7,8 @@ struct CaptureResult {
     let new: Int
     /// Distinct bookmarks touched: created plus re-saved duplicates.
     let total: Int
+    /// Links skipped because their URL embeds a username or password.
+    let rejectedCredentials: Int
 }
 
 @MainActor
@@ -137,6 +139,7 @@ final class AppModel: ObservableObject {
     func capture(urls: [URL]) -> CaptureResult {
         // The one capture gate: every caller (text, drop, import) inherits it.
         // A dropped file:// URL must never become a bookmark or reach enrichment.
+        let rejectedCredentials = urls.count { $0.user != nil || $0.password != nil }
         let urls = urls.filter(URLCleaner.isCapturable)
         let (new, touched) = store.add(urls: urls)
         let ids = new.map(\.id)
@@ -158,6 +161,6 @@ final class AppModel: ObservableObject {
                 }
             }
         }
-        return CaptureResult(new: ids.count, total: touched)
+        return CaptureResult(new: ids.count, total: touched, rejectedCredentials: rejectedCredentials)
     }
 }

@@ -360,6 +360,7 @@ public final class BookmarkStore {
         if FileManager.default.fileExists(atPath: fileURL.path) {
             do {
                 let current = try Data(contentsOf: fileURL)
+                _ = try JSONDecoder().decode(Library.self, from: current)
                 try current.write(to: backupURL, options: .atomic)
             } catch {
                 onWriteFailure?(BookmarkStoreWriteError.backup(error))

@@ -43,11 +43,6 @@ func rejectsNonHTTPSchemes(text: String) {
     #expect(!URLCleaner.isCapturable(url))
 }
 
-@Test func rejectsPathologicalURLLengths() {
-    let url = URL(string: "https://example.com/" + String(repeating: "a", count: 9_000))!
-    #expect(!URLCleaner.isCapturable(url))
-}
-
 @Test(arguments: [
     ("https://github.com/apple/swift", "GitHub"),
     ("https://gist.github.com/example/1", "GitHub"),

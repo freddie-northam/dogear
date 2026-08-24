@@ -52,7 +52,7 @@ struct LibraryWindow: View {
     @State private var selection: String =
         ProcessInfo.processInfo.environment["DOGEAR_DEMO_FOLDER"] ?? Library.unsorted
     @State private var query = ""
-    @State private var pasteFailed = false
+    @State private var pasteFailure: String?
     @State private var renameState: RenameState = .idle
     @State private var renameDraft = ""
     @State private var showingImport = false
@@ -107,10 +107,13 @@ struct LibraryWindow: View {
                 run: runNotesImport)
         }
         .onChange(of: selectedFolderIDs) { _, ids in saveSelection(ids) }
-        .alert("No Link Found", isPresented: $pasteFailed) {
-            Button("OK") {}
+        .alert("Could Not Save", isPresented: Binding(
+            get: { pasteFailure != nil },
+            set: { if !$0 { pasteFailure = nil } }
+        )) {
+            Button("OK") { pasteFailure = nil }
         } message: {
-            Text("The clipboard holds no web link. Dogear saves http and https links.")
+            Text(pasteFailure ?? "")
         }
         .alert(renameAlertTitle, isPresented: Binding(
             get: { renameState != .idle },
@@ -478,7 +481,11 @@ struct LibraryWindow: View {
     /// The one capture path: same as the popover, fed from the clipboard.
     private func pasteFromClipboard() {
         let text = NSPasteboard.general.string(forType: .string) ?? ""
-        if model.capture(text: text).total == 0 { pasteFailed = true }
+        let result = model.capture(text: text)
+        guard result.total == 0 else { return }
+        pasteFailure = result.rejectedCredentials > 0
+            ? "Remove the username or password from this link before saving it."
+            : "The clipboard holds no web link. Dogear saves http and https links."
     }
 
     private func startImport() {
@@ -576,12 +583,19 @@ struct LibraryWindow: View {
                 : "All \(found.count) links were already saved."
         } else {
             let result = model.capture(urls: fresh)
-            let alreadySaved = found.count - result.new
-            message = result.new == 1 ? "Imported 1 link." : "Imported \(result.new) links."
+            let alreadySaved = found.count - result.new - result.rejectedCredentials
+            message = result.new == 0
+                ? "No links imported."
+                : result.new == 1 ? "Imported 1 link." : "Imported \(result.new) links."
             if alreadySaved > 0 {
                 message += alreadySaved == 1
                     ? " 1 was already saved."
                     : " \(alreadySaved) were already saved."
+            }
+            if result.rejectedCredentials > 0 {
+                message += result.rejectedCredentials == 1
+                    ? " Skipped 1 link that includes a username or password."
+                    : " Skipped \(result.rejectedCredentials) links that include usernames or passwords."
             }
         }
         if failedFolders > 0 {
@@ -609,15 +623,23 @@ struct LibraryWindow: View {
         }
         let result = model.capture(urls: URLCleaner.allHTTPURLs(inHTML: html))
         if result.total == 0 {
-            importFileResult = "No links found in that file."
+            importFileResult = result.rejectedCredentials > 0
+                ? "Dogear skipped links that include usernames or passwords."
+                : "No links found in that file."
         } else if result.new == 0 {
             importFileResult = result.total == 1
                 ? "This link was already saved."
                 : "All \(result.total) were already saved."
+            if result.rejectedCredentials > 0 {
+                importFileResult? += " Some credential-bearing links were skipped."
+            }
         } else {
             importFileResult = result.new == 1
                 ? "Imported 1 link."
                 : "Imported \(result.new) links."
+            if result.rejectedCredentials > 0 {
+                importFileResult? += " Some credential-bearing links were skipped."
+            }
         }
     }
 
