@@ -53,7 +53,7 @@ Conventions: ASD-STE100 Simplified Technical English for all docs (one topic per
 
 ## Scope
 
-**In scope**: `README.md`, `ROADMAP.md`, `CONTRIBUTING.md`, `docs/superpowers/specs/2026-08-23-dogear-design.md` (append-only; see Step 4), `.github/workflows/ci.yml`, `.github/workflows/canary.yml`, `.github/dependabot.yml` (create), `CLAUDE.md` (create), `VERSION` (create), `Scripts/make-app.sh` (version line only), `Sources/Dogear/SettingsView.swift` (fallback string only).
+**In scope**: `Sources/Dogear/LibraryWindow.swift` (string literals only, Step 7), `README.md`, `ROADMAP.md`, `CONTRIBUTING.md`, `docs/superpowers/specs/2026-08-23-dogear-design.md` (append-only; see Step 4), `.github/workflows/ci.yml`, `.github/workflows/canary.yml`, `.github/dependabot.yml` (create), `CLAUDE.md` (create), `VERSION` (create), `Scripts/make-app.sh` (version line only), `Sources/Dogear/SettingsView.swift` (fallback string only).
 
 **Out of scope**: any other source file; the spec's existing body text (annotate, never rewrite); screenshots (they need a human with the running app; note their absence honestly instead).
 
@@ -116,7 +116,17 @@ Create `VERSION` containing `1.0.0` and a trailing newline. In `Scripts/make-app
 
 **Verify**: YAML parse command → exit 0; `grep -c "actions/checkout@[0-9a-f]\{40\}" .github/workflows/ci.yml .github/workflows/canary.yml` → 1 each.
 
-### Step 7: Full suite
+### Step 7: Copy fixes carried from plans 013 and 014 (in `Sources/Dogear/LibraryWindow.swift`, copy strings only)
+
+Three user-facing strings need correcting; change ONLY string literals, no logic:
+
+- The Notes folder picker buttons read "Select All" / "Select None"; change to "Select all" / "Select none" (sentence case, matching the rest of the app).
+- The Notes import result: after incremental cursors, a repeat import that finds no CHANGED notes currently reports "No links found in your notes.", which reads as failure. Locate where that message is chosen and, when at least one selected folder had a cursor (an incremental read), use "No new links since your last import." instead. Keep the original wording for a first full read that truly finds nothing. If distinguishing the two cases requires more than reading a value already in scope at that site, STOP and report rather than restructuring.
+- The bookmarks-file import result "All N were already saved." has no singular; add "This link was already saved." for N == 1, mirroring the Notes importer.
+
+**Verify**: `swift build` → Build complete; `grep -c "Select All" Sources/Dogear/LibraryWindow.swift` → 0; `grep -c "No new links since your last import." Sources/Dogear/LibraryWindow.swift` → 1.
+
+### Step 8: Full suite
 
 **Verify**: `swift test` → all pass, zero warnings.
 
