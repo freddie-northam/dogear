@@ -411,18 +411,28 @@ struct LibraryWindow: View {
                 "Dogear could not read Notes. Open System Settings, Privacy and Security, Automation, and allow Dogear to control Notes.")
             return
         }
-        let result = model.capture(urls: URLCleaner.allHTTPURLs(inHTML: bodies))
-        if result.total == 0 {
+        let existing = Set(model.store.library.bookmarks.map(\.url))
+        let found = URLCleaner.allHTTPURLs(inHTML: bodies)
+        let fresh = NotesImportPlanning.freshURLs(found, existing: existing)
+        if found.isEmpty {
             importState = .finished("No links found in your notes.")
-        } else if result.new == 0 {
-            importState = .finished(result.total == 1
-                ? "This link was already saved."
-                : "All \(result.total) were already saved.")
-        } else {
-            importState = .finished(result.total == 1
-                ? "Imported 1 link."
-                : "Imported \(result.total) links.")
+            return
         }
+        if fresh.isEmpty {
+            importState = .finished(found.count == 1
+                ? "All 1 link was already saved."
+                : "All \(found.count) links were already saved.")
+            return
+        }
+        let result = model.capture(urls: fresh)
+        let alreadySaved = found.count - result.new
+        var message = result.new == 1 ? "Imported 1 link." : "Imported \(result.new) links."
+        if alreadySaved > 0 {
+            message += alreadySaved == 1
+                ? " 1 was already saved."
+                : " \(alreadySaved) were already saved."
+        }
+        importState = .finished(message)
     }
 
     private func importBookmarksFile() {
