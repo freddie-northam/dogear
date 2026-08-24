@@ -2,7 +2,7 @@
 
 > **Executor instructions**: Follow this plan step by step. Run every
 > verification command and confirm the expected result before moving on. If
-> anything in "STOP conditions" occurs, stop and report — do not improvise.
+> anything in "STOP conditions" occurs, stop and report, do not improvise.
 > Your reviewer maintains `plans/README.md`. Commit after EACH slice as soon
 > as the suite is green; each slice is independently shippable.
 >
@@ -31,7 +31,7 @@ A design spike found a real bug first: re-running the importer today calls `capt
   - lines 4-8: `enum NotesImportState: Equatable { case confirm, running, finished(String) }`
   - line 45: `@State private var importState: NotesImportState = .confirm`
   - line 376: `private func runNotesImport()` (sets `.running`, calls `readNotesBodies()` synchronously on the main actor since plan 011, then `finishImport(with:)`)
-  - line 387: `private func finishImport(with bodies: String?)` — nil → the permission-denied message; otherwise `model.capture(urls: URLCleaner.allHTTPURLs(inHTML: bodies))` and a message from `result.total`/`result.new`.
+  - line 387: `private func finishImport(with bodies: String?)`, nil → the permission-denied message; otherwise `model.capture(urls: URLCleaner.allHTTPURLs(inHTML: bodies))` and a message from `result.total`/`result.new`.
   - line 451: `private func readNotesBodies() -> String?` with the fixed script `tell application "Notes" to get body of every note`, walking the returned list descriptor (1-indexed `atIndex`).
   - `NotesImportSheet` (line ~465) renders the three states with Cancel/Import, a spinner (plus Cancel since plan 011), and Done.
 - `AppModel.capture(urls:) -> CaptureResult` (`new`, `total`).
@@ -83,7 +83,7 @@ App: in `finishImport(with:)`, compute `existing = Set(model.store.library.bookm
 - Add `case choosing([NotesFolder])` to `NotesImportState` with `struct NotesFolder: Identifiable, Equatable { let id: String; let name: String }` (app target).
 - Rename the first sheet button from Import to Continue; on Continue run a new `readNotesFolders() -> [NotesFolder]?` with the fixed script `tell application "Notes" to get {id of every folder, name of every folder}` (two parallel lists; walk both descriptors; zip). nil → the existing permission message via `.finished`. Otherwise `.choosing(folders)`.
 - The `.choosing` view: title "Which folders?", a scrollable checkbox list (`Toggle` per folder), "Select all" / "Select none" plain buttons, Cancel, and Import (prominent; disabled when nothing is ticked). Persist the ticked set of folder ids in `@AppStorage("notesImportSelection")` as a JSON-encoded `[String]` so the sheet reopens with the same boxes ticked; default to all ticked on first run.
-- `runNotesImport()` now iterates the ticked folders and reads each with a per-folder script: `tell application "Notes"\nset f to first folder whose id is "<ID>"\nget body of every note of f whose password protected is false\nend tell`. Concatenate bodies across folders; update the `.running` label per folder ("Reading <name>...") between calls (state is on the main actor; the spinner may or may not repaint between synchronous calls — accepted). A folder whose script errors is skipped and counted; the summary appends "Dogear could not read N folders." when N > 0.
+- `runNotesImport()` now iterates the ticked folders and reads each with a per-folder script: `tell application "Notes"\nset f to first folder whose id is "<ID>"\nget body of every note of f whose password protected is false\nend tell`. Concatenate bodies across folders; update the `.running` label per folder ("Reading <name>...") between calls (state is on the main actor; the spinner may or may not repaint between synchronous calls, accepted). A folder whose script errors is skipped and counted; the summary appends "Dogear could not read N folders." when N > 0.
 
 **Verify**: `swift build` → Build complete. `swift test` → all pass. Commit.
 

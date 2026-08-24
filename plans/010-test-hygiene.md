@@ -2,7 +2,7 @@
 
 > **Executor instructions**: Follow this plan step by step. Run every
 > verification command and confirm the expected result before moving on. If
-> anything in "STOP conditions" occurs, stop and report — do not improvise.
+> anything in "STOP conditions" occurs, stop and report, do not improvise.
 > Your reviewer maintains `plans/README.md`.
 >
 > **Drift check (run first)**: `git diff --stat 4bac044..HEAD -- Tests/DogearKitTests/`

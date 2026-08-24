@@ -2,7 +2,7 @@
 
 > **Executor instructions**: Follow this plan step by step. Run every
 > verification command and confirm the expected result before moving on. If
-> anything in "STOP conditions" occurs, stop and report — do not improvise.
+> anything in "STOP conditions" occurs, stop and report, do not improvise.
 > Your reviewer maintains `plans/README.md`.
 >
 > **Drift check (run first)**: `git diff --stat 960959c..HEAD -- Sources/DogearKit/URLCleaner.swift Sources/DogearKit/BookmarkStore.swift Sources/DogearKit/OpenGraphParser.swift Sources/DogearKit/TikTokFetcher.swift Sources/Dogear/CapturePopover.swift Sources/Dogear/LibraryWindow.swift Tests/DogearKitTests/BookmarkStoreTests.swift Tests/DogearKitTests/OpenGraphParserTests.swift`
@@ -26,8 +26,8 @@ The design spec's invariant says only http and https URLs become bookmarks, and 
 
 Relevant files and excerpts:
 
-- `Sources/DogearKit/URLCleaner.swift` — has `firstHTTPURL`, `allHTTPURLs`, `canonicalString`. No single "is this a capturable URL" predicate.
-- `Sources/DogearKit/BookmarkStore.swift:110-118` — `insert(url:)`:
+- `Sources/DogearKit/URLCleaner.swift`, has `firstHTTPURL`, `allHTTPURLs`, `canonicalString`. No single "is this a capturable URL" predicate.
+- `Sources/DogearKit/BookmarkStore.swift:110-118`, `insert(url:)`:
 
 ```swift
 private func insert(url: URL) -> (bookmark: Bookmark, isNew: Bool) {
@@ -35,9 +35,9 @@ private func insert(url: URL) -> (bookmark: Bookmark, isNew: Bool) {
     if let index = library.bookmarks.firstIndex(where: { $0.url == canonical }) {
 ```
 
-- `Sources/DogearKit/BookmarkStore.swift:127` — `update(_:)` canonicalizes `bookmark.url` but performs no scheme check before storing.
-- `Sources/DogearKit/OpenGraphParser.swift:50` — `imageURL: properties["og:image"].flatMap(URL.init(string:))`.
-- `Sources/DogearKit/TikTokFetcher.swift:28` — `thumbnailURL: oembed.thumbnail_url.flatMap(URL.init(string:))`.
+- `Sources/DogearKit/BookmarkStore.swift:127`, `update(_:)` canonicalizes `bookmark.url` but performs no scheme check before storing.
+- `Sources/DogearKit/OpenGraphParser.swift:50`, `imageURL: properties["og:image"].flatMap(URL.init(string:))`.
+- `Sources/DogearKit/TikTokFetcher.swift:28`, `thumbnailURL: oembed.thumbnail_url.flatMap(URL.init(string:))`.
 - `NSWorkspace.shared.open` call sites: `Sources/Dogear/CapturePopover.swift:208, 346` and `Sources/Dogear/LibraryWindow.swift:757, 908` open `bookmark.url`/`pick.url`; `LibraryWindow.swift:618` opens the constructed maps URL (fixed host, stays as is).
 
 Conventions: no em dashes; Conventional Commits, no AI attribution; kit test-first; language mode v5 (`#/.../#` regexes only, none needed here).
@@ -79,13 +79,13 @@ Tests in `URLCleanerTests.swift` file are NOT in scope; instead test through the
 
 ### Step 2: Enforce in the store (test-first)
 
-- `insert(url:)`: first line, `guard URLCleaner.isCapturable(url) else { return? }` — the signature returns a non-optional tuple, so instead enforce one level up: in BOTH public entry points `add(url:)` and `add(urls:)`, filter/guard non-capturable input before reaching `insert`, with `add(url:)` returning early... STOP: `add(url:)` also returns a non-optional tuple. Resolution, and the shape to implement: make `insert(url:)` return an OPTIONAL tuple; `add(url:)` keeps its signature by treating a rejected URL as a no-op re-lookup — this is the one place a small signature change is acceptable: change `add(url:)` to return `(bookmark: Bookmark, isNew: Bool)?` and update its call sites. Search the app target for `store.add(url:` call sites and update them to handle nil by ignoring (the capture gate already filters, so nil is unreachable from the UI today; the change is defense in depth).
-- `update(_:)`: after canonicalizing, `guard URL(string: bookmark.url).map(URLCleaner.isCapturable) == true else { return }` — a non-http scheme never replaces a stored URL; the pre-update record survives.
+- `insert(url:)`: first line, `guard URLCleaner.isCapturable(url) else { return? }`, the signature returns a non-optional tuple, so instead enforce one level up: in BOTH public entry points `add(url:)` and `add(urls:)`, filter/guard non-capturable input before reaching `insert`, with `add(url:)` returning early... STOP: `add(url:)` also returns a non-optional tuple. Resolution, and the shape to implement: make `insert(url:)` return an OPTIONAL tuple; `add(url:)` keeps its signature by treating a rejected URL as a no-op re-lookup, this is the one place a small signature change is acceptable: change `add(url:)` to return `(bookmark: Bookmark, isNew: Bool)?` and update its call sites. Search the app target for `store.add(url:` call sites and update them to handle nil by ignoring (the capture gate already filters, so nil is unreachable from the UI today; the change is defense in depth).
+- `update(_:)`: after canonicalizing, `guard URL(string: bookmark.url).map(URLCleaner.isCapturable) == true else { return }`, a non-http scheme never replaces a stored URL; the pre-update record survives.
 
 Tests in `BookmarkStoreTests.swift`:
 
-1. `addRejectsNonHTTPSchemes` — `store.add(url: URL(string: "file:///etc/hosts")!)` returns nil and the library stays empty.
-2. `updateRefusesToStoreANonHTTPURL` — add a normal bookmark, mutate its `url` to a `javascript:` string, call `update`, reload the record: the stored URL is unchanged (still the original http URL).
+1. `addRejectsNonHTTPSchemes`, `store.add(url: URL(string: "file:///etc/hosts")!)` returns nil and the library stays empty.
+2. `updateRefusesToStoreANonHTTPURL`, add a normal bookmark, mutate its `url` to a `javascript:` string, call `update`, reload the record: the stored URL is unchanged (still the original http URL).
 
 **Verify**: `swift test --filter BookmarkStoreTests` → all pass including 2 new.
 

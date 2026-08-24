@@ -2,7 +2,7 @@
 
 > **Executor instructions**: Follow this plan step by step. Run every
 > verification command and confirm the expected result before moving on. If
-> anything in "STOP conditions" occurs, stop and report — do not improvise.
+> anything in "STOP conditions" occurs, stop and report, do not improvise.
 > Your reviewer maintains `plans/README.md`.
 >
 > **Drift check (run first)**: `git diff --stat 2b471d7..HEAD -- Sources/DogearKit/ThumbnailCache.swift Sources/DogearKit/BookmarkStore.swift Sources/Dogear/LibraryWindow.swift Sources/Dogear/CapturePopover.swift Tests/DogearKitTests/ThumbnailCacheTests.swift Tests/DogearKitTests/BookmarkStoreTests.swift`
@@ -20,13 +20,13 @@
 
 ## Why this matters
 
-Dogear's product bar is "one of the lightest apps on the system". Two hot paths violate it. First, every SwiftUI body evaluation that shows a thumbnail calls `NSImage(contentsOf:)` directly — a synchronous file read plus JPEG decode on the main thread — and bodies re-evaluate on every store mutation, hover change, and scroll cell materialization. With enrichment landing (4 concurrent fetches, each ending in a store write) a visible grid re-decodes every on-screen thumbnail per completed fetch; this is the likely scroll-hitch source. Second, the sidebar badges call `favorites()` (filter + sort), `archive()` (filter + sort), and `bookmarks(in:)` per folder row on every render, and the popover's counts line repeats the same scans: one sidebar pass over a 5,000-bookmark library is ~35,000 element visits plus two sorts, re-run per mutation.
+Dogear's product bar is "one of the lightest apps on the system". Two hot paths violate it. First, every SwiftUI body evaluation that shows a thumbnail calls `NSImage(contentsOf:)` directly, a synchronous file read plus JPEG decode on the main thread, and bodies re-evaluate on every store mutation, hover change, and scroll cell materialization. With enrichment landing (4 concurrent fetches, each ending in a store write) a visible grid re-decodes every on-screen thumbnail per completed fetch; this is the likely scroll-hitch source. Second, the sidebar badges call `favorites()` (filter + sort), `archive()` (filter + sort), and `bookmarks(in:)` per folder row on every render, and the popover's counts line repeats the same scans: one sidebar pass over a 5,000-bookmark library is ~35,000 element visits plus two sorts, re-run per mutation.
 
 ## Current state
 
 Relevant files:
 
-- `Sources/DogearKit/ThumbnailCache.swift` — struct with `fileURL(for:)`, `store(_:for:)` (downsamples to 600px JPEG), `exists(for:)`, `remove(for:)`. No decoded-image cache. Excerpt of the head of the file:
+- `Sources/DogearKit/ThumbnailCache.swift`, struct with `fileURL(for:)`, `store(_:for:)` (downsamples to 600px JPEG), `exists(for:)`, `remove(for:)`. No decoded-image cache. Excerpt of the head of the file:
 
 ```swift
 public struct ThumbnailCache: Sendable {
@@ -43,7 +43,7 @@ public struct ThumbnailCache: Sendable {
     }
 ```
 
-- `Sources/Dogear/LibraryWindow.swift` — three thumbnail read sites: the grid card (`if bookmark.hasThumbnail, let image = NSImage(contentsOf: model.thumbnails.fileURL(for: bookmark.id))` inside `BookmarkCard`), the list row badge (same pattern inside `BookmarkListRow`), and the sidebar badges at lines 112/123/134:
+- `Sources/Dogear/LibraryWindow.swift`, three thumbnail read sites: the grid card (`if bookmark.hasThumbnail, let image = NSImage(contentsOf: model.thumbnails.fileURL(for: bookmark.id))` inside `BookmarkCard`), the list row badge (same pattern inside `BookmarkListRow`), and the sidebar badges at lines 112/123/134:
 
 ```swift
 .badge(model.store.favorites().count)      // line 112
@@ -51,11 +51,11 @@ public struct ThumbnailCache: Sendable {
 .badge(model.store.archive().count)        // line 134
 ```
 
-- `Sources/Dogear/CapturePopover.swift` — the pick badge reads `NSImage(contentsOf: model.thumbnails.fileURL(for: pick.id))`; `countsLine` calls `model.store.bookmarks(in: folder).count` per folder.
-- `Sources/DogearKit/BookmarkStore.swift` — has `bookmarks(in:)`, `favorites()`, `archive()`. No counts accessor.
+- `Sources/Dogear/CapturePopover.swift`, the pick badge reads `NSImage(contentsOf: model.thumbnails.fileURL(for: pick.id))`; `countsLine` calls `model.store.bookmarks(in: folder).count` per folder.
+- `Sources/DogearKit/BookmarkStore.swift`, has `bookmarks(in:)`, `favorites()`, `archive()`. No counts accessor.
 - Tests: `ThumbnailCacheTests.swift`, `BookmarkStoreTests.swift`, Swift Testing style.
 
-Conventions: `NSCache` is Foundation (allowed; zero third-party rule intact). `ThumbnailCache` is a struct today — converting it to a `final class` is acceptable and expected here (NSCache is a reference; the app creates exactly one instance in `AppModel`). No em dashes; Conventional Commits; no AI attribution; kit logic test-first.
+Conventions: `NSCache` is Foundation (allowed; zero third-party rule intact). `ThumbnailCache` is a struct today, converting it to a `final class` is acceptable and expected here (NSCache is a reference; the app creates exactly one instance in `AppModel`). No em dashes; Conventional Commits; no AI attribution; kit logic test-first.
 
 ## Commands you will need
 
@@ -94,7 +94,7 @@ public func image(for id: UUID) -> NSImage? {
 
 `NSImage` requires `import AppKit` in this file; AppKit is a system framework and this package is macOS-only, so that is fine. Invalidate in `store(_:for:)` (after a successful write, `decoded.removeObject(forKey:)` so a refreshed thumbnail is re-read) and in `remove(for:)`.
 
-Tests first, in `ThumbnailCacheTests.swift` (follow the existing PNG-generation helper there): `imageForReturnsNilWithoutAFile`, `imageForReadsAndThenCaches` (store a valid image, call `image(for:)` twice, expect non-nil; then `remove(for:)` and expect `image(for:)` nil — proving invalidation), `storeInvalidatesTheDecodedCache` (store image A, read it, store image B for the same id, `image(for:)` must reflect B — compare pixel sizes of two differently-sized generated images).
+Tests first, in `ThumbnailCacheTests.swift` (follow the existing PNG-generation helper there): `imageForReturnsNilWithoutAFile`, `imageForReadsAndThenCaches` (store a valid image, call `image(for:)` twice, expect non-nil; then `remove(for:)` and expect `image(for:)` nil, proving invalidation), `storeInvalidatesTheDecodedCache` (store image A, read it, store image B for the same id, `image(for:)` must reflect B, compare pixel sizes of two differently-sized generated images).
 
 **Verify**: `swift test --filter ThumbnailCacheTests` → all pass including 3 new.
 
@@ -118,7 +118,7 @@ public struct Counts {
 public func counts() -> Counts
 ```
 
-One loop over `library.bookmarks`: a not-done bookmark increments `byFolder[its folder]`; `favoritedAt != nil` increments favorites (done or not, matching `favorites()`'s lens semantics — verify against the current `favorites()` filter before assuming; if `favorites()` includes done bookmarks, so must the count); `isDone` increments archived. Test: seed a store with a mix (filed, unsorted, done, favorited-and-done) and assert `counts()` equals the `.count` of the corresponding existing accessors for each bucket.
+One loop over `library.bookmarks`: a not-done bookmark increments `byFolder[its folder]`; `favoritedAt != nil` increments favorites (done or not, matching `favorites()`'s lens semantics, verify against the current `favorites()` filter before assuming; if `favorites()` includes done bookmarks, so must the count); `isDone` increments archived. Test: seed a store with a mix (filed, unsorted, done, favorited-and-done) and assert `counts()` equals the `.count` of the corresponding existing accessors for each bucket.
 
 **Verify**: `swift test --filter BookmarkStoreTests` → all pass including the new test.
 

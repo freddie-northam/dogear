@@ -2,7 +2,7 @@
 
 > **Executor instructions**: Follow this plan step by step. Run every
 > verification command and confirm the expected result before moving on. If
-> anything in "STOP conditions" occurs, stop and report — do not improvise.
+> anything in "STOP conditions" occurs, stop and report, do not improvise.
 > Your reviewer maintains `plans/README.md`.
 >
 > **Drift check (run first)**: `git diff --stat fd1e79d..HEAD -- Sources/Dogear/DogearApp.swift Scripts/make-app.sh`
@@ -26,8 +26,8 @@ Every capture route in Dogear funnels through the clipboard: the copy step is th
 
 Relevant files:
 
-- `Sources/Dogear/DogearApp.swift` — `@main` SwiftUI App; `init()` already reaches into AppKit (excerpt below). `AppModel` is created as a `@StateObject`; there is no shared/singleton accessor, and `AppModel.capture(text:)` is `@MainActor` (the whole class is `@MainActor`) and returns a `CaptureResult` (`new`/`total` counts).
-- `Scripts/make-app.sh` — builds the bundle; the Info.plist heredoc contains `LSUIElement` at line 31 and `NSAppleEventsUsageDescription` at line 32. `CFBundleExecutable` is `Dogear`.
+- `Sources/Dogear/DogearApp.swift`, `@main` SwiftUI App; `init()` already reaches into AppKit (excerpt below). `AppModel` is created as a `@StateObject`; there is no shared/singleton accessor, and `AppModel.capture(text:)` is `@MainActor` (the whole class is `@MainActor`) and returns a `CaptureResult` (`new`/`total` counts).
+- `Scripts/make-app.sh`, builds the bundle; the Info.plist heredoc contains `LSUIElement` at line 31 and `NSAppleEventsUsageDescription` at line 32. `CFBundleExecutable` is `Dogear`.
 
 `DogearApp.swift` excerpt (lines 25-36):
 
@@ -45,7 +45,7 @@ struct DogearApp: App {
     }
 ```
 
-Conventions: fewest files (a small new file `Sources/Dogear/ServiceProvider.swift` is acceptable and preferred over growing DogearApp.swift); no em dashes; Conventional Commits, no AI attribution; STE for any user-visible string; UI stays untested (no automated test possible for Services delivery — verification is build plus a scripted plist check).
+Conventions: fewest files (a small new file `Sources/Dogear/ServiceProvider.swift` is acceptable and preferred over growing DogearApp.swift); no em dashes; Conventional Commits, no AI attribution; STE for any user-visible string; UI stays untested (no automated test possible for Services delivery, verification is build plus a scripted plist check).
 
 ## Commands you will need
 
@@ -64,7 +64,7 @@ Conventions: fewest files (a small new file `Sources/Dogear/ServiceProvider.swif
 - `Sources/Dogear/DogearApp.swift` (wire the provider)
 - Create: `Sources/Dogear/ServiceProvider.swift`
 
-**Out of scope**: README (a later docs plan mentions the feature); `AppModel.swift` (no singleton — pass the instance); any `.appex`/extension work; `CFBundleURLTypes`.
+**Out of scope**: README (a later docs plan mentions the feature); `AppModel.swift` (no singleton, pass the instance); any `.appex`/extension work; `CFBundleURLTypes`.
 
 ## Git workflow
 
@@ -105,7 +105,7 @@ final class ServiceProvider: NSObject {
 
 In `DogearApp`, hold the provider strongly and register it. `@StateObject`'s wrapped value must not be touched in `init`, so register lazily instead: add a private `@State private var serviceProvider: ServiceProvider?` and, in the existing MenuBarExtra content `.onAppear` block (which already runs the first-launch logic), if `serviceProvider == nil`, create it with `{ [weak model] text in _ = model?.capture(text: text) }`-style closure capturing the model (`model` is a `@StateObject`; capturing the object reference in the closure is fine), assign it to the state var, and set `NSApp.servicesProvider = provider`. Then call `NSUpdateDynamicServices()` once so a rebuilt bundle refreshes registration during development.
 
-Note: `.onAppear` on MenuBarExtra `.window`-style content fires on first popover open, not at launch. That is acceptable for v1 of this feature (the service auto-launches the app if not running, and macOS delivers the service message after launch; when the app was launched by the service itself, AppKit sends the service request after the run loop starts, so registration must happen without user interaction in that path). To cover the launched-by-service path, ALSO register from `DogearApp.init()` is impossible (no model yet) — instead put the registration in `AppModel.init` guarded to main actor? NO — out of scope. The correct in-scope shape: register in a `.task` modifier on the MenuBarExtra LABEL view (the label renders at launch, unlike the window content). Attach `.task { registerServiceProviderIfNeeded() }` to the label's `Image`, with the register function defined on `DogearApp` doing the nil-check/create/assign described above.
+Note: `.onAppear` on MenuBarExtra `.window`-style content fires on first popover open, not at launch. That is acceptable for v1 of this feature (the service auto-launches the app if not running, and macOS delivers the service message after launch; when the app was launched by the service itself, AppKit sends the service request after the run loop starts, so registration must happen without user interaction in that path). To cover the launched-by-service path, ALSO register from `DogearApp.init()` is impossible (no model yet), instead put the registration in `AppModel.init` guarded to main actor? NO, out of scope. The correct in-scope shape: register in a `.task` modifier on the MenuBarExtra LABEL view (the label renders at launch, unlike the window content). Attach `.task { registerServiceProviderIfNeeded() }` to the label's `Image`, with the register function defined on `DogearApp` doing the nil-check/create/assign described above.
 
 **Verify**: `swift build` → Build complete; `swift test` → all pass, zero warnings.
 
@@ -149,6 +149,6 @@ No automated test can exercise Services delivery. The scripted gates are the bui
 
 ## Maintenance notes
 
-- If the launched-by-service path proves unreliable in manual QA (service invoked while app not running, bookmark not saved), the follow-up is registering from an `NSApplicationDelegateAdaptor` — a deliberate scope cut here.
+- If the launched-by-service path proves unreliable in manual QA (service invoked while app not running, bookmark not saved), the follow-up is registering from an `NSApplicationDelegateAdaptor`, a deliberate scope cut here.
 - The Services menu item may need enabling under System Settings, Keyboard, Keyboard Shortcuts, Services; the publication docs plan should mention it.
 - A future "Save current Safari tab" AppleScript action is adjacent (same Automation plumbing as Notes import) and was deliberately not bundled into this plan.

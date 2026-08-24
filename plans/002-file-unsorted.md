@@ -2,7 +2,7 @@
 
 > **Executor instructions**: Follow this plan step by step. Run every
 > verification command and confirm the expected result before moving on. If
-> anything in "STOP conditions" occurs, stop and report — do not improvise.
+> anything in "STOP conditions" occurs, stop and report, do not improvise.
 > Your reviewer maintains `plans/README.md`.
 >
 > **Drift check (run first)**: `git diff --stat 5f06577..HEAD -- Sources/Dogear/AppModel.swift Sources/DogearKit/BookmarkStore.swift Sources/Dogear/LibraryWindow.swift Tests/DogearKitTests/BookmarkStoreTests.swift`
@@ -26,10 +26,10 @@
 
 Relevant files:
 
-- `Sources/Dogear/AppModel.swift` — `fileUnsorted()` at lines 50-69 (excerpt below); the batching pattern to copy lives in `capture(urls:)` directly below it, which calls `store.add(urls:)` once for the whole batch.
-- `Sources/DogearKit/BookmarkStore.swift` — `autoFile(id:to:)` around line 118: guards only that the id exists and the folder exists, then `mutated()` per call. `add(urls:)` (one `mutated()` per batch) is the exemplar. `bookmarks(in:)` returns not-done bookmarks in a folder.
-- `Sources/Dogear/LibraryWindow.swift` — the call site inside the sidebar context menu: `Button { Task { await model.fileUnsorted() } } label: { Label("File These for Me", systemImage: "sparkles") }`, near line 136. The Notes import in the same file shows the feedback pattern: `NotesImportState` enum with `.finished(String)` driving a sheet.
-- `Tests/DogearKitTests/BookmarkStoreTests.swift` — store tests, Swift Testing style.
+- `Sources/Dogear/AppModel.swift`, `fileUnsorted()` at lines 50-69 (excerpt below); the batching pattern to copy lives in `capture(urls:)` directly below it, which calls `store.add(urls:)` once for the whole batch.
+- `Sources/DogearKit/BookmarkStore.swift`, `autoFile(id:to:)` around line 118: guards only that the id exists and the folder exists, then `mutated()` per call. `add(urls:)` (one `mutated()` per batch) is the exemplar. `bookmarks(in:)` returns not-done bookmarks in a folder.
+- `Sources/Dogear/LibraryWindow.swift`, the call site inside the sidebar context menu: `Button { Task { await model.fileUnsorted() } } label: { Label("File These for Me", systemImage: "sparkles") }`, near line 136. The Notes import in the same file shows the feedback pattern: `NotesImportState` enum with `.finished(String)` driving a sheet.
+- `Tests/DogearKitTests/BookmarkStoreTests.swift`, store tests, Swift Testing style.
 
 `AppModel.fileUnsorted()` today (`Sources/Dogear/AppModel.swift:50-69`):
 
@@ -101,9 +101,9 @@ Replace `autoFile(id:to:)` with `autoFile(_ assignments: [(id: UUID, folder: Str
 
 In `BookmarkStoreTests.swift` add:
 
-1. `autoFileBatchWritesOnce` — seed 3 unsorted bookmarks, count `onChange` firings via the existing closure hook, batch-file all 3 to "Recipes", `#expect` the change count increased by exactly 1 and all 3 moved.
-2. `autoFileSkipsManuallyFiledAndMoved` — seed 3 unsorted; `refile` one to "Shows" (sets manuallyFiled) and `autoFile`-batch all three ids to "Recipes"; the refiled one stays in "Shows", the applied count is 2.
-3. `autoFileSkipsUnknownFolder` — an assignment to a folder not in the list applies zero and fires no change.
+1. `autoFileBatchWritesOnce`, seed 3 unsorted bookmarks, count `onChange` firings via the existing closure hook, batch-file all 3 to "Recipes", `#expect` the change count increased by exactly 1 and all 3 moved.
+2. `autoFileSkipsManuallyFiledAndMoved`, seed 3 unsorted; `refile` one to "Shows" (sets manuallyFiled) and `autoFile`-batch all three ids to "Recipes"; the refiled one stays in "Shows", the applied count is 2.
+3. `autoFileSkipsUnknownFolder`, an assignment to a folder not in the list applies zero and fires no change.
 
 **Verify**: `swift test --filter BookmarkStoreTests` → all pass including 3 new.
 

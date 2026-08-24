@@ -3,7 +3,7 @@
 > **Executor instructions**: Follow this plan step by step. Run every
 > verification command and confirm the expected result before moving to the
 > next step. If anything in the "STOP conditions" section occurs, stop and
-> report — do not improvise. Your reviewer maintains `plans/README.md`.
+> report, do not improvise. Your reviewer maintains `plans/README.md`.
 >
 > **Drift check (run first)**: `git diff --stat dec5931..HEAD -- Sources/DogearKit/OpenGraphParser.swift Tests/DogearKitTests/OpenGraphParserTests.swift`
 > If either file changed since this plan was written, compare the "Current
@@ -27,8 +27,8 @@ The parser extracts `og:` metadata from untrusted HTML with two regexes. Two ord
 
 Relevant files:
 
-- `Sources/DogearKit/OpenGraphParser.swift` — the whole parser (~90 lines). `parse(html:)` at lines 11-47, `decodeEntities` below it (do not change `decodeEntities`).
-- `Tests/DogearKitTests/OpenGraphParserTests.swift` — fixture-backed tests, Swift Testing style. Uses `Bundle.module` fixtures from `Tests/DogearKitTests/Fixtures/` plus inline HTML strings.
+- `Sources/DogearKit/OpenGraphParser.swift`, the whole parser (~90 lines). `parse(html:)` at lines 11-47, `decodeEntities` below it (do not change `decodeEntities`).
+- `Tests/DogearKitTests/OpenGraphParserTests.swift`, fixture-backed tests, Swift Testing style. Uses `Bundle.module` fixtures from `Tests/DogearKitTests/Fixtures/` plus inline HTML strings.
 
 Excerpt as of `dec5931` (`Sources/DogearKit/OpenGraphParser.swift:11-31`):
 
@@ -58,7 +58,7 @@ public static func parse(html: String) -> OpenGraphData {
 
 Toolchain constraint that will bite you: this package builds in Swift language mode v5, where BARE regex literals `/.../` DO NOT COMPILE. Every regex literal must use extended delimiters `#/.../#`, as the existing code does.
 
-Repo conventions: zero third-party deps (no HTML parser libraries; `libxml2` via Foundation is also out of scope for this plan — the regex approach stays, made quote-aware). No em dashes anywhere. Conventional Commits, no AI attribution. A deliberate ceiling gets a `// ponytail:` comment.
+Repo conventions: zero third-party deps (no HTML parser libraries; `libxml2` via Foundation is also out of scope for this plan, the regex approach stays, made quote-aware). No em dashes anywhere. Conventional Commits, no AI attribution. A deliberate ceiling gets a `// ponytail:` comment.
 
 ## Commands you will need
 
@@ -77,9 +77,9 @@ Repo conventions: zero third-party deps (no HTML parser libraries; `libxml2` via
 
 **Out of scope** (do NOT touch):
 
-- `decodeEntities` and its tests — the double-decode behavior is a recorded ruling.
-- `Sources/DogearKit/XFetcher.swift`, `GenericFetcher.swift` — consumers; they must pass unmodified.
-- `Tests/DogearKitTests/Fixtures/` — the real-capture fixtures must not be edited; add inline HTML strings in the test file instead.
+- `decodeEntities` and its tests, the double-decode behavior is a recorded ruling.
+- `Sources/DogearKit/XFetcher.swift`, `GenericFetcher.swift`, consumers; they must pass unmodified.
+- `Tests/DogearKitTests/Fixtures/`, the real-capture fixtures must not be edited; add inline HTML strings in the test file instead.
 
 ## Git workflow
 
@@ -107,10 +107,10 @@ In the attribute loop, keep separate captures: store `property=` matches into `p
 
 Add to `Tests/DogearKitTests/OpenGraphParserTests.swift` (inline HTML strings, following the existing `fallsBackToTitleTag` style):
 
-1. `parsesContentContainingAGreaterThan` — `<meta property="og:description" content="5 > 3 tips">` yields description `"5 > 3 tips"`.
-2. `propertyWinsOverName` — `<meta property="og:title" name="twitter:title" content="Real">` yields title `"Real"`; also assert the reversed attribute order (`name` first, `property` second) yields the same.
-3. `singleQuotedContentWithAGreaterThan` — `<meta property='og:title' content='a > b'>` yields title `"a > b"`.
-4. `unquotedGreaterThanStillEndsTheTag` — `<meta property="og:title" content="x">trailing<p>` must not swallow `trailing<p>` into the tag (title is `"x"`).
+1. `parsesContentContainingAGreaterThan`, `<meta property="og:description" content="5 > 3 tips">` yields description `"5 > 3 tips"`.
+2. `propertyWinsOverName`, `<meta property="og:title" name="twitter:title" content="Real">` yields title `"Real"`; also assert the reversed attribute order (`name` first, `property` second) yields the same.
+3. `singleQuotedContentWithAGreaterThan`, `<meta property='og:title' content='a > b'>` yields title `"a > b"`.
+4. `unquotedGreaterThanStillEndsTheTag`, `<meta property="og:title" content="x">trailing<p>` must not swallow `trailing<p>` into the tag (title is `"x"`).
 
 **Verify**: `swift test --filter OpenGraphParserTests` → all pass including 4 new.
 

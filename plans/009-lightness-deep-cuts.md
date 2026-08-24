@@ -2,7 +2,7 @@
 
 > **Executor instructions**: Follow this plan step by step. Run every
 > verification command and confirm the expected result before moving on. If
-> anything in "STOP conditions" occurs, stop and report — do not improvise.
+> anything in "STOP conditions" occurs, stop and report, do not improvise.
 > Your reviewer maintains `plans/README.md`. Commit as soon as the full suite
 > is green, BEFORE writing your final report.
 >
@@ -103,9 +103,9 @@ In `StubHTTPClient`, implement `fetch` as: apply `redirects` (canonical-match, s
 
 Restructure `MetadataService.fetch(for:)`:
 
-1. `let (body, final) = try await client.fetch(url, limit: FetchLimit.html)` — on throw, return `(url, nil)` as today.
+1. `let (body, final) = try await client.fetch(url, limit: FetchLimit.html)`, on throw, return `(url, nil)` as today.
 2. Route with `fetcher(forHost: final.host)`.
-3. For fetchers that parse the page body (`GenericFetcher`, `XFetcher`): give `MetadataFetcher` a second entry point `func parse(body: Data, url: URL) throws -> FetchedMetadata` and call it with the already-downloaded body, so no second request happens. For `TikTokFetcher` (its metadata comes from the oEmbed endpoint, not the page), keep calling its existing `fetch(_:client:)` with the FINAL url (this is one page GET plus one oEmbed GET, down from two page GETs plus one oEmbed). Give `MetadataFetcher` a default `parse` that throws `HTTPClientError.noResponse` so TikTok need not implement it; `MetadataService` decides per fetcher via a `usesPageBody: Bool` static or by `is TikTokFetcher` check — pick the simpler; a protocol property `static var parsesPageBody: Bool` with a default of `true` and TikTok overriding to `false` is the cleaner shape.
+3. For fetchers that parse the page body (`GenericFetcher`, `XFetcher`): give `MetadataFetcher` a second entry point `func parse(body: Data, url: URL) throws -> FetchedMetadata` and call it with the already-downloaded body, so no second request happens. For `TikTokFetcher` (its metadata comes from the oEmbed endpoint, not the page), keep calling its existing `fetch(_:client:)` with the FINAL url (this is one page GET plus one oEmbed GET, down from two page GETs plus one oEmbed). Give `MetadataFetcher` a default `parse` that throws `HTTPClientError.noResponse` so TikTok need not implement it; `MetadataService` decides per fetcher via a `usesPageBody: Bool` static or by `is TikTokFetcher` check, pick the simpler; a protocol property `static var parsesPageBody: Bool` with a default of `true` and TikTok overriding to `false` is the cleaner shape.
 4. Return `(final, metadata)`.
 
 Existing tests: `MetadataServiceTests.resolvesShortLinkThenRoutesByFinalHost` and the enrichment redirect tests exercise the redirect → route → parse path through the stub's `redirects` map; they must pass with the new single-fetch flow. Add `fetchesTheResolvedPageExactlyOnce` in `MetadataServiceTests`: a generic page behind a redirect; after `fetch(for:)`, `stub.requestedURLs()` contains the page URL exactly once (it previously appeared twice).

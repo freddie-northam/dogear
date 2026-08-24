@@ -2,7 +2,7 @@
 
 > **Executor instructions**: Follow this plan step by step. Run every
 > verification command and confirm the expected result before moving on. If
-> anything in "STOP conditions" occurs, stop and report — do not improvise.
+> anything in "STOP conditions" occurs, stop and report, do not improvise.
 > Your reviewer maintains `plans/README.md`.
 >
 > **Drift check (run first)**: `git diff --stat 2b471d7..HEAD -- Sources/Dogear/FolderColor.swift Sources/DogearKit/Categorizer.swift Tests/DogearKitTests/Fixtures/accuracy-set.json Tests/DogearKitTests/KeywordCategorizerTests.swift`
@@ -26,7 +26,7 @@ A folder's identity is spread over four hand-edited sites that must move in lock
 
 Relevant files:
 
-- `Sources/Dogear/FolderColor.swift` — 29 lines, two global functions (full current content below). SwiftUI `Color` is available in DogearKit (SwiftUI is a system framework; the kit already links Foundation/ImageIO; adding `import SwiftUI` to one kit file is fine and keeps the zero-third-party rule intact).
+- `Sources/Dogear/FolderColor.swift`, 29 lines, two global functions (full current content below). SwiftUI `Color` is available in DogearKit (SwiftUI is a system framework; the kit already links Foundation/ImageIO; adding `import SwiftUI` to one kit file is fine and keeps the zero-third-party rule intact).
 
 ```swift
 import SwiftUI
@@ -59,9 +59,9 @@ func folderSymbol(for name: String) -> String {
 }
 ```
 
-- `Sources/DogearKit/Categorizer.swift` — `keywords: [String: [String]]` table keyed by folder name (has entries for Recipes, Restaurants, Shows, Music, Articles); `domainHints: [(domain: String, folder: String)]` array whose comment claims longest-domain-first ordering. The array currently contains DUPLICATE entries: `("maps.google.com", "Restaurants")` and `("maps.apple.com", "Restaurants")` appear at BOTH line ~33 and line ~39; the second occurrences are unreachable (first match wins). It also contains `("github.com", "Code")` and `("gitlab.com", "Code")` where "Code" is deliberately NOT a default folder (opt-in by creating a folder named Code; a test covers it).
-- `Tests/DogearKitTests/Fixtures/accuracy-set.json` — 40 entries, 10 each for Recipes/Restaurants/Shows/Articles; ZERO Music entries.
-- `Tests/DogearKitTests/KeywordCategorizerTests.swift` — `meetsSeventyPercentAccuracyOnFixtureSet` decodes the fixture, runs `KeywordCategorizer` with `Library.defaultFolders`, asserts `entries.count == 40` and accuracy >= 0.7.
+- `Sources/DogearKit/Categorizer.swift`, `keywords: [String: [String]]` table keyed by folder name (has entries for Recipes, Restaurants, Shows, Music, Articles); `domainHints: [(domain: String, folder: String)]` array whose comment claims longest-domain-first ordering. The array currently contains DUPLICATE entries: `("maps.google.com", "Restaurants")` and `("maps.apple.com", "Restaurants")` appear at BOTH line ~33 and line ~39; the second occurrences are unreachable (first match wins). It also contains `("github.com", "Code")` and `("gitlab.com", "Code")` where "Code" is deliberately NOT a default folder (opt-in by creating a folder named Code; a test covers it).
+- `Tests/DogearKitTests/Fixtures/accuracy-set.json`, 40 entries, 10 each for Recipes/Restaurants/Shows/Articles; ZERO Music entries.
+- `Tests/DogearKitTests/KeywordCategorizerTests.swift`, `meetsSeventyPercentAccuracyOnFixtureSet` decodes the fixture, runs `KeywordCategorizer` with `Library.defaultFolders`, asserts `entries.count == 40` and accuracy >= 0.7.
 
 Conventions: no em dashes; Conventional Commits, no AI attribution; kit test-first; fixture entries are realistic titles/descriptions/urls with an `expected` folder (open the file and match its exact JSON shape).
 
@@ -82,7 +82,7 @@ Conventions: no em dashes; Conventional Commits, no AI attribution; kit test-fir
 - `Tests/DogearKitTests/Fixtures/accuracy-set.json` (add Music entries)
 - `Tests/DogearKitTests/KeywordCategorizerTests.swift` (fixture-count assertion, new lockstep test)
 
-**Out of scope**: every call site of `folderColor`/`folderSymbol` in `Sources/Dogear/` — the functions keep their names and signatures, and the app target already imports DogearKit in those files, so call sites must compile UNCHANGED. If any call site needs an edit beyond nothing, STOP. `Library.defaultFolders` itself. The "Code" hint entries (they stay, with their comment).
+**Out of scope**: every call site of `folderColor`/`folderSymbol` in `Sources/Dogear/`, the functions keep their names and signatures, and the app target already imports DogearKit in those files, so call sites must compile UNCHANGED. If any call site needs an edit beyond nothing, STOP. `Library.defaultFolders` itself. The "Code" hint entries (they stay, with their comment).
 
 ## Git workflow
 
@@ -110,7 +110,7 @@ Add 10 Music entries to `accuracy-set.json` matching the existing JSON shape: re
 
 ### Step 4: The lockstep test
 
-Add `everyDefaultFolderIsFullyWired` to `KeywordCategorizerTests.swift`: for each folder in `Library.defaultFolders` where the folder is not `Library.unsorted`, assert (a) `KeywordCategorizer.keywords[folder]` is non-empty, (b) the accuracy fixture contains at least one entry expecting it, (c) `folderSymbol(for: folder) != "folder"` and (d) `folderColor(for: folder) != folderColor(for: "SomeUnknownFolderName")` (the custom-folder fallback), so a future folder added to defaults without table/fixture/style entries fails this test by name. (b) needs the fixture decoded in this test too — reuse the same decode the accuracy test uses.
+Add `everyDefaultFolderIsFullyWired` to `KeywordCategorizerTests.swift`: for each folder in `Library.defaultFolders` where the folder is not `Library.unsorted`, assert (a) `KeywordCategorizer.keywords[folder]` is non-empty, (b) the accuracy fixture contains at least one entry expecting it, (c) `folderSymbol(for: folder) != "folder"` and (d) `folderColor(for: folder) != folderColor(for: "SomeUnknownFolderName")` (the custom-folder fallback), so a future folder added to defaults without table/fixture/style entries fails this test by name. (b) needs the fixture decoded in this test too, reuse the same decode the accuracy test uses.
 
 **Verify**: `swift test --filter KeywordCategorizerTests` → all pass. Then full `swift test` → all pass, zero warnings.
 
@@ -133,5 +133,5 @@ Covered in Steps 3-4.
 
 ## Maintenance notes
 
-- Adding a folder to defaults now requires: defaultFolders, keywords, fixture entries, symbol, color — and the lockstep test names each miss. The store migration from plan 001 delivers the folder to existing users automatically.
+- Adding a folder to defaults now requires: defaultFolders, keywords, fixture entries, symbol, color, and the lockstep test names each miss. The store migration from plan 001 delivers the folder to existing users automatically.
 - Reviewer: check the Music fixture entries are plausibly real-world (they benchmark the product's headline feature; garbage-in weakens the gate).

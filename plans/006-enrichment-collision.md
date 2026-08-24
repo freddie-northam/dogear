@@ -2,7 +2,7 @@
 
 > **Executor instructions**: Follow this plan step by step. Run every
 > verification command and confirm the expected result before moving on. If
-> anything in "STOP conditions" occurs, stop and report — do not improvise.
+> anything in "STOP conditions" occurs, stop and report, do not improvise.
 > Your reviewer maintains `plans/README.md`.
 >
 > **Drift check (run first)**: `git diff --stat 4bac044..HEAD -- Sources/DogearKit/EnrichmentService.swift Tests/DogearKitTests/EnrichmentServiceTests.swift`
@@ -24,7 +24,7 @@ When enrichment resolves a bookmark's URL and finds another bookmark already hol
 
 ## Current state
 
-- `Sources/DogearKit/EnrichmentService.swift` — `enrich(id:)`; the whole method is the surface. Current collision block (lines 32-39):
+- `Sources/DogearKit/EnrichmentService.swift`, `enrich(id:)`; the whole method is the surface. Current collision block (lines 32-39):
 
 ```swift
 // Post-redirect dedupe: the resolved URL may match an existing bookmark.
@@ -40,7 +40,7 @@ bookmark.url = resolved
 
 The final write block (end of the method) already re-reads `latest` by id and merges enrichment fields onto it before `store.update(latest)`. Note `store.add(url:)` now returns an optional (plan 005); the bare call above compiles because it is `@discardableResult`.
 
-- `Tests/DogearKitTests/EnrichmentServiceTests.swift` — has `redirectCollisionCollapsesDuplicate` and `redirectCollisionBumpsTheSurvivorToTheTop` pinning the current delete-and-readd behavior; they will need updating to the merge semantics. Also has an `InterceptingHTTPClient` (triggers a closure on the Nth `data(from:)` call) used by the mid-flight refile tests: reuse it for the race test. The `makeEnvironment(client:)` helper builds a store + service on a temp dir.
+- `Tests/DogearKitTests/EnrichmentServiceTests.swift`, has `redirectCollisionCollapsesDuplicate` and `redirectCollisionBumpsTheSurvivorToTheTop` pinning the current delete-and-readd behavior; they will need updating to the merge semantics. Also has an `InterceptingHTTPClient` (triggers a closure on the Nth `data(from:)` call) used by the mid-flight refile tests: reuse it for the race test. The `makeEnvironment(client:)` helper builds a store + service on a temp dir.
 - `BookmarkStore` API you will use: `remove(id:)`, `update(_:)`, `add(url:)`, `library.bookmarks`; `ThumbnailCache.remove(for:)` via the service's `thumbnails` property.
 
 Conventions: no em dashes; Conventional Commits, no AI attribution; kit test-first; `EnrichmentService` is `@MainActor` (keep it).
@@ -76,10 +76,10 @@ Then restructure `enrich(id:)`: delete the early collision block after the fetch
 
 Replace the delete-and-readd semantics with a merge into the survivor. Write these tests first (update the two existing collision tests to these names/semantics rather than keeping stale ones):
 
-1. `redirectCollisionMergesIntoTheSurvivor` — existing bookmark S at the target URL (no note, not favourited); bookmark D (`note: "keep me"`, `favoritedAt` set, `manuallyFiled` folder "Recipes") whose URL redirects to S's URL. After `enrich(D.id)`: exactly one bookmark holds the target URL, it has id S (the survivor), `note == "keep me"`, `favoritedAt != nil`, folder "Recipes" with `manuallyFiled == true`, `createdAt == min(S.createdAt, D.createdAt)`, and `doneAt == nil`.
-2. `redirectCollisionKeepsSurvivorFieldsWhenPresent` — S already has a note and a star; D has different ones; after merge S keeps ITS OWN note and star (merge fills gaps only).
-3. `redirectCollisionBumpsTheSurvivorToTheTop` (keep the name) — the survivor is at index 0 after the merge.
-4. `redirectCollisionRemovesTheDuplicateThumbnail` — D had a stored thumbnail (use the PNG helper from `ThumbnailCacheTests` or store any valid image via `service.thumbnails.store`); after merge `thumbnails.exists(for: D.id) == false`.
+1. `redirectCollisionMergesIntoTheSurvivor`, existing bookmark S at the target URL (no note, not favourited); bookmark D (`note: "keep me"`, `favoritedAt` set, `manuallyFiled` folder "Recipes") whose URL redirects to S's URL. After `enrich(D.id)`: exactly one bookmark holds the target URL, it has id S (the survivor), `note == "keep me"`, `favoritedAt != nil`, folder "Recipes" with `manuallyFiled == true`, `createdAt == min(S.createdAt, D.createdAt)`, and `doneAt == nil`.
+2. `redirectCollisionKeepsSurvivorFieldsWhenPresent`, S already has a note and a star; D has different ones; after merge S keeps ITS OWN note and star (merge fills gaps only).
+3. `redirectCollisionBumpsTheSurvivorToTheTop` (keep the name), the survivor is at index 0 after the merge.
+4. `redirectCollisionRemovesTheDuplicateThumbnail`, D had a stored thumbnail (use the PNG helper from `ThumbnailCacheTests` or store any valid image via `service.thumbnails.store`); after merge `thumbnails.exists(for: D.id) == false`.
 
 Implementation of the merge, in the final block where the collision is detected (`survivor` = the other bookmark with the same url):
 
@@ -87,7 +87,7 @@ Implementation of the merge, in the final block where the collision is detected 
 - Manual folder: if `latest.manuallyFiled && !survivor.manuallyFiled`, copy `folder` and set `manuallyFiled = true` on the survivor.
 - `createdAt`: `Bookmark.createdAt` is a `let`; construct the merged survivor via the memberwise `Bookmark(...)` initializer with `createdAt: min(...)` and every other field from the survivor (after the gap-fill above).
 - Clear `survivor.doneAt` (documented intent: a re-share resurfaces).
-- Write: `store.remove(id: latest.id)` (the duplicate), `thumbnails.remove(for: latest.id)`, then `store.remove(id: survivor.id)` followed by re-inserting the merged survivor at the top: since the store has no insert-at-index API and `add(url:)` would lose fields, do this as `store.update(mergedSurvivor)` then `store.add(url: URL(string: mergedSurvivor.url)!)` — `add`'s re-add path finds the existing record by canonical url, clears doneAt, and bumps it to index 0 while preserving every other field. Verify by reading `insert(url:)` in `BookmarkStore` that it preserves fields on the re-add path (it removes and re-inserts the same `existing` record).
+- Write: `store.remove(id: latest.id)` (the duplicate), `thumbnails.remove(for: latest.id)`, then `store.remove(id: survivor.id)` followed by re-inserting the merged survivor at the top: since the store has no insert-at-index API and `add(url:)` would lose fields, do this as `store.update(mergedSurvivor)` then `store.add(url: URL(string: mergedSurvivor.url)!)`, `add`'s re-add path finds the existing record by canonical url, clears doneAt, and bumps it to index 0 while preserving every other field. Verify by reading `insert(url:)` in `BookmarkStore` that it preserves fields on the re-add path (it removes and re-inserts the same `existing` record).
 
 **Verify**: `swift test --filter EnrichmentServiceTests` → all pass including the 4 tests above and the race test. Then `swift test` full → all pass, zero warnings.
 

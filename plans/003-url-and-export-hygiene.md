@@ -2,7 +2,7 @@
 
 > **Executor instructions**: Follow this plan step by step. Run every
 > verification command and confirm the expected result before moving on. If
-> anything in "STOP conditions" occurs, stop and report — do not improvise.
+> anything in "STOP conditions" occurs, stop and report, do not improvise.
 > Your reviewer maintains `plans/README.md`.
 >
 > **Drift check (run first)**: `git diff --stat 5f06577..HEAD -- Sources/DogearKit/URLCleaner.swift Sources/DogearKit/Models.swift Tests/DogearKitTests/URLCleanerTests.swift Tests/DogearKitTests/ModelsTests.swift`
@@ -20,16 +20,16 @@
 
 ## Why this matters
 
-Two output-correctness bugs. First, the URL extractor trims every detected link at the first apostrophe, raw `'` or percent-encoded `%27` — those characters are in `markupMarkers`, added to cut HTML junk like `</div>` off links extracted from Notes bodies. But apostrophes are legal and common in real URLs (any Wikipedia article about a possessive), so a saved bookmark silently points at a truncated, usually 404, page. Second, `Bookmark.markdownLink` escapes square brackets in the title but interpolates the URL raw: a `)` inside a URL path (Wikipedia disambiguation pages) terminates the markdown link early, and a page-controlled title containing a decoded newline splits the exported list into broken lines. Copy as Markdown then corrupts whatever document the user pastes into.
+Two output-correctness bugs. First, the URL extractor trims every detected link at the first apostrophe, raw `'` or percent-encoded `%27`, those characters are in `markupMarkers`, added to cut HTML junk like `</div>` off links extracted from Notes bodies. But apostrophes are legal and common in real URLs (any Wikipedia article about a possessive), so a saved bookmark silently points at a truncated, usually 404, page. Second, `Bookmark.markdownLink` escapes square brackets in the title but interpolates the URL raw: a `)` inside a URL path (Wikipedia disambiguation pages) terminates the markdown link early, and a page-controlled title containing a decoded newline splits the exported list into broken lines. Copy as Markdown then corrupts whatever document the user pastes into.
 
 ## Current state
 
 Relevant files:
 
-- `Sources/DogearKit/URLCleaner.swift` — `markupMarkers` and `trimmedAtMarkup` (excerpt below); `allHTTPURLs(in:)` calls `trimmedAtMarkup` on every detected URL.
-- `Sources/DogearKit/Models.swift` — `Bookmark.markdownLink` and `markdownList` extension (excerpt below).
-- `Tests/DogearKitTests/URLCleanerTests.swift` — has `trimsExtractedURLAtHTMLMarkup` covering `<` and `"` cases.
-- `Tests/DogearKitTests/ModelsTests.swift` — has markdown tests including bracket escaping.
+- `Sources/DogearKit/URLCleaner.swift`, `markupMarkers` and `trimmedAtMarkup` (excerpt below); `allHTTPURLs(in:)` calls `trimmedAtMarkup` on every detected URL.
+- `Sources/DogearKit/Models.swift`, `Bookmark.markdownLink` and `markdownList` extension (excerpt below).
+- `Tests/DogearKitTests/URLCleanerTests.swift`, has `trimsExtractedURLAtHTMLMarkup` covering `<` and `"` cases.
+- `Tests/DogearKitTests/ModelsTests.swift`, has markdown tests including bracket escaping.
 
 `URLCleaner` excerpt (`Sources/DogearKit/URLCleaner.swift:32-43`):
 
@@ -80,7 +80,7 @@ Conventions: no em dashes anywhere; Conventional Commits, no AI attribution; kit
 
 **In scope**: the four files listed above.
 
-**Out of scope**: `OpenGraphParser.swift` (entity decoding is a recorded ruling); `LibraryWindow.swift` (the copy actions consume `markdownLink` unchanged); the `<`, `>`, `"`, and their percent forms in `markupMarkers` (they stay — they are the fix for real HTML junk).
+**Out of scope**: `OpenGraphParser.swift` (entity decoding is a recorded ruling); `LibraryWindow.swift` (the copy actions consume `markdownLink` unchanged); the `<`, `>`, `"`, and their percent forms in `markupMarkers` (they stay, they are the fix for real HTML junk).
 
 ## Git workflow
 
@@ -111,8 +111,8 @@ Note: NSDataDetector may percent-encode the raw apostrophe; the second assertion
 
 Failing tests in `ModelsTests.swift` (follow the existing markdown test style):
 
-1. `markdownLinkSurvivesParenthesesInURL` — a bookmark with url `https://en.wikipedia.org/wiki/Swift_(programming_language)`: the rendered link must round-trip, which angle-bracket delimiters guarantee: expect `[Title](<https://en.wikipedia.org/wiki/Swift_(programming_language)>)`.
-2. `markdownLinkFlattensNewlinesInTitle` — title `"Line one\nLine two"` renders as `[Line one Line two](<...>)` (newlines and control characters collapse to single spaces).
+1. `markdownLinkSurvivesParenthesesInURL`, a bookmark with url `https://en.wikipedia.org/wiki/Swift_(programming_language)`: the rendered link must round-trip, which angle-bracket delimiters guarantee: expect `[Title](<https://en.wikipedia.org/wiki/Swift_(programming_language)>)`.
+2. `markdownLinkFlattensNewlinesInTitle`, title `"Line one\nLine two"` renders as `[Line one Line two](<...>)` (newlines and control characters collapse to single spaces).
 
 Then implement: in `markdownLink`, collapse any character in `CharacterSet.newlines` plus control characters in the title to a single space (and collapse runs), keep the bracket replacement, and wrap the URL in angle brackets: `[\(safeTitle)](<\(url)>)`. Angle-bracket URL delimiters are standard CommonMark; they neutralize `(`/`)` and spaces without altering the URL itself. Update any existing markdown test expectations to the angle-bracket form.
 
