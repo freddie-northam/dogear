@@ -61,9 +61,17 @@ Archive, which stays searchable. Undo with Command Z.
 Download `Dogear.app` from the [latest release](https://github.com/freddie-northam/dogear/releases/latest)
 and move it to Applications. Dogear needs macOS 15.4 or later.
 
-Releases are built with `Scripts/make-app.sh` and carry an ad-hoc signature,
-so macOS asks you to confirm the first launch: right-click the app, choose
-Open, then Open again.
+Each release includes a SHA-256 checksum and GitHub build attestation. Verify
+the downloaded ZIP before opening it:
+
+```bash
+shasum -a 256 -c Dogear-v1.0.1.zip.sha256
+gh attestation verify Dogear-v1.0.1.zip --repo freddie-northam/dogear
+```
+
+Releases are built with `Scripts/make-app.sh`, use Hardened Runtime, and carry
+an ad-hoc signature. macOS asks you to confirm the first launch: right-click
+the app, choose Open, then Open again.
 
 Dogear shows a Dock icon by default. For a menu bar only app, turn off
 "Show icon in Dock" in Settings.
@@ -75,7 +83,7 @@ You need Xcode 16 or later. Nothing else.
 ```bash
 git clone https://github.com/freddie-northam/dogear
 cd dogear
-swift test              # 155 tests, all offline
+swift test              # offline suite; live canaries are skipped
 Scripts/make-app.sh     # builds build/Dogear.app
 open build/Dogear.app
 ```
