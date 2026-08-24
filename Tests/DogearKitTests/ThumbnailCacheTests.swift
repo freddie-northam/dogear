@@ -82,3 +82,47 @@ private func makePNG(width: Int = 4, height: Int = 4) -> Data {
     #expect(second.size.width == 40)
     #expect(second.size.width != first.size.width)
 }
+
+@Test @MainActor func coldListThumbnailLoadingYieldsTheMainActor() async throws {
+    let temp = TempDirectory()
+    let writer = try ThumbnailCache(directory: temp.url)
+    let ids = (0..<12).map { _ in UUID() }
+    for id in ids {
+        #expect(writer.store(makePNG(width: 600, height: 600), for: id))
+    }
+    let cold = try ThumbnailCache(directory: temp.url)
+
+    let signal = AsyncStream.makeStream(of: Void.self)
+    let start = ContinuousClock.now
+    let loading = Task { @MainActor in
+        signal.continuation.yield()
+        var count = 0
+        for id in ids {
+            if await cold.loadImage(for: id) != nil { count += 1 }
+        }
+        return count
+    }
+    for await _ in signal.stream.prefix(1) { break }
+    let elapsed = ContinuousClock.now - start
+
+    if ProcessInfo.processInfo.environment["PERF"] != nil {
+        // Two frames allow CI scheduling noise while staying below the 48 ms synchronous baseline.
+        #expect(elapsed < .milliseconds(32))
+    }
+    #expect(await loading.value == ids.count)
+}
+
+@Test @MainActor func cancelledColdLoadReturnsNil() async throws {
+    let temp = TempDirectory()
+    let writer = try ThumbnailCache(directory: temp.url)
+    let id = UUID()
+    #expect(writer.store(makePNG(width: 600, height: 600), for: id))
+    let cold = try ThumbnailCache(directory: temp.url)
+
+    let loading = Task { @MainActor in
+        withUnsafeCurrentTask { $0?.cancel() }
+        return await cold.loadImage(for: id) != nil
+    }
+
+    #expect(await loading.value == false)
+}

@@ -17,6 +17,7 @@ public final class ThumbnailCache: @unchecked Sendable {
 
     public init(directory: URL) throws {
         self.directory = directory
+        decoded.countLimit = 48
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     }
 
@@ -29,6 +30,30 @@ public final class ThumbnailCache: @unchecked Sendable {
     public func image(for id: UUID) -> NSImage? {
         if let cached = decoded.object(forKey: id as NSUUID) { return cached }
         guard let image = NSImage(contentsOf: fileURL(for: id)) else { return nil }
+        decoded.setObject(image, forKey: id as NSUUID)
+        return image
+    }
+
+    /// Loads a cold thumbnail without making SwiftUI's main actor decode it.
+    @MainActor
+    public func loadImage(for id: UUID) async -> NSImage? {
+        if let cached = decoded.object(forKey: id as NSUUID) { return cached }
+        let url = fileURL(for: id)
+        let loading = Task.detached(priority: .utility) { () -> CGImage? in
+            guard !Task.isCancelled else { return nil }
+            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+            guard !Task.isCancelled else { return nil }
+            return CGImageSourceCreateImageAtIndex(
+                source, 0,
+                [kCGImageSourceShouldCacheImmediately: true] as CFDictionary)
+        }
+        let cgImage = await withTaskCancellationHandler {
+            await loading.value
+        } onCancel: {
+            loading.cancel()
+        }
+        guard !Task.isCancelled, let cgImage else { return nil }
+        let image = NSImage(cgImage: cgImage, size: .zero)
         decoded.setObject(image, forKey: id as NSUUID)
         return image
     }

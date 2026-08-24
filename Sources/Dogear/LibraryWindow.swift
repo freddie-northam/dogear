@@ -1051,12 +1051,22 @@ struct BookmarkCard: View {
     @EnvironmentObject var model: AppModel
     let bookmark: Bookmark
     @State private var isHovering = false
+    @State private var thumbnailImage: NSImage?
 
     var body: some View {
-        if let url = URL(string: bookmark.url) {
-            card.draggable(url)
-        } else {
-            card
+        Group {
+            if let url = URL(string: bookmark.url) {
+                card.draggable(url)
+            } else {
+                card
+            }
+        }
+        .task(id: model.revision) {
+            let image = bookmark.hasThumbnail
+                ? await model.thumbnails.loadImage(for: bookmark.id)
+                : nil
+            guard !Task.isCancelled else { return }
+            thumbnailImage = image
         }
     }
 
@@ -1110,8 +1120,7 @@ struct BookmarkCard: View {
     }
 
     @ViewBuilder private var thumbnail: some View {
-        if bookmark.hasThumbnail,
-           let image = model.thumbnails.image(for: bookmark.id) {
+        if let image = thumbnailImage {
             Image(nsImage: image)
                 .resizable().aspectRatio(contentMode: .fill)
                 .frame(minWidth: 0, maxWidth: .infinity)
@@ -1240,6 +1249,7 @@ struct BookmarkListRow: View {
     @EnvironmentObject var model: AppModel
     let bookmark: Bookmark
     @State private var isHovering = false
+    @State private var thumbnailImage: NSImage?
 
     var body: some View {
         // One click opens here too; the wide row takes a smaller give than
@@ -1270,11 +1280,17 @@ struct BookmarkListRow: View {
         .onHover { isHovering = $0 }
         .bookmarkActions(bookmark)
         .draggable(URL(string: bookmark.url) ?? URL(fileURLWithPath: "/"))
+        .task(id: model.revision) {
+            let image = bookmark.hasThumbnail
+                ? await model.thumbnails.loadImage(for: bookmark.id)
+                : nil
+            guard !Task.isCancelled else { return }
+            thumbnailImage = image
+        }
     }
 
     @ViewBuilder private var badge: some View {
-        if bookmark.hasThumbnail,
-           let image = model.thumbnails.image(for: bookmark.id) {
+        if let image = thumbnailImage {
             Image(nsImage: image)
                 .resizable().aspectRatio(contentMode: .fill)
                 .frame(width: 24, height: 24)
