@@ -15,8 +15,16 @@ private struct FixedCategorizer: Categorizer {
 }
 
 @Test func factoryReturnsACategorizerOnEveryOS() {
-    // On macOS 15 build machines this is the keyword path; on 26+ it may be the LLM.
-    _ = CategorizerFactory.make()
+    let categorizer = CategorizerFactory.make()
+    if #available(macOS 26, *) {
+        // The LLM path only engages when FoundationModels reports the on-device
+        // model available at runtime, which this test cannot control either way.
+        #expect(categorizer is KeywordCategorizer || categorizer is FallbackCategorizer)
+        return
+    }
+    // Below macOS 26, FoundationModels is unavailable, so the factory always
+    // returns the keyword path.
+    #expect(categorizer is KeywordCategorizer)
 }
 
 @Test func fallbackUsedWhenPrimaryReturnsNil() async {

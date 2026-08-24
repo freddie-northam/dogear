@@ -19,7 +19,8 @@ private func makePNG(width: Int = 4, height: Int = 4) -> Data {
 }
 
 @Test func storesValidImageAndReportsExists() throws {
-    let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let temp = TempDirectory()
+    let dir = temp.url
     let cache = try ThumbnailCache(directory: dir)
     let id = UUID()
     #expect(cache.store(makePNG(), for: id))
@@ -29,7 +30,8 @@ private func makePNG(width: Int = 4, height: Int = 4) -> Data {
 }
 
 @Test func downsamplesLargeImagesTo600Pixels() throws {
-    let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let temp = TempDirectory()
+    let dir = temp.url
     let cache = try ThumbnailCache(directory: dir)
     let id = UUID()
     #expect(cache.store(makePNG(width: 900, height: 300), for: id))
@@ -40,7 +42,8 @@ private func makePNG(width: Int = 4, height: Int = 4) -> Data {
 }
 
 @Test func rejectsNonImageData() throws {
-    let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let temp = TempDirectory()
+    let dir = temp.url
     let cache = try ThumbnailCache(directory: dir)
     let id = UUID()
     #expect(!cache.store(Data("<html>error page</html>".utf8), for: id))
@@ -48,13 +51,15 @@ private func makePNG(width: Int = 4, height: Int = 4) -> Data {
 }
 
 @Test func imageForReturnsNilWithoutAFile() throws {
-    let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let temp = TempDirectory()
+    let dir = temp.url
     let cache = try ThumbnailCache(directory: dir)
     #expect(cache.image(for: UUID()) == nil)
 }
 
 @Test func imageForReadsAndThenCaches() throws {
-    let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let temp = TempDirectory()
+    let dir = temp.url
     let cache = try ThumbnailCache(directory: dir)
     let id = UUID()
     #expect(cache.store(makePNG(), for: id))
@@ -65,7 +70,8 @@ private func makePNG(width: Int = 4, height: Int = 4) -> Data {
 }
 
 @Test func storeInvalidatesTheDecodedCache() throws {
-    let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let temp = TempDirectory()
+    let dir = temp.url
     let cache = try ThumbnailCache(directory: dir)
     let id = UUID()
     #expect(cache.store(makePNG(width: 4, height: 4), for: id))
