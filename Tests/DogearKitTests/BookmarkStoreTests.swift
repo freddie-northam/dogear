@@ -542,3 +542,53 @@ private func storeSeeded(folders: [String]) throws -> BookmarkStore {
     #expect(reloaded.library.folders.first == "Articles")
     #expect(reloaded.library.folders.last == "Unsorted")
 }
+
+
+@Test func removeReturnsPositionAndRestorePutsItBack() throws {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    let (a, _) = store.add(url: URL(string: "https://a.com/1")!)!
+    let (b, _) = store.add(url: URL(string: "https://a.com/2")!)!
+    _ = store.add(url: URL(string: "https://a.com/3")!)!
+    // Order is newest first: [3, b, a]. Remove b from the middle.
+    let removed = try #require(store.remove(id: b.id))
+    #expect(removed.index == 1)
+    #expect(store.library.bookmarks.count == 2)
+    store.restore(removed.bookmark, at: removed.index)
+    #expect(store.library.bookmarks.map(\.id)[1] == b.id)
+    #expect(store.library.bookmarks.map(\.id)[2] == a.id)
+    // Restoring twice is a no-op.
+    store.restore(removed.bookmark, at: 0)
+    #expect(store.library.bookmarks.count == 3)
+}
+
+@Test func restoreClampsAnOutOfRangeIndex() throws {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    let (a, _) = store.add(url: URL(string: "https://a.com/1")!)!
+    let removed = try #require(store.remove(id: a.id))
+    store.restore(removed.bookmark, at: 99)
+    #expect(store.library.bookmarks.count == 1)
+}
+
+@Test func removeFolderReturnsWhatRestoreNeeds() throws {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    let (x, _) = store.add(url: URL(string: "https://a.com/x")!)!
+    store.refile(id: x.id, to: "Recipes")
+    let recipesIndex = store.library.folders.firstIndex(of: "Recipes")!
+    let removed = try #require(store.removeFolder("Recipes"))
+    #expect(removed.index == recipesIndex)
+    #expect(removed.bookmarkIDs == [x.id])
+    #expect(store.library.bookmarks[0].folder == Library.unsorted)
+    store.restoreFolder("Recipes", at: removed.index, bookmarkIDs: removed.bookmarkIDs)
+    #expect(store.library.folders[recipesIndex] == "Recipes")
+    #expect(store.library.bookmarks[0].folder == "Recipes")
+}
+
+@Test func removeFolderRefusesUnsortedAndUnknown() throws {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    #expect(store.removeFolder(Library.unsorted) == nil)
+    #expect(store.removeFolder("Nope") == nil)
+}

@@ -136,8 +136,21 @@ public final class BookmarkStore {
         mutated()
     }
 
-    public func remove(id: UUID) {
-        library.bookmarks.removeAll { $0.id == id }
+    /// Removes a bookmark and returns what undo needs: the record and the
+    /// index it held, so `restore` can put it back exactly where it was.
+    @discardableResult
+    public func remove(id: UUID) -> (bookmark: Bookmark, index: Int)? {
+        guard let index = library.bookmarks.firstIndex(where: { $0.id == id }) else { return nil }
+        let bookmark = library.bookmarks.remove(at: index)
+        mutated()
+        return (bookmark, index)
+    }
+
+    /// Reinserts a removed bookmark at its original position (clamped to the
+    /// current count). A record already present is left alone.
+    public func restore(_ bookmark: Bookmark, at index: Int) {
+        guard !library.bookmarks.contains(where: { $0.id == bookmark.id }) else { return }
+        library.bookmarks.insert(bookmark, at: min(index, library.bookmarks.endIndex))
         mutated()
     }
 
@@ -219,11 +232,30 @@ public final class BookmarkStore {
         mutated()
     }
 
-    public func removeFolder(_ name: String) {
-        guard name != Library.unsorted, library.folders.contains(name) else { return }
-        library.folders.removeAll { $0 == name }
+    /// Removes a folder, moving its bookmarks to Unsorted. Returns what undo
+    /// needs: the folder's index and the ids it held, so `restoreFolder` can
+    /// put the folder back and re-home exactly those bookmarks.
+    @discardableResult
+    public func removeFolder(_ name: String) -> (index: Int, bookmarkIDs: [UUID])? {
+        guard name != Library.unsorted, let index = library.folders.firstIndex(of: name) else { return nil }
+        library.folders.remove(at: index)
+        var moved: [UUID] = []
         for i in library.bookmarks.indices where library.bookmarks[i].folder == name {
             library.bookmarks[i].folder = Library.unsorted
+            moved.append(library.bookmarks[i].id)
+        }
+        mutated()
+        return (index, moved)
+    }
+
+    /// Reverses `removeFolder`: the folder returns to its index and the listed
+    /// bookmarks return to it. A name already in use is left alone.
+    public func restoreFolder(_ name: String, at index: Int, bookmarkIDs: [UUID]) {
+        guard name != Library.unsorted, !library.folders.contains(name) else { return }
+        library.folders.insert(name, at: min(index, library.folders.endIndex))
+        let ids = Set(bookmarkIDs)
+        for i in library.bookmarks.indices where ids.contains(library.bookmarks[i].id) {
+            library.bookmarks[i].folder = name
         }
         mutated()
     }
