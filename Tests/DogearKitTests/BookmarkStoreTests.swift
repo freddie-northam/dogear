@@ -467,15 +467,17 @@ import Testing
     // The spec's benchmark table is verified by `PERF=1 swift test -c release
     // -Xswiftc -enable-testing`, not on every PR: shared CI runners are noisy,
     // and a slow neighbour would fail these for reasons unrelated to the diff.
-    // Release, because that is what a user runs.
+    // Release, because that is what a user runs, and because an unoptimized
+    // build hides the difference between a byte scan and a grapheme walk.
     //
-    // The mutation ceiling sits far below what a click cost while the store
-    // wrote on the calling thread, so a return to that fails here. It leaves a
+    // The search and mutation ceilings sit far below what each cost before the
+    // store stopped lowercasing every field and stopped writing on the calling
+    // thread, so a return to either implementation fails here. Both leave a
     // wide margin over the measured cost: the point is to catch a regression,
     // not to police a millisecond.
     if ProcessInfo.processInfo.environment["PERF"] != nil {
         #expect(elapsed < .milliseconds(200))
-        #expect(searchElapsed < .milliseconds(100))
+        #expect(searchElapsed < .milliseconds(3))
         #expect(mutateElapsed < .milliseconds(3))
     }
 }

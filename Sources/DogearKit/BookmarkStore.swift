@@ -274,13 +274,13 @@ public final class BookmarkStore {
     }
 
     public func search(_ query: String) -> [Bookmark] {
-        let needle = query.lowercased()
+        let needle = TextSearch.Query(query)
         guard !needle.isEmpty else { return [] }
         return library.bookmarks.filter {
-            $0.title.lowercased().contains(needle)
-                || ($0.author?.lowercased().contains(needle) ?? false)
-                || ($0.note?.lowercased().contains(needle) ?? false)
-                || $0.url.lowercased().contains(needle)
+            TextSearch.matches($0.title, needle)
+                || TextSearch.matches($0.author, needle)
+                || TextSearch.matches($0.note, needle)
+                || TextSearch.matches($0.url, needle)
         }
     }
 
