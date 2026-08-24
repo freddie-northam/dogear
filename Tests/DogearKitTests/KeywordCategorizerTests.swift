@@ -87,7 +87,10 @@ private struct AccuracyEntry: Decodable {
 @Test func neverReturnsAFolderOutsideTheList() async {
     let metadata = FetchedMetadata(title: "Creamy pasta recipe", description: nil)
     let folder = await KeywordCategorizer().categorize(metadata, url: URL(string: "https://a.com")!, folders: ["Watchlist", "Unsorted"])
-    #expect(folder == nil || folder == "Watchlist" || folder == "Unsorted")
+    // Recipes is deliberately excluded from the folder list, so the categorizer
+    // must not invent it, and Unsorted is never returned directly by the keyword path.
+    #expect(folder == nil)
+    #expect(folder != "Unsorted")
 }
 
 @Test func everyDefaultFolderIsFullyWired() throws {
