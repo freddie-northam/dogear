@@ -1049,10 +1049,8 @@ struct BookmarkGrid: View {
 
 struct BookmarkCard: View {
     @EnvironmentObject var model: AppModel
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let bookmark: Bookmark
     @State private var isHovering = false
-    @State private var isPressed = false
 
     var body: some View {
         if let url = URL(string: bookmark.url) {
@@ -1063,55 +1061,51 @@ struct BookmarkCard: View {
     }
 
     private var card: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            thumbnail
-                .overlay(alignment: .topTrailing) {
-                    FavoriteStar(bookmark: bookmark)
-                        .opacity(isHovering || bookmark.isFavorite ? 1 : 0)
+        // One click opens, the same as the popover rows: a card is a button.
+        // The shared style gives the press its feel on pointer-down, and the
+        // star is a button of its own inside the label, so it wins its own
+        // clicks.
+        Button(action: open) {
+            VStack(alignment: .leading, spacing: 6) {
+                thumbnail
+                    .overlay(alignment: .topTrailing) {
+                        FavoriteStar(bookmark: bookmark)
+                            .opacity(isHovering || bookmark.isFavorite ? 1 : 0)
+                    }
+                Text(bookmark.title)
+                    .font(.headline)
+                    .lineLimit(2, reservesSpace: true)
+                // The note line always reserves its height, so every card in a
+                // row is the same size whether or not a note exists.
+                Text(bookmark.note ?? " ")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1, reservesSpace: true)
+                HStack(spacing: 6) {
+                    // The folder speaks through its symbol and color; the word,
+                    // the domain, and the raw link are noise at card size.
+                    Image(systemName: folderSymbol(for: bookmark.folder))
+                        .font(.caption2)
+                        .foregroundStyle(folderColor(for: bookmark.folder))
+                        .help(bookmark.folder)
+                        .accessibilityLabel(bookmark.folder)
+                    if let author = bookmark.author {
+                        Text(author).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                    Spacer()
+                    Text(bookmark.createdAt, format: .dateTime.day().month())
+                        .font(.caption2).foregroundStyle(.tertiary)
                 }
-            Text(bookmark.title)
-                .font(.headline)
-                .lineLimit(2, reservesSpace: true)
-            // The note line always reserves its height, so every card in a
-            // row is the same size whether or not a note exists.
-            Text(bookmark.note ?? " ")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1, reservesSpace: true)
-            HStack(spacing: 6) {
-                // The folder speaks through its symbol and color; the word,
-                // the domain, and the raw link are noise at card size.
-                Image(systemName: folderSymbol(for: bookmark.folder))
-                    .font(.caption2)
-                    .foregroundStyle(folderColor(for: bookmark.folder))
-                    .help(bookmark.folder)
-                    .accessibilityLabel(bookmark.folder)
-                if let author = bookmark.author {
-                    Text(author).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                }
-                Spacer()
-                Text(bookmark.createdAt, format: .dateTime.day().month())
-                    .font(.caption2).foregroundStyle(.tertiary)
             }
+            .padding(12)
+            .background(isHovering ? .quaternary : .quinary, in: RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.separator, lineWidth: 0.5))
+            .contentShape(Rectangle())
         }
-        .padding(12)
-        .background(isHovering ? .quaternary : .quinary, in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.separator, lineWidth: 0.5))
-        // Response lives on pointer-down, not release: the card gives a little
-        // under the pointer the instant it is pressed. The same press curve as
-        // every button in the app; nothing here is a throw. Reduced motion
-        // keeps the color change and drops the scale.
-        .scaleEffect(isPressed && !reduceMotion ? 0.98 : 1)
+        .buttonStyle(.pressable(scale: 0.98))
         .animation(Motion.hover, value: isHovering)
-        .animation(Motion.press, value: isPressed)
         .onHover { isHovering = $0 }
         .pointerStyle(.link)
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { _ in isPressed = true }
-                .onEnded { _ in isPressed = false }
-        )
-        .onTapGesture(count: 2) { open() }
         .bookmarkActions(bookmark)
     }
 
@@ -1248,28 +1242,32 @@ struct BookmarkListRow: View {
     @State private var isHovering = false
 
     var body: some View {
-        HStack(spacing: 10) {
-            badge
-            Text(bookmark.title).lineLimit(1)
-            if let note = bookmark.note, !note.isEmpty {
-                Text(note).font(.caption).foregroundStyle(.tertiary).lineLimit(1)
+        // One click opens here too; the wide row takes a smaller give than
+        // the card so the press reads the same to the eye.
+        Button(action: open) {
+            HStack(spacing: 10) {
+                badge
+                Text(bookmark.title).lineLimit(1)
+                if let note = bookmark.note, !note.isEmpty {
+                    Text(note).font(.caption).foregroundStyle(.tertiary).lineLimit(1)
+                }
+                Spacer(minLength: 8)
+                if bookmark.isFavorite {
+                    Image(systemName: "star.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.pink)
+                }
+                Text(bookmark.createdAt, format: .dateTime.day().month())
+                    .font(.caption).foregroundStyle(.tertiary)
             }
-            Spacer(minLength: 8)
-            if bookmark.isFavorite {
-                Image(systemName: "star.fill")
-                    .font(.caption2)
-                    .foregroundStyle(.pink)
-            }
-            Text(bookmark.createdAt, format: .dateTime.day().month())
-                .font(.caption).foregroundStyle(.tertiary)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 2)
+            .background(.quaternary.opacity(isHovering ? 0.6 : 0), in: RoundedRectangle(cornerRadius: 6))
+            .contentShape(Rectangle())
         }
-        .padding(.horizontal, 4)
-        .padding(.vertical, 2)
-        .background(.quaternary.opacity(isHovering ? 0.6 : 0), in: RoundedRectangle(cornerRadius: 6))
-        .contentShape(Rectangle())
+        .buttonStyle(.pressable(scale: 0.99))
         .pointerStyle(.link)
         .onHover { isHovering = $0 }
-        .onTapGesture(count: 2) { open() }
         .bookmarkActions(bookmark)
         .draggable(URL(string: bookmark.url) ?? URL(fileURLWithPath: "/"))
     }
