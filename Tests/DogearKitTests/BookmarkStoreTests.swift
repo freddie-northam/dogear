@@ -520,3 +520,25 @@ private func storeSeeded(folders: [String]) throws -> BookmarkStore {
     let picked = store.pick()
     #expect(picked?.folder == "Recipes")
 }
+
+
+@Test func moveFoldersReordersAndKeepsUnsortedLast() throws {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    // Defaults: Recipes, Restaurants, Shows, Music, Articles, Unsorted
+    store.moveFolders(fromOffsets: IndexSet(integer: 0), toOffset: 3)
+    #expect(store.library.folders == ["Restaurants", "Shows", "Recipes", "Music", "Articles", "Unsorted"])
+    // A move past the end lands above Unsorted, never below it.
+    store.moveFolders(fromOffsets: IndexSet(integer: 0), toOffset: 99)
+    #expect(store.library.folders.last == "Unsorted")
+    #expect(store.library.folders[4] == "Restaurants")
+}
+
+@Test func moveFoldersPersistsAcrossReload() throws {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    store.moveFolders(fromOffsets: IndexSet(integer: 4), toOffset: 0)
+    let reloaded = try BookmarkStore(directory: temp.url)
+    #expect(reloaded.library.folders.first == "Articles")
+    #expect(reloaded.library.folders.last == "Unsorted")
+}

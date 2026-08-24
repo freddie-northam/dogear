@@ -195,6 +195,18 @@ public final class BookmarkStore {
         mutated()
     }
 
+    /// Reorders the user-facing folders. Unsorted is pinned last: it is an
+    /// inbox, not a folder the user arranges, so moves that would displace it
+    /// are clamped to the slot above it.
+    public func moveFolders(fromOffsets source: IndexSet, toOffset destination: Int) {
+        var movable = library.folders.filter { $0 != Library.unsorted }
+        let hasUnsorted = movable.count != library.folders.count
+        let clampedDestination = min(destination, movable.count)
+        movable.move(fromOffsets: source, toOffset: clampedDestination)
+        library.folders = hasUnsorted ? movable + [Library.unsorted] : movable
+        mutated()
+    }
+
     public func renameFolder(_ name: String, to newName: String) {
         let newName = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard name != Library.unsorted, !newName.isEmpty,
