@@ -68,7 +68,7 @@ final class AppModel: ObservableObject {
     // in batches and the user did not point at a card.
 
     func deleteBookmark(_ bookmark: Bookmark, undoManager: UndoManager?) {
-        guard let removed = withAnimation(.smooth(duration: 0.25), { store.remove(id: bookmark.id) }) else { return }
+        guard let removed = withAnimation(Motion.shuffle, { store.remove(id: bookmark.id) }) else { return }
         // The cached thumbnail stays while undo is possible so a restored
         // bookmark keeps its image; the cache tolerates an orphan if the
         // delete is never undone.
@@ -82,7 +82,7 @@ final class AppModel: ObservableObject {
     }
 
     func markDone(_ id: UUID, undoManager: UndoManager?) {
-        withAnimation(.smooth(duration: 0.25)) { store.markDone(id: id) }
+        withAnimation(Motion.shuffle) { store.markDone(id: id) }
         register(undoManager, name: "Mark Done") { model in
             model.store.markUndone(id: id)
             model.register(undoManager, name: "Mark Done") { model in
@@ -92,7 +92,7 @@ final class AppModel: ObservableObject {
     }
 
     func deleteFolder(_ name: String, undoManager: UndoManager?) {
-        guard let removed = withAnimation(.smooth(duration: 0.25), { store.removeFolder(name) }) else { return }
+        guard let removed = withAnimation(Motion.shuffle, { store.removeFolder(name) }) else { return }
         register(undoManager, name: "Delete Folder") { model in
             model.store.restoreFolder(name, at: removed.index, bookmarkIDs: removed.bookmarkIDs)
             model.register(undoManager, name: "Delete Folder") { model in
@@ -105,7 +105,7 @@ final class AppModel: ObservableObject {
                           _ action: @escaping @MainActor (AppModel) -> Void) {
         guard let undoManager else { return }
         undoManager.registerUndo(withTarget: self) { model in
-            MainActor.assumeIsolated { withAnimation(.smooth(duration: 0.25)) { action(model) } }
+            MainActor.assumeIsolated { withAnimation(Motion.shuffle) { action(model) } }
         }
         undoManager.setActionName(name)
     }
