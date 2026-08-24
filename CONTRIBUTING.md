@@ -16,9 +16,8 @@ All logic lives in `Sources/DogearKit`, with unit tests. The SwiftUI app in
 ## Rules
 
 - `swift test` must pass. New logic needs tests.
-- ROADMAP.md records current product decisions. The design spec in
-  `docs/superpowers/specs/` is the dated v1 design record; where they
-  differ, ROADMAP and the code win.
+- ROADMAP.md records current product decisions. Where an older note
+  differs, ROADMAP and the code win.
 - Conventional Commits: `feat:`, `fix:`, `docs:`, `test:`, `chore:`.
 - One concern per pull request.
 
