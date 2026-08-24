@@ -16,15 +16,18 @@ All logic lives in `Sources/DogearKit` and is unit-tested. The SwiftUI app in
 ## Rules
 
 - `swift test` must pass. New logic needs tests.
-- The design spec lives in `docs/superpowers/specs/`. Read it before large changes.
+- ROADMAP.md records current product decisions. The design spec in
+  `docs/superpowers/specs/` is the dated v1 design record; where they
+  differ, ROADMAP and the code win.
 - Conventional Commits: `feat:`, `fix:`, `docs:`, `test:`, `chore:`.
 - One concern per pull request.
 
 ## Live canaries
 
 `CANARY=1 swift test --filter CanaryTests` runs real fetches against TikTok
-and X. CI runs these daily; a canary failure means a platform changed its
-behavior, not that your change broke something.
+and X. CI runs these on a daily schedule once the repository has a GitHub
+remote; a canary failure means a platform changed its behavior, not that
+your change broke something.
 
 ## Extension points
 
@@ -33,8 +36,10 @@ behavior, not that your change broke something.
 Implement `MetadataFetcher` (`Sources/DogearKit/MetadataFetching.swift`):
 `fetch(_:client:) async throws -> FetchedMetadata`. Register the host in
 `MetadataService.fetcher(forHost:)` (`Sources/DogearKit/MetadataService.swift`).
-Add a fixture test under `Tests/DogearKitTests/Fixtures`, following
-`TikTokFetcherTests.swift` or `XFetcherTests.swift`.
+A fetcher either parses the page body or calls its own endpoint; see
+`parsesPageBody` on `MetadataFetcher`. Add a fixture test under
+`Tests/DogearKitTests/Fixtures`, following `TikTokFetcherTests.swift` or
+`XFetcherTests.swift`.
 
 ### Add a categorizer
 

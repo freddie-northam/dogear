@@ -1,7 +1,7 @@
 # Dogear: design specification
 
 Date: 2026-08-23
-Status: approved design, ready for implementation planning
+Status: dated v1 design record. See the "Drift since approval" section at the end; ROADMAP.md and the code are current.
 
 ## 1. Purpose
 
@@ -153,3 +153,21 @@ The accuracy fixture set is roughly 40 real links, about 8 per default folder, c
 | Search keystroke to results | < 100 ms | automated, generated store |
 | Store load with 5,000 bookmarks | < 200 ms | automated |
 | Idle footprint | < 50 MB memory, ~0% CPU | Activity Monitor check per release |
+
+## Drift since approval (2026-08-24)
+
+- The deployment target is macOS 15.4, not macOS 15. The app needs a
+  NSPasteboard API only present from 15.4.
+- The project builds with SwiftPM, not an Xcode project.
+- The popover shipped as a v4 redesign, not the layout section 4 describes.
+- The LLM categorizer sends a free-text prompt and validates the answer in
+  code. `@Generable` is still the goal; it waits on Xcode 26 (plan 016).
+- The first-run Launch at Login offer and the custom-folder symbol palette
+  are deferred by decision. See ROADMAP.md.
+- Markdown export shipped: a bookmark or a folder can be copied or exported
+  as Markdown.
+- A Music folder shipped as a sixth default folder.
+- Bookmark cards no longer show the source domain in their caption.
+- Releases are signed with an ad-hoc signature, not notarized. Notarization
+  is deferred and needs an Apple Developer ID.
+- The README has no screenshots yet.
