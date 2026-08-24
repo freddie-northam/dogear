@@ -56,6 +56,9 @@ public final class BookmarkStore {
     /// fighting the app every launch.
     private func migrate() {
         guard (library.schemaVersion ?? 1) < Library.currentSchemaVersion else { return }
+        let hadCredentials = library.bookmarks.contains {
+            URL(string: $0.url)?.user != nil || URL(string: $0.url)?.password != nil
+        }
 
         for folder in Library.defaultFolders where folder != Library.unsorted && !library.folders.contains(folder) {
             let index = library.folders.firstIndex(of: Library.unsorted) ?? library.folders.endIndex
@@ -88,6 +91,9 @@ public final class BookmarkStore {
 
         library.schemaVersion = Library.currentSchemaVersion
         saveNow()
+        // The first save rotates the old file. Replace that credential-bearing
+        // backup with the sanitized main file before migration completes.
+        if hadCredentials { saveNow() }
     }
 
     // MARK: Mutations

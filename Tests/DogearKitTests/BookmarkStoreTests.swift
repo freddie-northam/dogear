@@ -446,6 +446,8 @@ import Testing
 
     #expect(store.library.bookmarks.first?.url == "https://example.com/private")
     #expect(String(decoding: try Data(contentsOf: file), as: UTF8.self).contains("secret") == false)
+    let backup = temp.url.appendingPathComponent("library.json.bak")
+    #expect(String(decoding: try Data(contentsOf: backup), as: UTF8.self).contains("secret") == false)
 }
 
 @Test func folderAdoptionRunsOnce() throws {
