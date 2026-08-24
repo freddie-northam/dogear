@@ -21,12 +21,32 @@ public enum URLCleaner {
         return matches.compactMap { match in
             guard let url = match.url, let scheme = url.scheme?.lowercased(),
                   scheme == "http" || scheme == "https" else { return nil }
+            // A bare "item.id" in a code snippet looks like an Indonesian domain to
+            // the detector. Skip it when the text carried no scheme and no path.
+            if isCodeIdentifier(matchedText: String(text[Range(match.range, in: text)!]), url: url) {
+                return nil
+            }
             // The detector can run past HTML that follows a link with no
             // whitespace, like "example.com/a</div>", and it percent-encodes
             // the markup. Cut the URL at the first markup character, in
             // literal or percent-encoded form.
             return trimmedAtMarkup(url)
         }
+    }
+
+    /// A scheme-less bare host of one short lowercase label plus a two-letter
+    /// TLD, with no path or query, is a code identifier like "result.id" far
+    /// more often than a saved website. Real bare domains ("booking.com",
+    /// "impeccable.style") have longer TLDs or labels and pass through.
+    static func isCodeIdentifier(matchedText: String, url: URL) -> Bool {
+        guard !matchedText.contains("://"),
+              url.path.isEmpty || url.path == "/", url.query == nil,
+              let host = url.host?.lowercased() else { return false }
+        let parts = host.split(separator: ".")
+        guard parts.count == 2, parts[1].count == 2,
+              (1...8).contains(parts[0].count),
+              parts[0].allSatisfy({ $0.isLetter && $0.isLowercase }) else { return false }
+        return true
     }
 
     static let markupMarkers = ["<", ">", "\"", "%3C", "%3E", "%22", "%3c", "%3e"]

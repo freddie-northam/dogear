@@ -118,3 +118,16 @@ func rejectsNonHTTPSchemes(text: String) {
     #expect(a == b)
     #expect(c == b)
 }
+
+
+@Test(arguments: ["item.id", "result.id", "element.id", "r.id", "config.js"])
+func skipsBareCodeIdentifiers(text: String) {
+    #expect(URLCleaner.allHTTPURLs(in: "let x = \(text)").isEmpty)
+}
+
+// NSDataDetector does not recognise every newer TLD as a bare host, so the
+// bare forms here are ones it does detect; the scheme-bearing forms cover the rest.
+@Test(arguments: ["booking.com", "acrcloud.com", "https://item.id", "item.id/path", "https://impeccable.style", "https://how.complexsystems.fail"])
+func keepsRealBareDomains(text: String) {
+    #expect(URLCleaner.allHTTPURLs(in: "see \(text) later").count == 1)
+}
