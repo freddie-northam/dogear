@@ -22,8 +22,15 @@ final class AppModel: ObservableObject {
     @Published var storageError: String?
 
     init() {
-        let supportDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Dogear")
+        // DOGEAR_DATA_DIR points the app at another library: screenshots and
+        // demos run against a throwaway directory, never a real one.
+        let supportDir: URL
+        if let override = ProcessInfo.processInfo.environment["DOGEAR_DATA_DIR"], !override.isEmpty {
+            supportDir = URL(fileURLWithPath: override, isDirectory: true)
+        } else {
+            supportDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("Dogear")
+        }
         // A store that cannot initialize means unreadable data with no backup.
         // Crashing here is correct: never run against a store we cannot trust.
         store = try! BookmarkStore(directory: supportDir)

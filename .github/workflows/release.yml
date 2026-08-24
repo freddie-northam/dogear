@@ -1,0 +1,32 @@
+name: Release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Run tests
+        run: swift test
+      - name: Build the app
+        run: Scripts/make-app.sh
+      - name: Check the tag matches VERSION
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          test "v$(tr -d '[:space:]' < VERSION)" = "$TAG"
+      - name: Zip the app
+        env:
+          TAG: ${{ github.ref_name }}
+        run: ditto -c -k --keepParent build/Dogear.app "Dogear-$TAG.zip"
+      - name: Publish the release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        with:
+          files: Dogear-*.zip
+          generate_release_notes: true
