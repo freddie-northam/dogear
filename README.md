@@ -17,10 +17,6 @@
   <a href="CONTRIBUTING.md">Contribute</a>
 </p>
 
-<p align="center">
-  <img src="assets/screenshots/library.png" width="880" alt="The Dogear library: folders in a sidebar, bookmarks as cards with thumbnails">
-</p>
-
 ## Why Dogear
 
 Links you save for later go to die. A recipe in a note, a restaurant in a
