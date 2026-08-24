@@ -14,6 +14,15 @@ final class ServiceProvider: NSObject {
                             userData: String?,
                             error: AutoreleasingUnsafeMutablePointer<NSString?>) {
         guard let text = pasteboard.string(forType: .string) else { return }
+        let urls = URLCleaner.allHTTPURLs(in: text)
+        guard !urls.contains(where: { $0.user != nil || $0.password != nil }) else {
+            error.pointee = "Remove the username or password from this link before saving it."
+            return
+        }
+        guard !urls.isEmpty else {
+            error.pointee = "Dogear saves http and https web links."
+            return
+        }
         let capture = capture
         Task { @MainActor in capture(text) }
     }

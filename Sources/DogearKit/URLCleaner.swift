@@ -75,6 +75,8 @@ public enum URLCleaner {
         }
         parts.scheme = parts.scheme?.lowercased()
         parts.host = parts.host?.lowercased()
+        parts.user = nil
+        parts.password = nil
         // The same tweet arrives as twitter.com or x.com depending on where
         // the link was copied; one host keeps them one bookmark.
         if let host = parts.host,
@@ -102,9 +104,26 @@ public enum URLCleaner {
         return parts.string ?? url.absoluteString
     }
 
+    public static func displayHost(for url: URL) -> String {
+        guard let host = url.host?.lowercased(), !host.isEmpty else { return "Other" }
+        return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+    }
+
+    public static func siteName(for url: URL) -> String {
+        let host = displayHost(for: url)
+        if host == "github.com" || host.hasSuffix(".github.com") { return "GitHub" }
+        if host == "x.com" || host.hasSuffix(".x.com")
+            || host == "twitter.com" || host.hasSuffix(".twitter.com") { return "X" }
+        if host == "tiktok.com" || host.hasSuffix(".tiktok.com") { return "TikTok" }
+        return host
+    }
+
     /// The one rule for what may become or remain a bookmark URL.
     public static func isCapturable(_ url: URL) -> Bool {
         let scheme = url.scheme?.lowercased()
-        return scheme == "http" || scheme == "https"
+        return (scheme == "http" || scheme == "https")
+            && url.host?.isEmpty == false
+            && url.user == nil
+            && url.password == nil
     }
 }

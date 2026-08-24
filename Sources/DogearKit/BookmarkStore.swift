@@ -1,5 +1,19 @@
 import Foundation
 
+public enum BookmarkStoreWriteError: LocalizedError {
+    case backup(Error)
+    case save(Error)
+
+    public var errorDescription: String? {
+        switch self {
+        case .backup(let error):
+            return "Dogear saved your bookmarks, but could not refresh the backup: \(error.localizedDescription)"
+        case .save(let error):
+            return "Dogear could not save your bookmarks: \(error.localizedDescription)"
+        }
+    }
+}
+
 public final class BookmarkStore {
     public private(set) var library: Library
     public private(set) var didRecoverFromBackup = false
@@ -42,6 +56,9 @@ public final class BookmarkStore {
     /// fighting the app every launch.
     private func migrate() {
         guard (library.schemaVersion ?? 1) < Library.currentSchemaVersion else { return }
+        let hadCredentials = library.bookmarks.contains {
+            URL(string: $0.url)?.user != nil || URL(string: $0.url)?.password != nil
+        }
 
         for folder in Library.defaultFolders where folder != Library.unsorted && !library.folders.contains(folder) {
             let index = library.folders.firstIndex(of: Library.unsorted) ?? library.folders.endIndex
@@ -74,6 +91,9 @@ public final class BookmarkStore {
 
         library.schemaVersion = Library.currentSchemaVersion
         saveNow()
+        // The first save rotates the old file. Replace that credential-bearing
+        // backup with the sanitized main file before migration completes.
+        if hadCredentials { saveNow() }
     }
 
     // MARK: Mutations
@@ -268,6 +288,10 @@ public final class BookmarkStore {
         library.bookmarks.filter { $0.folder == folder && !$0.isDone }
     }
 
+    public func waiting() -> [Bookmark] {
+        library.bookmarks.filter { !$0.isDone }
+    }
+
     public func archive() -> [Bookmark] {
         library.bookmarks.filter(\.isDone)
             .sorted { ($0.doneAt ?? .distantPast) > ($1.doneAt ?? .distantPast) }
@@ -336,17 +360,22 @@ public final class BookmarkStore {
         do {
             data = try JSONEncoder().encode(library)
         } catch {
-            onWriteFailure?(error)
+            onWriteFailure?(BookmarkStoreWriteError.save(error))
             return
         }
         if FileManager.default.fileExists(atPath: fileURL.path) {
-            try? FileManager.default.removeItem(at: backupURL)
-            try? FileManager.default.copyItem(at: fileURL, to: backupURL)
+            do {
+                let current = try Data(contentsOf: fileURL)
+                _ = try JSONDecoder().decode(Library.self, from: current)
+                try current.write(to: backupURL, options: .atomic)
+            } catch {
+                onWriteFailure?(BookmarkStoreWriteError.backup(error))
+            }
         }
         do {
             try data.write(to: fileURL, options: .atomic)
         } catch {
-            onWriteFailure?(error)
+            onWriteFailure?(BookmarkStoreWriteError.save(error))
         }
     }
 

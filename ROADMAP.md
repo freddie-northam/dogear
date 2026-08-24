@@ -29,6 +29,9 @@ next, and what the team chose to leave out.
   second import reads only what changed since the last import.
 - List view and sort order: switch between grid and list, and sort by last
   saved, oldest first, title, or site.
+- Waiting and site groups: review every active bookmark across folders, group
+  GitHub, X, TikTok, and other sites dynamically, and see the destination host
+  before opening a bookmark.
 - Music folder: a default folder for songs, albums, and playlists.
 - Refresh Metadata: re-fetch title, author, and thumbnail for one bookmark.
 - File These for Me: run auto-filing over the Unsorted folder on demand.
@@ -36,6 +39,8 @@ next, and what the team chose to leave out.
   Save to Dogear.
 - Browser bookmarks import and Markdown export: import a bookmarks file
   from a browser, and export the library to a Markdown file.
+- Verified releases: release tags must point at `main`. Published ZIPs include
+  a checksum and build provenance, refuse replacement, and use Hardened Runtime.
 
 ## Next up
 
@@ -62,5 +67,5 @@ Nothing is scheduled. New ideas start as deferred decisions below.
 - No notifications, ever. You open the app to see a pick. The app never
   pushes one to you.
 - Zero third-party dependencies. Dogear uses only Apple's frameworks.
-- Local-only data. Dogear stores your library on your Mac, with no server
-  and no account.
+- Local-only library data. Dogear stores your library on your Mac, with no
+  server and no account. Metadata enrichment contacts each saved site.

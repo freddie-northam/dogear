@@ -15,6 +15,29 @@ public struct FetchedMetadata: Equatable, Sendable {
         self.thumbnailURL = thumbnailURL
         self.source = source
     }
+
+    func bounded() -> FetchedMetadata {
+        FetchedMetadata(
+            title: Self.clean(title, limit: 512),
+            author: Self.clean(author, limit: 256),
+            description: Self.clean(description, limit: 2_048),
+            thumbnailURL: thumbnailURL,
+            source: source
+        )
+    }
+
+    private static let unsafeText = CharacterSet.controlCharacters.union(
+        CharacterSet(charactersIn: "\u{061C}\u{200E}\u{200F}\u{202A}\u{202B}\u{202C}\u{202D}\u{202E}\u{2066}\u{2067}\u{2068}\u{2069}")
+    )
+
+    private static func clean(_ value: String?, limit: Int) -> String? {
+        guard let value else { return nil }
+        let cleaned = value.components(separatedBy: unsafeText)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return cleaned.isEmpty ? nil : String(cleaned.prefix(limit))
+    }
 }
 
 public protocol MetadataFetcher: Sendable {

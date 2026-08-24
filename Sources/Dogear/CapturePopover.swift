@@ -193,14 +193,24 @@ struct CapturePopover: View {
     }
 
     private func save() {
-        let result = model.capture(text: text)
+        let urls = URLCleaner.allHTTPURLs(in: text)
+        let result = model.capture(urls: urls)
         if result.total == 0 {
-            hint = "That is not a web link. Dogear saves http and https links."
+            hint = result.rejectedCredentials > 0
+                ? "Remove the username or password from this link before saving it."
+                : "That is not a web link. Dogear saves http and https links."
             return
         }
         clipboard.consume()
         text = ""
         if pick == nil { pick = model.store.pick() }
+        if result.rejectedCredentials > 0 {
+            let saved = result.new == 0
+                ? "Valid links were already saved."
+                : "Saved \(result.new) valid link\(result.new == 1 ? "" : "s")."
+            hint = "\(saved) Skipped links that include usernames or passwords."
+            return
+        }
         if result.total > 1 {
             hint = result.new == 0
                 ? "All \(result.total) were already saved."
@@ -248,12 +258,16 @@ struct CapturePopover: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(pick.title).font(.callout).lineLimit(2)
                         HStack(spacing: 4) {
-                            Image(systemName: folderSymbol(for: pick.folder))
-                                .font(.system(size: 9))
-                            Text(pick.folder)
+                            HStack(spacing: 4) {
+                                Image(systemName: folderSymbol(for: pick.folder))
+                                    .font(.system(size: 9))
+                                Text(pick.folder)
+                            }
+                            .foregroundStyle(folderColor(for: pick.folder))
+                            Text(displayHost(pick))
+                                .foregroundStyle(.secondary)
                         }
                         .font(.caption2)
-                        .foregroundStyle(folderColor(for: pick.folder))
                     }
                 }
                 .contentShape(Rectangle())
@@ -261,19 +275,15 @@ struct CapturePopover: View {
             .buttonStyle(.pressable(scale: 0.98))
             .pointerStyle(.link)
             Spacer(minLength: 8)
-            // The actions appear with the row hover, Control Center style,
-            // and each names itself through its own hover color.
-            if isPickHovering {
-                HoverIconButton(symbol: "checkmark", label: "Mark done", hoverColor: .green) {
-                    withAnimation(Motion.reveal) {
-                        model.markDone(pick.id, undoManager: undoManager)
-                        self.pick = model.store.pick(excluding: pick.id)
-                    }
+            HoverIconButton(symbol: "checkmark", label: "Mark done", hoverColor: .green) {
+                withAnimation(Motion.reveal) {
+                    model.markDone(pick.id, undoManager: undoManager)
+                    self.pick = model.store.pick(excluding: pick.id)
                 }
-                HoverIconButton(symbol: "arrow.clockwise", label: "Show another", hoverColor: .primary) {
-                    withAnimation(Motion.reveal) {
-                        self.pick = model.store.pick(excluding: pick.id)
-                    }
+            }
+            HoverIconButton(symbol: "arrow.clockwise", label: "Show another", hoverColor: .primary) {
+                withAnimation(Motion.reveal) {
+                    self.pick = model.store.pick(excluding: pick.id)
                 }
             }
         }
@@ -395,7 +405,13 @@ private struct PopoverListRow: View {
                             .font(.system(size: 11))
                             .foregroundStyle(folderColor(for: bookmark.folder))
                     )
-                Text(bookmark.title).font(.callout).lineLimit(1)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(bookmark.title).font(.callout).lineLimit(1)
+                    Text(displayHost(bookmark))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
                 Spacer(minLength: 8)
                 if isHovering {
                     Image(systemName: "arrow.up.right")

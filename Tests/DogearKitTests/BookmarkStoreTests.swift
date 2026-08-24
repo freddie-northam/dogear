@@ -38,6 +38,14 @@ import Testing
     #expect(store.library.bookmarks.isEmpty)
 }
 
+@Test func addRejectsCredentialBearingURLs() throws {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    let result = store.add(url: URL(string: "https://user:secret@example.com/private")!)
+    #expect(result == nil)
+    #expect(store.library.bookmarks.isEmpty)
+}
+
 @Test func updateRefusesToStoreANonHTTPURL() throws {
     let temp = TempDirectory()
     let store = try BookmarkStore(directory: temp.url)
@@ -69,6 +77,18 @@ import Testing
     store.markUndone(id: bookmark.id)
     #expect(store.bookmarks(in: Library.unsorted).map(\.id) == [bookmark.id])
     #expect(store.archive().isEmpty)
+}
+
+@Test func waitingReturnsEveryActiveBookmarkAcrossFolders() throws {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    let (recipe, _) = store.add(url: URL(string: "https://a.com/recipe")!)!
+    store.refile(id: recipe.id, to: "Recipes")
+    let (unsorted, _) = store.add(url: URL(string: "https://a.com/read")!)!
+    let (done, _) = store.add(url: URL(string: "https://a.com/done")!)!
+    store.markDone(id: done.id)
+
+    #expect(store.waiting().map(\.id) == [unsorted.id, recipe.id])
 }
 
 @Test func refileSetsManuallyFiled() throws {
@@ -339,6 +359,26 @@ import Testing
     #expect(recoveredAgain.didRecoverFromBackup)
 }
 
+@Test func saveDoesNotRotateReadableCorruptionOverTheBackup() throws {
+    let temp = TempDirectory()
+    let dir = temp.url
+    let store = try BookmarkStore(directory: dir)
+    _ = store.add(url: URL(string: "https://a.com/1")!)
+    _ = store.add(url: URL(string: "https://a.com/2")!)
+    let backupURL = dir.appendingPathComponent("library.json.bak")
+    let goodBackup = try Data(contentsOf: backupURL)
+    try Data("{}".utf8).write(to: dir.appendingPathComponent("library.json"))
+    var reportedBackupFailure = false
+    store.onWriteFailure = { error in
+        if case BookmarkStoreWriteError.backup = error { reportedBackupFailure = true }
+    }
+
+    store.saveNow()
+
+    #expect(reportedBackupFailure)
+    #expect(try Data(contentsOf: backupURL) == goodBackup)
+}
+
 @Test func recoversFromBackupWhenMainFileIsMissing() throws {
     let temp = TempDirectory()
     let dir = temp.url
@@ -388,6 +428,26 @@ import Testing
     let unsortedIndex = store.library.folders.firstIndex(of: Library.unsorted)!
     #expect(musicIndex < unsortedIndex)
     #expect(store.library.schemaVersion == Library.currentSchemaVersion)
+}
+
+@Test func migrationRemovesCredentialsFromStoredURLs() throws {
+    let temp = TempDirectory()
+    let file = temp.url.appendingPathComponent("library.json")
+    let json = """
+    {"folders":["Unsorted"],"bookmarks":[{
+    "id":"00000000-0000-0000-0000-000000000001",
+    "url":"https://user:secret@example.com/private","title":"Private",
+    "folder":"Unsorted","source":"web","createdAt":0,
+    "hasThumbnail":false,"manuallyFiled":false}],"schemaVersion":2}
+    """
+    try Data(json.utf8).write(to: file)
+
+    let store = try BookmarkStore(directory: temp.url)
+
+    #expect(store.library.bookmarks.first?.url == "https://example.com/private")
+    #expect(String(decoding: try Data(contentsOf: file), as: UTF8.self).contains("secret") == false)
+    let backup = temp.url.appendingPathComponent("library.json.bak")
+    #expect(String(decoding: try Data(contentsOf: backup), as: UTF8.self).contains("secret") == false)
 }
 
 @Test func folderAdoptionRunsOnce() throws {

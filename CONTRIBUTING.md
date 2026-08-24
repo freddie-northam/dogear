@@ -24,9 +24,13 @@ All logic lives in `Sources/DogearKit`, with unit tests. The SwiftUI app in
 ## Cut a release
 
 1. Set the new version in `VERSION`.
-2. Commit, then tag: `git tag v1.0.1 && git push --tags`.
-3. The Release workflow runs the tests, builds the app, and attaches
-   `Dogear-v1.0.1.zip` to a GitHub release with generated notes.
+2. Merge the version commit to `main`.
+3. Create an annotated tag: `git tag -a v1.0.1 -m "Dogear v1.0.1"`.
+4. Push the new tag: `git push origin v1.0.1`.
+5. The Release workflow verifies the commit is on `main`, runs the tests,
+   builds the app, and attaches the ZIP and its SHA-256 checksum to GitHub.
+
+Never move or reuse a released version tag. Cut a new version instead.
 
 ## Screenshots
 

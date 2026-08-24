@@ -27,6 +27,6 @@ public struct MetadataService: Sendable {
         } else {
             metadata = try? await fetcher.fetch(fetched.finalURL, client: client)
         }
-        return (fetched.finalURL, metadata)
+        return (fetched.finalURL, metadata?.bounded())
     }
 }

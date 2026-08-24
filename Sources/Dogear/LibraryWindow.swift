@@ -52,7 +52,7 @@ struct LibraryWindow: View {
     @State private var selection: String =
         ProcessInfo.processInfo.environment["DOGEAR_DEMO_FOLDER"] ?? Library.unsorted
     @State private var query = ""
-    @State private var pasteFailed = false
+    @State private var pasteFailure: String?
     @State private var renameState: RenameState = .idle
     @State private var renameDraft = ""
     @State private var showingImport = false
@@ -68,6 +68,7 @@ struct LibraryWindow: View {
     @AppStorage("notesImportCursors") private var cursorsJSON = "{}"
     private let archiveID = "__archive__"
     private let favoritesID = "__favorites__"
+    private let waitingID = "__waiting__"
 
     var body: some View {
         NavigationSplitView {
@@ -79,9 +80,18 @@ struct LibraryWindow: View {
                     // re-add its own bookmark: that would un-archive and
                     // reorder silently. Only URLs new to the store count.
                     let existing = Set(model.store.library.bookmarks.map(\.url))
-                    let fresh = urls.filter { !existing.contains(URLCleaner.canonicalString($0)) }
+                    let fresh = urls.filter {
+                        $0.user != nil || $0.password != nil
+                            || !existing.contains(URLCleaner.canonicalString($0))
+                    }
                     guard !fresh.isEmpty else { return false }
-                    return model.capture(urls: fresh).total > 0
+                    let result = model.capture(urls: fresh)
+                    if result.rejectedCredentials > 0 {
+                        pasteFailure = result.total > 0
+                            ? "Saved valid links. Skipped links that include usernames or passwords."
+                            : "Remove the username or password from this link before saving it."
+                    }
+                    return result.total > 0
                 }
         }
         .searchable(text: $query, prompt: "Search bookmarks")
@@ -106,10 +116,13 @@ struct LibraryWindow: View {
                 run: runNotesImport)
         }
         .onChange(of: selectedFolderIDs) { _, ids in saveSelection(ids) }
-        .alert("No Link Found", isPresented: $pasteFailed) {
-            Button("OK") {}
+        .alert("Save Links", isPresented: Binding(
+            get: { pasteFailure != nil },
+            set: { if !$0 { pasteFailure = nil } }
+        )) {
+            Button("OK") { pasteFailure = nil }
         } message: {
-            Text("The clipboard holds no web link. Dogear saves http and https links.")
+            Text(pasteFailure ?? "")
         }
         .alert(renameAlertTitle, isPresented: Binding(
             get: { renameState != .idle },
@@ -207,6 +220,14 @@ struct LibraryWindow: View {
         return List(selection: $selection) {
             Section {
                 Label {
+                    Text("Waiting")
+                } icon: {
+                    Image(systemName: "clock")
+                        .foregroundStyle(.orange)
+                }
+                .badge(model.store.library.bookmarks.count - counts.archived)
+                .tag(waitingID)
+                Label {
                     Text("Favourites")
                 } icon: {
                     Image(systemName: "star.fill")
@@ -250,7 +271,8 @@ struct LibraryWindow: View {
             }
         }
         .contextMenu(forSelectionType: String.self) { folders in
-            if let folder = folders.first, folder != archiveID, folder != favoritesID {
+            if let folder = folders.first,
+               folder != archiveID, folder != favoritesID, folder != waitingID {
                 Button {
                     copyToPasteboard(Bookmark.markdownList(model.store.bookmarks(in: folder)))
                 } label: {
@@ -314,6 +336,7 @@ struct LibraryWindow: View {
             }
             .help("Sort")
             .accessibilityLabel("Sort")
+            .disabled(!supportsGrouping)
             Menu {
                 Button {
                     pasteFromClipboard()
@@ -359,11 +382,12 @@ struct LibraryWindow: View {
         if !trimmedQuery.isEmpty { return model.store.search(trimmedQuery) }
         if selection == archiveID { return model.store.archive() }
         if selection == favoritesID { return model.store.favorites() }
+        if selection == waitingID { return sorted(model.store.waiting()) }
         return sorted(model.store.bookmarks(in: selection))
     }
 
-    /// The sort menu applies to folder views. Favourites and Archive keep
-    /// their own recency orders: they are time lenses already.
+    /// Favourites and Archive keep their own recency orders: they are time
+    /// lenses already. Waiting and folders use the selected sort.
     private func sorted(_ items: [Bookmark]) -> [Bookmark] {
         switch sort {
         case .lastSaved:
@@ -375,11 +399,11 @@ struct LibraryWindow: View {
                 $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
             }
         case .site:
-            return items.sorted { hostName($0) < hostName($1) }
+            return items.sorted { siteName($0) < siteName($1) }
         }
     }
 
-    private var isFolderSelection: Bool {
+    private var supportsGrouping: Bool {
         selection != archiveID && selection != favoritesID && trimmedQuery.isEmpty
     }
 
@@ -398,6 +422,12 @@ struct LibraryWindow: View {
                 "Nothing archived yet",
                 systemImage: "checkmark.circle",
                 description: Text("Mark a bookmark done and it moves here.")
+            )
+        } else if bookmarks.isEmpty, selection == waitingID {
+            ContentUnavailableView(
+                "Nothing waiting",
+                systemImage: "checkmark.circle",
+                description: Text("New bookmarks appear here until you mark them done.")
             )
         } else if bookmarks.isEmpty, model.store.library.bookmarks.isEmpty {
             firstRunEmptyState
@@ -422,7 +452,7 @@ struct LibraryWindow: View {
     }
 
     private var listGrouping: BookmarkList.Grouping {
-        guard isFolderSelection else { return .none }
+        guard supportsGrouping else { return .none }
         switch sort {
         case .lastSaved: return .date
         case .site: return .site
@@ -460,7 +490,14 @@ struct LibraryWindow: View {
     /// The one capture path: same as the popover, fed from the clipboard.
     private func pasteFromClipboard() {
         let text = NSPasteboard.general.string(forType: .string) ?? ""
-        if model.capture(text: text).total == 0 { pasteFailed = true }
+        let result = model.capture(text: text)
+        if result.rejectedCredentials > 0 {
+            pasteFailure = result.total > 0
+                ? "Saved valid links. Skipped links that include usernames or passwords."
+                : "Remove the username or password from this link before saving it."
+        } else if result.total == 0 {
+            pasteFailure = "The clipboard holds no web link. Dogear saves http and https links."
+        }
     }
 
     private func startImport() {
@@ -558,12 +595,19 @@ struct LibraryWindow: View {
                 : "All \(found.count) links were already saved."
         } else {
             let result = model.capture(urls: fresh)
-            let alreadySaved = found.count - result.new
-            message = result.new == 1 ? "Imported 1 link." : "Imported \(result.new) links."
+            let alreadySaved = found.count - result.new - result.rejectedCredentials
+            message = result.new == 0
+                ? "No links imported."
+                : result.new == 1 ? "Imported 1 link." : "Imported \(result.new) links."
             if alreadySaved > 0 {
                 message += alreadySaved == 1
                     ? " 1 was already saved."
                     : " \(alreadySaved) were already saved."
+            }
+            if result.rejectedCredentials > 0 {
+                message += result.rejectedCredentials == 1
+                    ? " Skipped 1 link that includes a username or password."
+                    : " Skipped \(result.rejectedCredentials) links that include usernames or passwords."
             }
         }
         if failedFolders > 0 {
@@ -591,15 +635,23 @@ struct LibraryWindow: View {
         }
         let result = model.capture(urls: URLCleaner.allHTTPURLs(inHTML: html))
         if result.total == 0 {
-            importFileResult = "No links found in that file."
+            importFileResult = result.rejectedCredentials > 0
+                ? "Dogear skipped links that include usernames or passwords."
+                : "No links found in that file."
         } else if result.new == 0 {
             importFileResult = result.total == 1
                 ? "This link was already saved."
                 : "All \(result.total) were already saved."
+            if result.rejectedCredentials > 0 {
+                importFileResult? += " Some credential-bearing links were skipped."
+            }
         } else {
             importFileResult = result.new == 1
                 ? "Imported 1 link."
                 : "Imported \(result.new) links."
+            if result.rejectedCredentials > 0 {
+                importFileResult? += " Some credential-bearing links were skipped."
+            }
         }
     }
 
@@ -653,8 +705,12 @@ func openBookmarkURL(_ string: String) {
     NSWorkspace.shared.open(url)
 }
 
-func hostName(_ bookmark: Bookmark) -> String {
-    URL(string: bookmark.url)?.host ?? ""
+func displayHost(_ bookmark: Bookmark) -> String {
+    URL(string: bookmark.url).map(URLCleaner.displayHost) ?? "Other"
+}
+
+func siteName(_ bookmark: Bookmark) -> String {
+    URL(string: bookmark.url).map(URLCleaner.siteName) ?? "Other"
 }
 
 /// A markdown export of the whole library: one `## <Folder>` section per
@@ -1082,13 +1138,17 @@ struct BookmarkCard: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1, reservesSpace: true)
                 HStack(spacing: 6) {
-                    // The folder speaks through its symbol and color; the word,
-                    // the domain, and the raw link are noise at card size.
+                    // Keep the folder compact, but show the destination host:
+                    // fetched titles, authors, and images are not identity.
                     Image(systemName: folderSymbol(for: bookmark.folder))
                         .font(.caption2)
                         .foregroundStyle(folderColor(for: bookmark.folder))
                         .help(bookmark.folder)
                         .accessibilityLabel(bookmark.folder)
+                    Text(displayHost(bookmark))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                     if let author = bookmark.author {
                         Text(author).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                     }
@@ -1103,6 +1163,7 @@ struct BookmarkCard: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.pressable(scale: 0.98))
+        .accessibilityLabel("\(bookmark.title), \(displayHost(bookmark))")
         .animation(Motion.hover, value: isHovering)
         .onHover { isHovering = $0 }
         .pointerStyle(.link)
@@ -1201,7 +1262,7 @@ struct BookmarkList: View {
         case .none:
             return [(nil, bookmarks)]
         case .site:
-            let grouped = Dictionary(grouping: bookmarks, by: hostName)
+            let grouped = Dictionary(grouping: bookmarks, by: siteName)
             return grouped.keys.sorted().map { ($0.isEmpty ? "Other" : $0, grouped[$0] ?? []) }
         case .date:
             return dateGroups
@@ -1248,6 +1309,10 @@ struct BookmarkListRow: View {
             HStack(spacing: 10) {
                 badge
                 Text(bookmark.title).lineLimit(1)
+                Text(displayHost(bookmark))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
                 if let note = bookmark.note, !note.isEmpty {
                     Text(note).font(.caption).foregroundStyle(.tertiary).lineLimit(1)
                 }
@@ -1266,6 +1331,7 @@ struct BookmarkListRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.pressable(scale: 0.99))
+        .accessibilityLabel("\(bookmark.title), \(displayHost(bookmark))")
         .pointerStyle(.link)
         .onHover { isHovering = $0 }
         .bookmarkActions(bookmark)
