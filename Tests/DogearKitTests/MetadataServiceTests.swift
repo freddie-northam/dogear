@@ -59,6 +59,17 @@ import Testing
     #expect(result.metadata == nil)
 }
 
+@Test func boundsAndCleansRemoteMetadata() async throws {
+    let pageURL = URL(string: "https://example.com/large")!
+    let unsafeTitle = String(repeating: "a", count: 600) + "\u{202E}hidden"
+    let html = Data("<meta property=\"og:title\" content=\"\(unsafeTitle)\">".utf8)
+    let result = await MetadataService(client: StubHTTPClient(responses: [pageURL: html])).fetch(for: pageURL)
+
+    let title = try #require(result.metadata?.title)
+    #expect(title.count == 512)
+    #expect(!title.contains("\u{202E}"))
+}
+
 @Test func genericFetcherParsesFixture() async throws {
     let fixtureURL = Bundle.module.url(forResource: "generic-page", withExtension: "html", subdirectory: "Fixtures")!
     let pageURL = URL(string: "https://example.com/pasta")!

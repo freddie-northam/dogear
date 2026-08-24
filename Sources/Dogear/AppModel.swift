@@ -49,7 +49,7 @@ final class AppModel: ObservableObject {
         store.onChange = { [weak self] in self?.revision += 1 }
         AppModel.shared = self
         store.onWriteFailure = { [weak self] error in
-            self?.storageError = "Dogear could not save your bookmarks: \(error.localizedDescription)"
+            self?.storageError = error.localizedDescription
         }
     }
 
@@ -137,10 +137,7 @@ final class AppModel: ObservableObject {
     func capture(urls: [URL]) -> CaptureResult {
         // The one capture gate: every caller (text, drop, import) inherits it.
         // A dropped file:// URL must never become a bookmark or reach enrichment.
-        let urls = urls.filter {
-            let scheme = $0.scheme?.lowercased()
-            return scheme == "http" || scheme == "https"
-        }
+        let urls = urls.filter(URLCleaner.isCapturable)
         let (new, touched) = store.add(urls: urls)
         let ids = new.map(\.id)
         if !ids.isEmpty {

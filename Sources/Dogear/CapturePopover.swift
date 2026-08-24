@@ -193,9 +193,12 @@ struct CapturePopover: View {
     }
 
     private func save() {
-        let result = model.capture(text: text)
+        let urls = URLCleaner.allHTTPURLs(in: text)
+        let result = model.capture(urls: urls)
         if result.total == 0 {
-            hint = "That is not a web link. Dogear saves http and https links."
+            hint = urls.contains { $0.user != nil || $0.password != nil }
+                ? "Remove the username or password from this link before saving it."
+                : "That is not a web link. Dogear saves http and https links."
             return
         }
         clipboard.consume()

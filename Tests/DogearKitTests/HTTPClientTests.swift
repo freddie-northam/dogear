@@ -58,12 +58,27 @@ private func stubbedClient() -> URLSessionHTTPClient {
 @Test func realClientThrowsTooLargePastTheLimit() async throws {
     let client = stubbedClient()
     await #expect(throws: HTTPClientError.tooLarge) {
-        _ = try await client.data(from: URL(string: "https://stub.example/x")!, limit: 1_000)
+        _ = try await client.data(from: URL(string: "https://1.1.1.1/x")!, limit: 1_000)
     }
 }
 
 @Test func realClientReturnsTheWholeBodyUnderTheLimit() async throws {
     let client = stubbedClient()
-    let data = try await client.data(from: URL(string: "https://stub.example/x")!, limit: 10_000)
+    let data = try await client.data(from: URL(string: "https://1.1.1.1/x")!, limit: 10_000)
     #expect(data.count == 2_000)
+}
+
+@Test(arguments: [
+    "http://127.0.0.1/private",
+    "http://10.0.0.1/private",
+    "http://169.254.1.1/private",
+    "http://192.168.1.1/private",
+    "http://[::1]/private",
+    "http://[fd00::1]/private",
+])
+func blocksPrivateNetworkDestinations(url: String) async {
+    let client = stubbedClient()
+    await #expect(throws: HTTPClientError.unsafeDestination) {
+        _ = try await client.data(from: URL(string: url)!, limit: 10_000)
+    }
 }

@@ -38,6 +38,28 @@ func rejectsNonHTTPSchemes(text: String) {
     #expect(URLCleaner.firstHTTPURL(in: text) == nil)
 }
 
+@Test func rejectsCredentialBearingURLs() {
+    let url = URL(string: "https://user:secret@example.com/private")!
+    #expect(!URLCleaner.isCapturable(url))
+}
+
+@Test func rejectsPathologicalURLLengths() {
+    let url = URL(string: "https://example.com/" + String(repeating: "a", count: 9_000))!
+    #expect(!URLCleaner.isCapturable(url))
+}
+
+@Test(arguments: [
+    ("https://github.com/apple/swift", "GitHub"),
+    ("https://gist.github.com/example/1", "GitHub"),
+    ("https://x.com/example/status/1", "X"),
+    ("https://www.tiktok.com/@example/video/1", "TikTok"),
+    ("https://www.example.com/article", "example.com"),
+    ("https://github.com.evil.example/phish", "github.com.evil.example"),
+])
+func namesSiteGroups(url: String, expected: String) {
+    #expect(URLCleaner.siteName(for: URL(string: url)!) == expected)
+}
+
 @Test func canonicalStripsTrackingParams() {
     let url = URL(string: "https://a.com/p?utm_source=tw&id=5&utm_campaign=x&fbclid=z&igsh=q&si=r")!
     #expect(URLCleaner.canonicalString(url) == "https://a.com/p?id=5")

@@ -38,6 +38,14 @@ import Testing
     #expect(store.library.bookmarks.isEmpty)
 }
 
+@Test func addRejectsCredentialBearingURLs() throws {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    let result = store.add(url: URL(string: "https://user:secret@example.com/private")!)
+    #expect(result == nil)
+    #expect(store.library.bookmarks.isEmpty)
+}
+
 @Test func updateRefusesToStoreANonHTTPURL() throws {
     let temp = TempDirectory()
     let store = try BookmarkStore(directory: temp.url)
@@ -69,6 +77,18 @@ import Testing
     store.markUndone(id: bookmark.id)
     #expect(store.bookmarks(in: Library.unsorted).map(\.id) == [bookmark.id])
     #expect(store.archive().isEmpty)
+}
+
+@Test func waitingReturnsEveryActiveBookmarkAcrossFolders() throws {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    let (recipe, _) = store.add(url: URL(string: "https://a.com/recipe")!)!
+    store.refile(id: recipe.id, to: "Recipes")
+    let (unsorted, _) = store.add(url: URL(string: "https://a.com/read")!)!
+    let (done, _) = store.add(url: URL(string: "https://a.com/done")!)!
+    store.markDone(id: done.id)
+
+    #expect(store.waiting().map(\.id) == [unsorted.id, recipe.id])
 }
 
 @Test func refileSetsManuallyFiled() throws {
