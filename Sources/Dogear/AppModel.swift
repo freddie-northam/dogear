@@ -43,6 +43,57 @@ final class AppModel: ObservableObject {
 
     /// Saves every http(s) link in the text. Deduplication applies per URL,
     /// so a link that appears twice in one paste counts once.
+    // MARK: Forgiveness
+
+    /// Every destructive action registers its inverse here, so Undo works the
+    /// same from a card, a list row, the sidebar, and the popover. Undo
+    /// closures are @Sendable and run on the main thread; the explicit hop
+    /// is what lets them touch main-actor state honestly. A nil manager (no
+    /// window) still performs the action, just without undo.
+
+    func deleteBookmark(_ bookmark: Bookmark, undoManager: UndoManager?) {
+        guard let removed = store.remove(id: bookmark.id) else { return }
+        // The cached thumbnail stays while undo is possible so a restored
+        // bookmark keeps its image; the cache tolerates an orphan if the
+        // delete is never undone.
+        if undoManager == nil { thumbnails.remove(for: bookmark.id) }
+        register(undoManager, name: "Delete Bookmark") { model in
+            model.store.restore(removed.bookmark, at: removed.index)
+            model.register(undoManager, name: "Delete Bookmark") { model in
+                model.deleteBookmark(bookmark, undoManager: undoManager)
+            }
+        }
+    }
+
+    func markDone(_ id: UUID, undoManager: UndoManager?) {
+        store.markDone(id: id)
+        register(undoManager, name: "Mark Done") { model in
+            model.store.markUndone(id: id)
+            model.register(undoManager, name: "Mark Done") { model in
+                model.markDone(id, undoManager: undoManager)
+            }
+        }
+    }
+
+    func deleteFolder(_ name: String, undoManager: UndoManager?) {
+        guard let removed = store.removeFolder(name) else { return }
+        register(undoManager, name: "Delete Folder") { model in
+            model.store.restoreFolder(name, at: removed.index, bookmarkIDs: removed.bookmarkIDs)
+            model.register(undoManager, name: "Delete Folder") { model in
+                model.deleteFolder(name, undoManager: undoManager)
+            }
+        }
+    }
+
+    private func register(_ undoManager: UndoManager?, name: String,
+                          _ action: @escaping @MainActor (AppModel) -> Void) {
+        guard let undoManager else { return }
+        undoManager.registerUndo(withTarget: self) { model in
+            MainActor.assumeIsolated { action(model) }
+        }
+        undoManager.setActionName(name)
+    }
+
     func capture(text: String) -> CaptureResult {
         capture(urls: URLCleaner.allHTTPURLs(in: text))
     }
