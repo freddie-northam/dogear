@@ -47,7 +47,10 @@ struct LibraryWindow: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.undoManager) private var undoManager
     @State private var folderPendingDeletion: String?
-    @State private var selection: String = Library.unsorted
+    // DOGEAR_DEMO_FOLDER picks the folder a demo launch opens on, so README
+    // screenshots are reproducible. Real launches open on Unsorted, the inbox.
+    @State private var selection: String =
+        ProcessInfo.processInfo.environment["DOGEAR_DEMO_FOLDER"] ?? Library.unsorted
     @State private var query = ""
     @State private var pasteFailed = false
     @State private var renameState: RenameState = .idle

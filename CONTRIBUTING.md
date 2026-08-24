@@ -31,9 +31,10 @@ All logic lives in `Sources/DogearKit`, with unit tests. The SwiftUI app in
 
 ## Screenshots
 
-`DOGEAR_DATA_DIR=/path/to/demo Scripts/make-app.sh` then launch the app with
-that variable set to run it against a demo library. The README screenshots
-come from a demo library, never from a real one.
+Launch the app with `DOGEAR_DATA_DIR=/path/to/demo` to run it against a
+demo library, and `DOGEAR_DEMO_FOLDER=Recipes` to open the library on a
+folder. The README screenshots come from a demo library, never from a real
+one. Capture windows with `screencapture -l <window id>`.
 
 ## Live canaries
 
