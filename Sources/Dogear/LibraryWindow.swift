@@ -1016,6 +1016,10 @@ private struct QRPopover: View {
 
 struct BookmarkGrid: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    // Read here so a sort change animates the reorder. Folder clicks and
+    // search keystrokes replace the whole list and must stay hard cuts, so
+    // the grid does not key its animation on the bookmark ids.
+    @AppStorage("librarySort") private var sortRaw = LibrarySort.lastSaved.rawValue
     let bookmarks: [Bookmark]
 
     private let columns = [GridItem(.adaptive(minimum: 220), spacing: 16)]
@@ -1027,14 +1031,18 @@ struct BookmarkGrid: View {
                     BookmarkCard(bookmark: bookmark)
                         // A card that is marked done or deleted leaves toward the
                         // sidebar, where Archive lives, so the motion says where
-                        // it went. Reduced motion keeps the fade only.
+                        // it went. A card that arrives grows into place; it did
+                        // not come from the sidebar. Reduced motion keeps the
+                        // fade only.
                         .transition(reduceMotion
                             ? .opacity
-                            : .opacity.combined(with: .move(edge: .leading)))
+                            : .asymmetric(
+                                insertion: .opacity.combined(with: .scale(scale: 0.96)),
+                                removal: .opacity.combined(with: .move(edge: .leading))))
                 }
             }
             .padding(16)
-            .animation(.smooth(duration: 0.25), value: bookmarks.map(\.id))
+            .animation(.smooth(duration: 0.25), value: sortRaw)
         }
     }
 }
