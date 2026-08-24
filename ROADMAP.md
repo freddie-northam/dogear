@@ -36,6 +36,9 @@ next, and what the team chose to leave out.
   Save to Dogear.
 - Browser bookmarks import and Markdown export: import a bookmarks file
   from a browser, and export the library to a Markdown file.
+- Speed and safety of the library (v1.0.1): a click and a keystroke no
+  longer wait for the disk, search is faster, a save that fails is tried
+  again, and a page cannot give a bookmark a title of any length.
 
 ## Next up
 
