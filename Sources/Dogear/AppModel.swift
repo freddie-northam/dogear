@@ -63,8 +63,12 @@ final class AppModel: ObservableObject {
     /// is what lets them touch main-actor state honestly. A nil manager (no
     /// window) still performs the action, just without undo.
 
+    // Deletion, done, and their undo are the only library changes that
+    // animate. Capture, filing, and enrichment stay hard cuts: they arrive
+    // in batches and the user did not point at a card.
+
     func deleteBookmark(_ bookmark: Bookmark, undoManager: UndoManager?) {
-        guard let removed = store.remove(id: bookmark.id) else { return }
+        guard let removed = withAnimation(.smooth(duration: 0.25), { store.remove(id: bookmark.id) }) else { return }
         // The cached thumbnail stays while undo is possible so a restored
         // bookmark keeps its image; the cache tolerates an orphan if the
         // delete is never undone.
@@ -78,7 +82,7 @@ final class AppModel: ObservableObject {
     }
 
     func markDone(_ id: UUID, undoManager: UndoManager?) {
-        store.markDone(id: id)
+        withAnimation(.smooth(duration: 0.25)) { store.markDone(id: id) }
         register(undoManager, name: "Mark Done") { model in
             model.store.markUndone(id: id)
             model.register(undoManager, name: "Mark Done") { model in
@@ -88,7 +92,7 @@ final class AppModel: ObservableObject {
     }
 
     func deleteFolder(_ name: String, undoManager: UndoManager?) {
-        guard let removed = store.removeFolder(name) else { return }
+        guard let removed = withAnimation(.smooth(duration: 0.25), { store.removeFolder(name) }) else { return }
         register(undoManager, name: "Delete Folder") { model in
             model.store.restoreFolder(name, at: removed.index, bookmarkIDs: removed.bookmarkIDs)
             model.register(undoManager, name: "Delete Folder") { model in
@@ -101,7 +105,7 @@ final class AppModel: ObservableObject {
                           _ action: @escaping @MainActor (AppModel) -> Void) {
         guard let undoManager else { return }
         undoManager.registerUndo(withTarget: self) { model in
-            MainActor.assumeIsolated { action(model) }
+            MainActor.assumeIsolated { withAnimation(.smooth(duration: 0.25)) { action(model) } }
         }
         undoManager.setActionName(name)
     }
