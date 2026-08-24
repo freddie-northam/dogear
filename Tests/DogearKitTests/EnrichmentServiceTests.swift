@@ -1,6 +1,22 @@
+import AppKit
+import CoreGraphics
 import Foundation
+import ImageIO
 import Testing
+import UniformTypeIdentifiers
 @testable import DogearKit
+
+private func makePNG(width: Int = 4, height: Int = 4) -> Data {
+    let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8,
+                            bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
+                            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+    let image = context.makeImage()!
+    let data = NSMutableData()
+    let dest = CGImageDestinationCreateWithData(data, UTType.png.identifier as CFString, 1, nil)!
+    CGImageDestinationAddImage(dest, image, nil)
+    CGImageDestinationFinalize(dest)
+    return data as Data
+}
 
 @MainActor
 private func makeEnvironment(client: StubHTTPClient) throws -> (BookmarkStore, EnrichmentService) {
@@ -78,10 +94,10 @@ private func makeEnvironment(client: StubHTTPClient) throws -> (BookmarkStore, E
 private final class InterceptingHTTPClient: HTTPClient, @unchecked Sendable {
     let inner: StubHTTPClient
     let triggerOnCall: Int
-    let onTrigger: @MainActor () -> Void
+    let onTrigger: @MainActor () async -> Void
     private var count = 0
 
-    init(inner: StubHTTPClient, triggerOnCall: Int = 1, onTrigger: @escaping @MainActor () -> Void) {
+    init(inner: StubHTTPClient, triggerOnCall: Int = 1, onTrigger: @escaping @MainActor () async -> Void) {
         self.inner = inner
         self.triggerOnCall = triggerOnCall
         self.onTrigger = onTrigger
@@ -185,7 +201,43 @@ private final class InterceptingHTTPClient: HTTPClient, @unchecked Sendable {
     #expect(!after.manuallyFiled)
 }
 
-@Test func redirectCollisionCollapsesDuplicate() async throws {
+// Two short links that both resolve to the same target, enriched concurrently: A's
+// collision check must not run before B has had a chance to land its own resolved URL,
+// or both survive as duplicates. Trigger during A's thumbnail fetch (its second
+// data(from:) call, since generic-page.html has an og:image) so B's full enrich(id:)
+// completes while A is still mid-flight, before A reaches its own write.
+@MainActor
+@Test func concurrentRedirectCollisionKeepsOnlyOneSurvivor() async throws {
+    let shortA = URL(string: "https://short.example/a")!
+    let shortB = URL(string: "https://short.example/b")!
+    let target = URL(string: "https://target.example/page")!
+    let html = try Data(contentsOf: Bundle.module.url(forResource: "generic-page", withExtension: "html", subdirectory: "Fixtures")!)
+    let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let store = try BookmarkStore(directory: dir)
+    let (bookmarkA, _) = store.add(url: shortA)!
+    let (bookmarkB, _) = store.add(url: shortB)!
+
+    var stub = StubHTTPClient(responses: [target: html])
+    stub.redirects = [shortA: target, shortB: target]
+
+    var service: EnrichmentService!
+    let client = InterceptingHTTPClient(inner: stub, triggerOnCall: 2) {
+        await service.enrich(id: bookmarkB.id)
+    }
+    service = EnrichmentService(
+        store: store,
+        metadata: MetadataService(client: client),
+        categorizer: KeywordCategorizer(),
+        thumbnails: try ThumbnailCache(directory: dir.appendingPathComponent("thumbnails")),
+        client: client
+    )
+
+    await service.enrich(id: bookmarkA.id)
+
+    #expect(store.library.bookmarks.filter { $0.url == "https://target.example/page" }.count == 1)
+}
+
+@Test func redirectCollisionMergesIntoTheSurvivor() async throws {
     let short = URL(string: "https://vm.tiktok.com/SHORT/")!
     let full = URL(string: "https://www.tiktok.com/@a/video/123")!
     let oembed = try Data(contentsOf: Bundle.module.url(forResource: "tiktok-oembed", withExtension: "json", subdirectory: "Fixtures")!)
@@ -193,14 +245,57 @@ private final class InterceptingHTTPClient: HTTPClient, @unchecked Sendable {
     client.redirects = [short: full]
     let (store, service) = try await makeEnvironment(client: client)
 
-    let (existing, _) = store.add(url: full)!
-    await service.enrich(id: existing.id)
-    let (viaShort, isNew) = store.add(url: short)!
-    #expect(isNew) // the short link does not match before resolution
-    await service.enrich(id: viaShort.id)
+    // S: the survivor, no note, not favourited.
+    let (survivor, _) = store.add(url: full)!
 
-    #expect(store.library.bookmarks.count == 1)
-    #expect(store.library.bookmarks[0].id == existing.id)
+    // D: the duplicate, with a note, a star, and a manual folder to preserve.
+    let (duplicate, _) = store.add(url: short)!
+    var d = store.library.bookmarks.first { $0.id == duplicate.id }!
+    d.note = "keep me"
+    store.update(d)
+    store.toggleFavorite(id: duplicate.id)
+    store.refile(id: duplicate.id, to: "Recipes")
+
+    await service.enrich(id: duplicate.id)
+
+    let matches = store.library.bookmarks.filter { $0.url == URLCleaner.canonicalString(full) }
+    #expect(matches.count == 1)
+    let merged = matches[0]
+    #expect(merged.id == survivor.id)
+    #expect(merged.note == "keep me")
+    #expect(merged.favoritedAt != nil)
+    #expect(merged.folder == "Recipes")
+    #expect(merged.manuallyFiled)
+    #expect(merged.createdAt == min(survivor.createdAt, duplicate.createdAt))
+    #expect(merged.doneAt == nil)
+}
+
+@Test func redirectCollisionKeepsSurvivorFieldsWhenPresent() async throws {
+    let short = URL(string: "https://vm.tiktok.com/SHORT/")!
+    let full = URL(string: "https://www.tiktok.com/@a/video/123")!
+    let oembed = try Data(contentsOf: Bundle.module.url(forResource: "tiktok-oembed", withExtension: "json", subdirectory: "Fixtures")!)
+    var client = StubHTTPClient(responses: [TikTokFetcher.oembedURL(for: full): oembed])
+    client.redirects = [short: full]
+    let (store, service) = try await makeEnvironment(client: client)
+
+    let (survivor, _) = store.add(url: full)!
+    var s = store.library.bookmarks.first { $0.id == survivor.id }!
+    s.note = "survivor's note"
+    store.update(s)
+    store.toggleFavorite(id: survivor.id)
+    let survivorFavoritedAt = store.library.bookmarks.first { $0.id == survivor.id }!.favoritedAt
+
+    let (duplicate, _) = store.add(url: short)!
+    var d = store.library.bookmarks.first { $0.id == duplicate.id }!
+    d.note = "duplicate's note"
+    store.update(d)
+    store.toggleFavorite(id: duplicate.id)
+
+    await service.enrich(id: duplicate.id)
+
+    let merged = store.library.bookmarks.first { $0.id == survivor.id }!
+    #expect(merged.note == "survivor's note")
+    #expect(merged.favoritedAt == survivorFavoritedAt)
 }
 
 @Test func redirectCollisionBumpsTheSurvivorToTheTop() async throws {
@@ -211,16 +306,31 @@ private final class InterceptingHTTPClient: HTTPClient, @unchecked Sendable {
     client.redirects = [short: full]
     let (store, service) = try await makeEnvironment(client: client)
 
-    let (existing, _) = store.add(url: full)!
-    await service.enrich(id: existing.id)
-    // Enrichment filed the survivor by category, so compare inside that folder.
-    let folder = store.library.bookmarks.first { $0.id == existing.id }!.folder
+    let (survivor, _) = store.add(url: full)!
     let (other, _) = store.add(url: URL(string: "https://example.com/other")!)!
-    store.refile(id: other.id, to: folder)
-    #expect(store.bookmarks(in: folder).map(\.id) == [other.id, existing.id])
+    #expect(store.library.bookmarks.map(\.id) == [other.id, survivor.id])
 
-    let (viaShort, _) = store.add(url: short)!
-    await service.enrich(id: viaShort.id)
+    let (duplicate, _) = store.add(url: short)!
+    #expect(store.library.bookmarks[0].id == duplicate.id)
 
-    #expect(store.bookmarks(in: folder).map(\.id) == [existing.id, other.id])
+    await service.enrich(id: duplicate.id)
+
+    #expect(store.library.bookmarks[0].id == survivor.id)
+}
+
+@Test func redirectCollisionRemovesTheDuplicateThumbnail() async throws {
+    let short = URL(string: "https://vm.tiktok.com/SHORT/")!
+    let full = URL(string: "https://www.tiktok.com/@a/video/123")!
+    let oembed = try Data(contentsOf: Bundle.module.url(forResource: "tiktok-oembed", withExtension: "json", subdirectory: "Fixtures")!)
+    var client = StubHTTPClient(responses: [TikTokFetcher.oembedURL(for: full): oembed])
+    client.redirects = [short: full]
+    let (store, service) = try await makeEnvironment(client: client)
+
+    _ = store.add(url: full)!
+    let (duplicate, _) = store.add(url: short)!
+    #expect(await service.thumbnails.store(makePNG(), for: duplicate.id))
+
+    await service.enrich(id: duplicate.id)
+
+    #expect(await !service.thumbnails.exists(for: duplicate.id))
 }
