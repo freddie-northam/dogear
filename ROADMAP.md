@@ -17,6 +17,7 @@ next, and what the team chose to leave out.
 - Drag in/out: drag a link into Dogear, and drag a bookmark out to another app.
 - QR code on cards: show a QR code for a bookmark, so you can open the link
   on your phone.
+- Folder reorder: drag folders into any order. Unsorted stays last.
 - Dock icon: on by default, so the app stays reachable when a full menu bar
   hides its item. A click opens the library. A setting turns it off.
 - Import from Apple Notes: read your notes locally and save every link found.
@@ -37,6 +38,10 @@ next, and what the team chose to leave out.
 Nothing is scheduled. New ideas start as deferred decisions below.
 
 ## Deferred by decision
+
+- Nested folders and sidebar dividers: one flat level of folders keeps
+  filing simple and the categorizer unambiguous. Revisit if a library
+  grows past about 15 folders.
 
 - Notarized releases: gated on an Apple Developer ID; releases are ad-hoc
   signed today.
