@@ -12,6 +12,10 @@ APP=build/Dogear.app
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp .build/release/Dogear "$APP/Contents/MacOS/Dogear"
+# Strip local symbols: the release binary shipped 6,000 symbols nobody
+# loads, which doubled its size. Crash reports still symbolicate through
+# the dSYM that swift build leaves beside the binary.
+strip -x "$APP/Contents/MacOS/Dogear"
 cp build/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
 VERSION="$(tr -d '[:space:]' < VERSION)"
