@@ -1,0 +1,60 @@
+import Foundation
+
+/// Writes the library as a Netscape bookmark file, the format every browser
+/// imports. Dogear can already read one; this is the door back out, so a
+/// library is never trapped in the app.
+public enum BookmarksHTML {
+    /// The whole library, one section per folder in the user's own order,
+    /// with the archive last. Notes travel as `DD` lines, which browsers keep
+    /// as the bookmark description.
+    public static func export(_ library: Library) -> String {
+        var lines = [
+            "<!DOCTYPE NETSCAPE-Bookmark-file-1>",
+            "<!-- This file was written by Dogear. -->",
+            "<META HTTP-EQUIV=\"Content-Type\" CONTENT=\"text/html; charset=UTF-8\">",
+            "<TITLE>Bookmarks</TITLE>",
+            "<H1>Bookmarks</H1>",
+            "<DL><p>",
+        ]
+        let archived = library.bookmarks.filter(\.isDone)
+        for folder in library.folders {
+            let items = library.bookmarks.filter { $0.folder == folder && !$0.isDone }
+            guard !items.isEmpty else { continue }
+            lines.append(contentsOf: section(named: folder, items: items))
+        }
+        if !archived.isEmpty {
+            lines.append(contentsOf: section(named: "Archive", items: archived))
+        }
+        lines.append("</DL><p>")
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    static func section(named name: String, items: [Bookmark]) -> [String] {
+        var lines = ["    <DT><H3>\(escaped(name))</H3>", "    <DL><p>"]
+        for bookmark in items {
+            let addDate = String(Int(bookmark.createdAt.timeIntervalSince1970))
+            lines.append("        <DT><A HREF=\"\(escaped(bookmark.url))\" ADD_DATE=\"\(addDate)\">"
+                + "\(escaped(bookmark.title))</A>")
+            if let note = bookmark.note, !note.isEmpty {
+                lines.append("        <DD>\(escaped(flattened(note)))")
+            }
+        }
+        lines.append("    </DL><p>")
+        return lines
+    }
+
+    /// A note runs to several lines; a `DD` entry is one line, so the breaks
+    /// collapse to spaces rather than splitting the description in two.
+    static func flattened(_ text: String) -> String {
+        text.components(separatedBy: .newlines.union(.controlCharacters))
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+    }
+
+    static func escaped(_ text: String) -> String {
+        text.replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+    }
+}

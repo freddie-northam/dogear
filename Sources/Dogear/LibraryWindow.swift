@@ -332,9 +332,14 @@ struct LibraryWindow: View {
                 }
                 Divider()
                 Button {
-                    exportLibrary()
+                    exportMarkdownFile()
                 } label: {
-                    Label("Export Library...", systemImage: "square.and.arrow.up")
+                    Label("Export as Markdown...", systemImage: "square.and.arrow.up")
+                }
+                Button {
+                    exportBookmarksFile()
+                } label: {
+                    Label("Export Bookmarks File...", systemImage: "square.and.arrow.up.on.square")
                 }
             } label: {
                 Image(systemName: "plus")
@@ -603,14 +608,26 @@ struct LibraryWindow: View {
         }
     }
 
-    private func exportLibrary() {
+    private func exportMarkdownFile() {
+        export(named: "Dogear.md",
+               type: UTType(filenameExtension: "md") ?? .plainText,
+               contents: exportMarkdown(model.store.library))
+    }
+
+    /// The door back out to a browser: every browser reads this format, and
+    /// so does Dogear's own Import Bookmarks File.
+    private func exportBookmarksFile() {
+        export(named: "Dogear.html", type: .html,
+               contents: BookmarksHTML.export(model.store.library))
+    }
+
+    private func export(named name: String, type: UTType, contents: String) {
         let panel = NSSavePanel()
-        panel.nameFieldStringValue = "Dogear.md"
-        panel.allowedContentTypes = [UTType(filenameExtension: "md") ?? .plainText]
+        panel.nameFieldStringValue = name
+        panel.allowedContentTypes = [type]
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        let markdown = exportMarkdown(model.store.library)
         do {
-            try markdown.write(to: url, atomically: true, encoding: String.Encoding.utf8)
+            try contents.write(to: url, atomically: true, encoding: String.Encoding.utf8)
         } catch {
             model.storageError = "Dogear could not export your bookmarks: \(error.localizedDescription)"
         }
