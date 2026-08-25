@@ -280,7 +280,7 @@ import Testing
     #expect(store.pick(excluding: only.id)?.id == only.id)
 }
 
-@Test func pickDrawsOnlyFromTheTenOldest() throws {
+@Test func pickWorksThroughTheOldestBookmarksWithoutRepeating() throws {
     let temp = TempDirectory()
     let store = try BookmarkStore(directory: temp.url)
     var idsOldestFirst: [UUID] = []
@@ -299,14 +299,16 @@ import Testing
         store.update(dated)
         idsOldestFirst.append(created.id)
     }
-    let tenOldest = Set(idsOldestFirst.prefix(10))
-    var sampled = Set<UUID>()
-    for _ in 0..<50 {
+    // Each showing is recorded, so the row moves on to the next oldest save
+    // rather than drawing the same one again.
+    var seen: [UUID] = []
+    for _ in 0..<10 {
         let picked = try #require(store.pick())
-        #expect(tenOldest.contains(picked.id))
-        sampled.insert(picked.id)
+        store.markShown(id: picked.id)
+        seen.append(picked.id)
     }
-    #expect(sampled.count >= 2)
+    #expect(seen == Array(idsOldestFirst.prefix(10)))
+    #expect(Set(seen).count == 10)
 }
 
 @Test func recoversFromCorruptStoreUsingBackup() throws {
@@ -591,4 +593,58 @@ private func storeSeeded(folders: [String]) throws -> BookmarkStore {
     let store = try BookmarkStore(directory: temp.url)
     #expect(store.removeFolder(Library.unsorted) == nil)
     #expect(store.removeFolder("Nope") == nil)
+}
+
+// MARK: Pick memory
+
+@Test func pickPrefersABookmarkTheRowHasNeverShown() throws {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    let older = store.add(url: URL(string: "https://a.com/older")!)!.bookmark
+    let newer = store.add(url: URL(string: "https://a.com/newer")!)!.bookmark
+    store.markShown(id: older.id)
+    // The older bookmark would win on age alone; having been shown puts it second.
+    #expect(store.pick()?.id == newer.id)
+}
+
+@Test func pickReturnsToTheBookmarkShownLongestAgoOnceAllHaveBeenSeen() throws {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    let first = store.add(url: URL(string: "https://a.com/first")!)!.bookmark
+    let second = store.add(url: URL(string: "https://a.com/second")!)!.bookmark
+    store.markShown(id: first.id)
+    store.markShown(id: second.id)
+    #expect(store.pick()?.id == first.id)
+}
+
+@Test func markShownPersistsAcrossReload() throws {
+    let temp = TempDirectory()
+    let dir = temp.url
+    let store = try BookmarkStore(directory: dir)
+    let shown = store.add(url: URL(string: "https://a.com/shown")!)!.bookmark
+    store.markShown(id: shown.id)
+    let reloaded = try BookmarkStore(directory: dir)
+    #expect(reloaded.library.bookmarks.first { $0.id == shown.id }?.lastShownAt != nil)
+}
+
+@Test func markShownIgnoresAnUnknownID() throws {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    store.add(url: URL(string: "https://a.com/a")!)
+    store.markShown(id: UUID())
+    #expect(store.library.bookmarks.allSatisfy { $0.lastShownAt == nil })
+}
+
+@Test func aLibrarySavedBeforeLastShownAtStillLoads() throws {
+    let temp = TempDirectory()
+    let dir = temp.url
+    let older = """
+        {"folders":["Recipes","Unsorted"],"schemaVersion":2,"bookmarks":[
+        {"id":"\(UUID().uuidString)","url":"https://a.com/p","title":"Pasta","folder":"Recipes",
+        "source":"web","createdAt":0,"hasThumbnail":false,"manuallyFiled":false}]}
+        """
+    try older.write(to: dir.appendingPathComponent("library.json"), atomically: true, encoding: .utf8)
+    let store = try BookmarkStore(directory: dir)
+    #expect(store.library.bookmarks.count == 1)
+    #expect(store.library.bookmarks[0].lastShownAt == nil)
 }

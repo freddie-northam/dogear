@@ -19,10 +19,14 @@ public struct Bookmark: Codable, Identifiable, Equatable, Sendable {
     // Optional like doneAt: synthesized Codable decodes a missing key as nil,
     // so libraries written before this field load unchanged.
     public var favoritedAt: Date?
+    /// When the pick row last showed this bookmark. Optional for the same
+    /// reason as favoritedAt: an older library file must still load.
+    public var lastShownAt: Date?
 
     public init(id: UUID, url: String, title: String, author: String?, note: String?,
                 folder: String, source: Source, createdAt: Date, doneAt: Date?,
-                hasThumbnail: Bool, manuallyFiled: Bool, favoritedAt: Date? = nil) {
+                hasThumbnail: Bool, manuallyFiled: Bool, favoritedAt: Date? = nil,
+                lastShownAt: Date? = nil) {
         self.id = id
         self.url = url
         self.title = title
@@ -35,6 +39,7 @@ public struct Bookmark: Codable, Identifiable, Equatable, Sendable {
         self.hasThumbnail = hasThumbnail
         self.manuallyFiled = manuallyFiled
         self.favoritedAt = favoritedAt
+        self.lastShownAt = lastShownAt
     }
 
     public var isDone: Bool { doneAt != nil }
