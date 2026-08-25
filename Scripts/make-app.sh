@@ -2,7 +2,27 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-swift build -c release
+TOOLCHAIN="$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain"
+INTENTS_PROCESSOR="$TOOLCHAIN/usr/bin/appintentsmetadataprocessor"
+PROTOCOLS="Scripts/appintents-protocols.json"
+
+# Shortcuts finds an app's intents through a metadata bundle that Xcode
+# normally builds behind a build phase. SwiftPM has no such phase, so the
+# compiler is asked for the constant values the processor reads, and the
+# processor runs by hand below. Both steps are skipped where the tools are
+# missing: the app still builds, only without its Shortcuts actions.
+if [ -x "$INTENTS_PROCESSOR" ] && [ -f "$PROTOCOLS" ]; then
+    WITH_INTENTS=1
+    swift build -c release \
+        -Xswiftc -emit-const-values \
+        -Xswiftc -Xfrontend -Xswiftc -const-gather-protocols-file \
+        -Xswiftc -Xfrontend -Xswiftc "$PROTOCOLS"
+else
+    WITH_INTENTS=0
+    echo "warning: App Intents metadata tools not found; building without Shortcuts actions"
+    swift build -c release
+fi
+
 mkdir -p build
 rm -rf build/AppIcon.iconset
 swift Scripts/make-icon.swift
@@ -17,6 +37,28 @@ cp .build/release/Dogear "$APP/Contents/MacOS/Dogear"
 # the dSYM that swift build leaves beside the binary.
 strip -x "$APP/Contents/MacOS/Dogear"
 cp build/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+
+if [ "$WITH_INTENTS" = "1" ]; then
+    CONST_VALS="$(mktemp)"
+    SOURCE_LIST="$(mktemp)"
+    find .build -path "*release/Dogear.build/*.swiftconstvalues" > "$CONST_VALS"
+    ls Sources/Dogear/*.swift > "$SOURCE_LIST"
+    TRIPLE="$(swift -print-target-info | sed -n 's/.*"triple": "\([^"]*\)".*/\1/p' | head -1)"
+    # A failure here costs the Shortcuts actions, never the build.
+    "$INTENTS_PROCESSOR" \
+        --output "$APP/Contents/Resources" \
+        --toolchain-dir "$TOOLCHAIN" \
+        --module-name Dogear \
+        --sdk-root "$(xcrun --show-sdk-path)" \
+        --xcode-version "$(xcodebuild -version | tail -1 | awk '{print $3}')" \
+        --platform-family macosx \
+        --deployment-target 15.4 \
+        --target-triple "$TRIPLE" \
+        --source-file-list "$SOURCE_LIST" \
+        --swift-const-vals-list "$CONST_VALS" \
+        --force || echo "warning: App Intents metadata step failed; no Shortcuts actions"
+    rm -f "$CONST_VALS" "$SOURCE_LIST"
+fi
 
 VERSION="$(tr -d '[:space:]' < VERSION)"
 cat > "$APP/Contents/Info.plist" <<PLIST
