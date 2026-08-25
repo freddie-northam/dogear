@@ -20,6 +20,16 @@ final class AppModel: ObservableObject {
     let thumbnails: ThumbnailCache
     @Published var revision = 0
     @Published var storageError: String?
+    /// Set when a Spotlight result asks the library to show a bookmark.
+    @Published var spotlightRequest: String?
+
+    /// Publishing to Spotlight is a setting, because the index is a copy of
+    /// the library that lives outside the app.
+    static let spotlightKey = "spotlightIndexing"
+    static var spotlightEnabled: Bool {
+        UserDefaults.standard.object(forKey: spotlightKey) as? Bool ?? true
+    }
+    private var spotlightTask: Task<Void, Never>?
 
     init() {
         // DOGEAR_DATA_DIR points the app at another library: screenshots and
@@ -46,7 +56,13 @@ final class AppModel: ObservableObject {
             thumbnails: thumbnails,
             client: client
         )
-        store.onChange = { [weak self] in self?.revision += 1 }
+        store.onChange = { [weak self] in
+            self?.revision += 1
+            self?.scheduleSpotlightSync()
+        }
+        // A library saved before this version was never published, so index
+        // once at launch. The delay keeps it clear of the first frame.
+        scheduleSpotlightSync()
         AppModel.shared = self
         store.onWriteFailure = { [weak self] error in
             self?.storageError = "Dogear could not save your bookmarks: \(error.localizedDescription)"
@@ -55,6 +71,38 @@ final class AppModel: ObservableObject {
 
     /// Saves every http(s) link in the text. Deduplication applies per URL,
     /// so a link that appears twice in one paste counts once.
+    // MARK: Spotlight
+
+    /// Republishes the library after the changes stop. A paste of fifty links
+    /// fires onChange once, but a burst of enrichments fires it fifty times,
+    /// and each one would otherwise rebuild the whole index.
+    private func scheduleSpotlightSync() {
+        spotlightTask?.cancel()
+        spotlightTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            self?.syncSpotlight()
+        }
+    }
+
+    /// Publishes the library, or clears it when the user turns the setting off.
+    func syncSpotlight() {
+        guard AppModel.spotlightEnabled else {
+            SpotlightIndex.removeAll()
+            return
+        }
+        SpotlightIndex.replaceAll(with: store.library.bookmarks)
+    }
+
+    /// Answers a Spotlight result by asking the library to search for it. The
+    /// library, not the browser, is the honest destination: it shows the note
+    /// and the folder the user filed it under.
+    func showFromSpotlight(id: String) {
+        guard let uuid = UUID(uuidString: id),
+              let bookmark = store.library.bookmarks.first(where: { $0.id == uuid }) else { return }
+        spotlightRequest = bookmark.title
+    }
+
     // MARK: Forgiveness
 
     /// Every destructive action registers its inverse here, so Undo works the

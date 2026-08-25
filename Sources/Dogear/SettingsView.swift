@@ -24,6 +24,7 @@ struct SettingsView: View {
 private struct GeneralSettings: View {
     @AppStorage("detectCopiedLinks") private var detectCopiedLinks = true
     @AppStorage(DockPresence.defaultsKey) private var showDockIcon = true
+    @AppStorage(AppModel.spotlightKey) private var spotlightIndexing = true
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
 
     var body: some View {
@@ -40,6 +41,13 @@ private struct GeneralSettings: View {
                     Text("Detect copied links")
                     Text("Dogear checks if the clipboard holds a link. It reads the clipboard only when you save.")
                 }
+            }
+            Section("Search") {
+                Toggle(isOn: $spotlightIndexing) {
+                    Text("Find bookmarks in Spotlight")
+                    Text("Your saved links answer a Spotlight search. The list stays on this Mac.")
+                }
+                .onChange(of: spotlightIndexing) { AppModel.shared?.syncSpotlight() }
             }
             Section("Startup") {
                 Toggle(isOn: $launchAtLogin) {

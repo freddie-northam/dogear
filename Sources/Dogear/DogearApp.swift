@@ -1,4 +1,6 @@
 import AppKit
+import CoreSpotlight
+import DogearKit
 import SwiftUI
 
 // Menu bar icons. The idle icon is a template image, so it follows the menu
@@ -56,6 +58,15 @@ struct DogearApp: App {
                     dockObserver.start {
                         openWindow(id: "library")
                     }
+                }
+                // The label is the one view that exists from launch, so it is
+                // where a Spotlight result lands even when Spotlight started
+                // the app.
+                .onContinueUserActivity(CSSearchableItemActionType) { activity in
+                    guard let id = activity.userInfo?[CSSearchableItemActivityIdentifier] as? String
+                    else { return }
+                    model.showFromSpotlight(id: id)
+                    openWindow(id: "library")
                 }
         }
         .menuBarExtraStyle(.window)

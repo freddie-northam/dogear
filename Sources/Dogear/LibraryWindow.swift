@@ -111,6 +111,11 @@ struct LibraryWindow: View {
                 .environmentObject(model)
         }
         .onChange(of: selectedFolderIDs) { _, ids in saveSelection(ids) }
+        .onChange(of: model.spotlightRequest) { _, request in
+            guard let request else { return }
+            query = request
+            model.spotlightRequest = nil
+        }
         .alert("No Link Found", isPresented: $pasteFailed) {
             Button("OK") {}
         } message: {
