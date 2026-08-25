@@ -363,8 +363,9 @@ public final class BookmarkStore {
     /// Records that the pick row showed this bookmark, so the next draw
     /// prefers one the user has not seen. This writes but does not notify:
     /// nothing on screen changes, so a redraw would be wasted work.
-    /// ponytail: one whole-library write per popover open, measured at 18 ms
-    /// with 5,000 bookmarks. Coalesce the write if that ever shows.
+    /// ponytail: one whole-library write per popover open, measured at 17 ms
+    /// with 5,000 bookmarks against a 150 ms popover budget. Coalesce the
+    /// write if that margin ever closes.
     public func markShown(id: UUID) {
         guard let index = library.bookmarks.firstIndex(where: { $0.id == id }) else { return }
         library.bookmarks[index].lastShownAt = Date()

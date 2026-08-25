@@ -732,3 +732,27 @@ private func testPlace(_ name: String, latitude: Double = 51.5, longitude: Doubl
     _ = store.add(places: [testPlace("A")], to: "Restaurants")
     #expect(changes == 0)
 }
+
+@Test func picksAndRecordsTheShowingUnder50msWithFiveThousandBookmarks() throws {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    for i in 0..<5000 {
+        _ = store.addForTesting(urlString: "https://example.com/item/\(i)")
+    }
+    store.saveNow()
+
+    let pickStart = ContinuousClock.now
+    let picked = try #require(store.pick())
+    let pickElapsed = ContinuousClock.now - pickStart
+
+    // markShown writes the whole library, and it runs on every popover open,
+    // so it sits inside the same budget as a save.
+    let markStart = ContinuousClock.now
+    store.markShown(id: picked.id)
+    let markElapsed = ContinuousClock.now - markStart
+
+    if ProcessInfo.processInfo.environment["PERF"] != nil {
+        #expect(pickElapsed < .milliseconds(50))
+        #expect(markElapsed < .milliseconds(50))
+    }
+}
