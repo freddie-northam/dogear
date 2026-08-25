@@ -20,6 +20,11 @@ public final class EnrichmentService {
     public func enrich(id: UUID) async {
         guard let started = store.library.bookmarks.first(where: { $0.id == id }),
               let url = URL(string: started.url) else { return }
+        // A place has no page behind it. Fetching its map link would replace the
+        // name the user approved with whatever the map site titles that page,
+        // and refile it by the map host. The rule lives here because this is
+        // the only function that could break it.
+        guard !started.isPlace else { return }
 
         let result = await metadata.fetch(for: url)
         let resolved = URLCleaner.canonicalString(result.resolvedURL)
@@ -79,16 +84,12 @@ public final class EnrichmentService {
                 survivor.folder = latest.folder
                 survivor.manuallyFiled = true
             }
-            // createdAt is a `let`: rebuild via the memberwise initializer to backdate it to
-            // whichever bookmark is older, with every other field taken from the survivor
-            // (already gap-filled above).
-            let merged = Bookmark(
-                id: survivor.id, url: survivor.url, title: survivor.title, author: survivor.author,
-                note: survivor.note, folder: survivor.folder, source: survivor.source,
-                createdAt: min(survivor.createdAt, latest.createdAt), doneAt: nil,
-                hasThumbnail: survivor.hasThumbnail, manuallyFiled: survivor.manuallyFiled,
-                favoritedAt: survivor.favoritedAt
-            )
+            // Copy the survivor and change only the two fields the merge decides.
+            // This used to rebuild through the memberwise initializer, which meant
+            // every field added to Bookmark later was silently dropped here.
+            var merged = survivor
+            merged.createdAt = min(survivor.createdAt, latest.createdAt)
+            merged.doneAt = nil
             store.remove(id: latest.id)
             thumbnails.remove(for: latest.id)
             // Write the merged fields onto the survivor, then re-add it: add()'s re-add path

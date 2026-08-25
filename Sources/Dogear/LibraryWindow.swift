@@ -1119,7 +1119,7 @@ struct BookmarkCard: View {
                     .lineLimit(2, reservesSpace: true)
                 // The note line always reserves its height, so every card in a
                 // row is the same size whether or not a note exists.
-                Text(bookmark.note ?? bookmark.place?.address ?? " ")
+                Text(bookmark.subtitle ?? " ")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1, reservesSpace: true)
@@ -1291,8 +1291,8 @@ struct BookmarkListRow: View {
             HStack(spacing: 10) {
                 badge
                 Text(bookmark.title).lineLimit(1)
-                if let note = bookmark.note, !note.isEmpty {
-                    Text(note).font(.caption).foregroundStyle(.tertiary).lineLimit(1)
+                if let subtitle = bookmark.subtitle, !subtitle.isEmpty {
+                    Text(subtitle).font(.caption).foregroundStyle(.tertiary).lineLimit(1)
                 }
                 Spacer(minLength: 8)
                 if bookmark.isFavorite {

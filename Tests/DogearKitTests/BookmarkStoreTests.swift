@@ -756,3 +756,54 @@ private func testPlace(_ name: String, latitude: Double = 51.5, longitude: Doubl
         #expect(markElapsed < .milliseconds(50))
     }
 }
+
+@Test func markThumbnailsAppliesTheBatchWithOneWrite() throws {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    let a = store.add(url: URL(string: "https://a.com/a")!)!.bookmark
+    let b = store.add(url: URL(string: "https://a.com/b")!)!.bookmark
+    var changes = 0
+    store.onChange = { changes += 1 }
+    #expect(store.markThumbnails([a.id, b.id]) == 2)
+    #expect(changes == 1)
+    #expect(store.library.bookmarks.allSatisfy { $0.hasThumbnail })
+}
+
+@Test func markThumbnailsIgnoresUnknownAndAlreadyMarkedIDs() throws {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    let a = store.add(url: URL(string: "https://a.com/a")!)!.bookmark
+    #expect(store.markThumbnails([a.id]) == 1)
+    var changes = 0
+    store.onChange = { changes += 1 }
+    #expect(store.markThumbnails([a.id, UUID()]) == 0)
+    #expect(changes == 0)
+}
+
+@Test func markThumbnailsSetsOnlyTheFlag() throws {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    let saved = try #require(store.add(places: [testPlace("Kagari")], to: "Restaurants").first)
+    store.refile(id: saved.id, to: "Recipes")
+    store.markThumbnails([saved.id])
+    let after = try #require(store.library.bookmarks.first { $0.id == saved.id })
+    // A refile that happened while the map was drawing must survive.
+    #expect(after.folder == "Recipes")
+    #expect(after.place?.name == "Kagari")
+    #expect(after.hasThumbnail)
+}
+
+@Test func subtitleFallsBackFromNoteToPlaceAddress() {
+    let place = Place(name: "Kagari", address: "Ginza, Tokyo", latitude: 35.6, longitude: 139.7)
+    let base = Bookmark(id: UUID(), url: "https://a.com/p", title: "T", author: nil, note: nil,
+                        folder: "Recipes", source: .web, createdAt: Date(), doneAt: nil,
+                        hasThumbnail: false, manuallyFiled: false)
+    var withNote = base
+    withNote.note = "Halve the salt."
+    withNote.place = place
+    #expect(withNote.subtitle == "Halve the salt.")
+    var withPlace = base
+    withPlace.place = place
+    #expect(withPlace.subtitle == "Ginza, Tokyo")
+    #expect(base.subtitle == nil)
+}

@@ -36,19 +36,11 @@ public enum BookmarksHTML {
             lines.append("        <DT><A HREF=\"\(escaped(bookmark.url))\" ADD_DATE=\"\(addDate)\">"
                 + "\(escaped(bookmark.title))</A>")
             if let note = bookmark.note, !note.isEmpty {
-                lines.append("        <DD>\(escaped(flattened(note)))")
+                lines.append("        <DD>\(escaped(note.singleLine))")
             }
         }
         lines.append("    </DL><p>")
         return lines
-    }
-
-    /// A note runs to several lines; a `DD` entry is one line, so the breaks
-    /// collapse to spaces rather than splitting the description in two.
-    static func flattened(_ text: String) -> String {
-        text.components(separatedBy: .newlines.union(.controlCharacters))
-            .filter { !$0.isEmpty }
-            .joined(separator: " ")
     }
 
     static func escaped(_ text: String) -> String {

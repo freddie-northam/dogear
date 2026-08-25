@@ -24,7 +24,7 @@ struct SettingsView: View {
 private struct GeneralSettings: View {
     @AppStorage("detectCopiedLinks") private var detectCopiedLinks = true
     @AppStorage(DockPresence.defaultsKey) private var showDockIcon = true
-    @AppStorage(AppModel.spotlightKey) private var spotlightIndexing = true
+    @AppStorage(SpotlightSync.defaultsKey) private var spotlightIndexing = true
     @AppStorage(DogearApp.hotKeyDefaultsKey) private var captureHotKey = ""
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
 

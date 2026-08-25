@@ -23,12 +23,6 @@ final class AppModel: ObservableObject {
     /// Set when a Spotlight result asks the library to show a bookmark.
     @Published var spotlightRequest: String?
 
-    /// Publishing to Spotlight is a setting, because the index is a copy of
-    /// the library that lives outside the app.
-    static let spotlightKey = "spotlightIndexing"
-    static var spotlightEnabled: Bool {
-        UserDefaults.standard.object(forKey: spotlightKey) as? Bool ?? true
-    }
     private var spotlightTask: Task<Void, Never>?
 
     init() {
@@ -77,6 +71,11 @@ final class AppModel: ObservableObject {
     /// fires onChange once, but a burst of enrichments fires it fifty times,
     /// and each one would otherwise rebuild the whole index.
     private func scheduleSpotlightSync() {
+        // Nothing to publish and nothing to clear: the toggle already cleared
+        // the index once when the user turned it off. Without this, every
+        // capture and every enrichment would ask Spotlight to delete an empty
+        // domain, for as long as the app runs.
+        guard SpotlightSync.isEnabled else { return }
         spotlightTask?.cancel()
         spotlightTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(2))
@@ -87,11 +86,11 @@ final class AppModel: ObservableObject {
 
     /// Publishes the library, or clears it when the user turns the setting off.
     func syncSpotlight() {
-        guard AppModel.spotlightEnabled else {
-            SpotlightIndex.removeAll()
+        guard SpotlightSync.isEnabled else {
+            SpotlightSync.removeAll()
             return
         }
-        SpotlightIndex.replaceAll(with: store.library.bookmarks)
+        SpotlightSync.replaceAll(with: store.library.bookmarks)
     }
 
     /// Answers a Spotlight result by asking the library to search for it. The
@@ -192,19 +191,37 @@ final class AppModel: ObservableObject {
         let thumbnails = thumbnails
         let store = store
         Task { @MainActor in
-            for bookmark in saved {
-                guard let place = bookmark.place,
-                      let data = await PlaceSnapshot.pngData(for: place),
-                      thumbnails.store(data, for: bookmark.id) else { continue }
-                // Re-read the record: the user may have renamed or refiled it
-                // while the map was drawing.
-                guard var fresh = store.library.bookmarks.first(where: { $0.id == bookmark.id })
-                else { continue }
-                fresh.hasThumbnail = true
-                store.update(fresh)
+            // At most four maps drawing at once, the same cap capture uses:
+            // twenty places must not draw one map after another.
+            var drawn: [UUID] = []
+            await withTaskGroup(of: UUID?.self) { group in
+                var iterator = saved.makeIterator()
+                for _ in 0..<4 {
+                    guard let bookmark = iterator.next() else { break }
+                    group.addTask { await AppModel.drawMap(for: bookmark, into: thumbnails) }
+                }
+                for await id in group {
+                    if let id { drawn.append(id) }
+                    guard let bookmark = iterator.next() else { continue }
+                    group.addTask { await AppModel.drawMap(for: bookmark, into: thumbnails) }
+                }
             }
+            // One write for the batch. A write per map would undo the batching
+            // add(places:) just did.
+            store.markThumbnails(drawn)
         }
         return saved.count
+    }
+
+    /// Draws one map off the main actor and returns the id when an image
+    /// landed on disk. Nonisolated on purpose: inheriting the main actor here
+    /// would make the task group draw the maps one at a time.
+    private nonisolated static func drawMap(for bookmark: Bookmark,
+                                            into thumbnails: ThumbnailCache) async -> UUID? {
+        guard let place = bookmark.place,
+              let data = await PlaceSnapshot.pngData(for: place),
+              thumbnails.store(data, for: bookmark.id) else { return nil }
+        return bookmark.id
     }
 
     func capture(urls: [URL]) -> CaptureResult {

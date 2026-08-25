@@ -214,6 +214,23 @@ public final class BookmarkStore {
         return applied
     }
 
+    /// Marks a batch as having a thumbnail on disk, with one write. Setting
+    /// the flag by id cannot clobber a rename or a refile the user made while
+    /// the image was being drawn, and an id that is gone is skipped. Returns
+    /// the number applied.
+    @discardableResult
+    public func markThumbnails(_ ids: [UUID]) -> Int {
+        var applied = 0
+        for id in ids {
+            guard let index = library.bookmarks.firstIndex(where: { $0.id == id }),
+                  !library.bookmarks[index].hasThumbnail else { continue }
+            library.bookmarks[index].hasThumbnail = true
+            applied += 1
+        }
+        if applied > 0 { mutated() }
+        return applied
+    }
+
     public func refile(id: UUID, to folder: String) {
         guard let index = library.bookmarks.firstIndex(where: { $0.id == id }) else { return }
         library.bookmarks[index].folder = folder

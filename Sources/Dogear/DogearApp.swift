@@ -3,37 +3,34 @@ import CoreSpotlight
 import DogearKit
 import SwiftUI
 
-// Menu bar icons. The idle icon is a template image, so it follows the menu
-// bar appearance. The detected icon opts out of template rendering to show
-// the brand pink; MenuBarExtra strips color from template images, so a
-// palette-configured NSImage is the one way the pink survives.
+// The idle icon is a template image, so it follows the menu bar appearance.
 private let idleIcon: NSImage = {
     let image = NSImage(systemSymbolName: "bookmark", accessibilityDescription: "Dogear")!
     image.isTemplate = true
     return image
 }()
 
-private let linkDetectedIcon: NSImage = {
-    let base = NSImage(systemSymbolName: "bookmark.fill", accessibilityDescription: "Dogear, link detected")!
-    // A non-template image keeps its intrinsic size instead of following the
-    // menu bar, so pin the symbol to the menu bar's standard point size.
-    let configuration = NSImage.SymbolConfiguration(pointSize: 14, weight: .regular)
+/// MenuBarExtra strips color from a template image, so a palette-configured
+/// non-template one is the only way the brand pink survives. Such an image
+/// also keeps its intrinsic size instead of following the menu bar, so the
+/// symbol is pinned to the menu bar's standard point size.
+private func pinkMenuBarIcon(_ symbol: String, weight: NSFont.Weight,
+                             description: String) -> NSImage {
+    let base = NSImage(systemSymbolName: symbol, accessibilityDescription: description)!
+    let configuration = NSImage.SymbolConfiguration(pointSize: 14, weight: weight)
         .applying(NSImage.SymbolConfiguration(paletteColors: [.systemPink]))
     let image = base.withSymbolConfiguration(configuration) ?? base
     image.isTemplate = false
     return image
-}()
+}
+
+private let linkDetectedIcon = pinkMenuBarIcon(
+    "bookmark.fill", weight: .regular, description: "Dogear, link detected")
 
 // Shown for a moment after the shortcut saves a link. The app has no
 // notifications, so the menu bar itself is where the confirmation goes.
-private let savedIcon: NSImage = {
-    let base = NSImage(systemSymbolName: "checkmark", accessibilityDescription: "Dogear, link saved")!
-    let configuration = NSImage.SymbolConfiguration(pointSize: 14, weight: .semibold)
-        .applying(NSImage.SymbolConfiguration(paletteColors: [.systemPink]))
-    let image = base.withSymbolConfiguration(configuration) ?? base
-    image.isTemplate = false
-    return image
-}()
+private let savedIcon = pinkMenuBarIcon(
+    "checkmark", weight: .semibold, description: "Dogear, link saved")
 
 @main
 struct DogearApp: App {
@@ -116,11 +113,7 @@ struct DogearApp: App {
     /// a save that needs no window is the whole point of a shortcut.
     private func captureFromClipboard() {
         Task { @MainActor in
-            // The same rule as the popover: ask the clipboard for its shape,
-            // and read the content only when it holds a link.
-            let detected = try? await NSPasteboard.general.detectedPatterns(for: [\.links])
-            guard detected?.contains(\.links) == true,
-                  let text = clipboard.readClipboard(),
+            guard let text = await clipboard.readLink(),
                   model.capture(text: text).total > 0 else { return }
             clipboard.consume()
             didSaveFromHotKey = true

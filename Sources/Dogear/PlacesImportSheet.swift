@@ -67,7 +67,7 @@ struct PlacesImportSheet: View {
                 Button("Find Places", action: search)
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
-                    .disabled(PlaceParser.parse(text).isEmpty)
+                    .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
     }
@@ -118,24 +118,22 @@ struct PlacesImportSheet: View {
         }
     }
 
-    private func row(_ candidate: Binding<PlaceCandidate>) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            if let place = candidate.wrappedValue.place {
-                Toggle(isOn: candidate.isSelected) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(place.name)
-                        if let address = place.address {
-                            Text(address).font(.caption).foregroundStyle(.secondary)
-                        }
+    @ViewBuilder private func row(_ candidate: Binding<PlaceCandidate>) -> some View {
+        if let place = candidate.wrappedValue.place {
+            Toggle(isOn: candidate.isSelected) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(place.name)
+                    if let address = place.address {
+                        Text(address).font(.caption).foregroundStyle(.secondary)
                     }
                 }
-                .toggleStyle(.checkbox)
-            } else {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(candidate.wrappedValue.query.searchText)
-                        .foregroundStyle(.secondary).strikethrough()
-                    Text("Not found on the map").font(.caption).foregroundStyle(.tertiary)
-                }
+            }
+            .toggleStyle(.checkbox)
+        } else {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(candidate.wrappedValue.query.searchText)
+                    .foregroundStyle(.secondary).strikethrough()
+                Text("Not found on the map").font(.caption).foregroundStyle(.tertiary)
             }
         }
     }
@@ -168,7 +166,9 @@ struct PlacesImportSheet: View {
         Task {
             let resolver = MapKitPlaceResolver()
             var found: [PlaceCandidate] = []
-            // One lookup at a time: the map service refuses a burst of them.
+            // ponytail: one lookup at a time. Concurrent MKLocalSearch requests
+            // come back throttled, and the resolver reads a throttled request as
+            // "not found", so a wrong answer would cost more than the wait.
             for (index, query) in queries.enumerated() {
                 let place = await resolver.resolve(query)
                 found.append(PlaceCandidate(query: query, place: place, isSelected: place != nil))

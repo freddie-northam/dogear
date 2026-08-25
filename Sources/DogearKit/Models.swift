@@ -12,7 +12,7 @@ public struct Bookmark: Codable, Identifiable, Equatable, Sendable {
     public var note: String?
     public var folder: String
     public var source: Source
-    public let createdAt: Date
+    public var createdAt: Date
     public var doneAt: Date?
     public var hasThumbnail: Bool
     public var manuallyFiled: Bool
@@ -51,7 +51,23 @@ public struct Bookmark: Codable, Identifiable, Equatable, Sendable {
     public var isPlace: Bool { place != nil }
 }
 
+extension String {
+    /// The text on one line: newlines and control characters collapse to
+    /// single spaces. Splitting yields an empty component for each one, so
+    /// dropping the empties turns a run into a single space rather than one
+    /// space per character.
+    var singleLine: String {
+        components(separatedBy: .newlines.union(.controlCharacters))
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+    }
+}
+
 extension Bookmark {
+    /// The line under the title. A place the user has not written a note on
+    /// still has something to say: where it is.
+    public var subtitle: String? { note ?? place?.address }
+
     /// A `[title](<url>)` markdown link. Square brackets in the title become
     /// parentheses, and newlines/control characters collapse to single spaces,
     /// so the link text cannot break the markdown syntax or the line structure
@@ -59,14 +75,7 @@ extension Bookmark {
     /// delimiters so a `)` or space inside the URL cannot terminate the link
     /// early, without altering the URL itself.
     public var markdownLink: String {
-        // Splitting on newlines/control characters yields an empty component
-        // for each run of them; dropping the empties before rejoining is what
-        // collapses a run to a single space instead of one space per character.
-        let flattenedTitle = title
-            .components(separatedBy: .newlines.union(.controlCharacters))
-            .filter { !$0.isEmpty }
-            .joined(separator: " ")
-        let safeTitle = flattenedTitle
+        let safeTitle = title.singleLine
             .replacingOccurrences(of: "[", with: "(")
             .replacingOccurrences(of: "]", with: ")")
         return "[\(safeTitle)](<\(url)>)"

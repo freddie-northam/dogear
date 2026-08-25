@@ -9,18 +9,26 @@ PROTOCOLS="Scripts/appintents-protocols.json"
 # Shortcuts finds an app's intents through a metadata bundle that Xcode
 # normally builds behind a build phase. SwiftPM has no such phase, so the
 # compiler is asked for the constant values the processor reads, and the
-# processor runs by hand below. Both steps are skipped where the tools are
-# missing: the app still builds, only without its Shortcuts actions.
-if [ -x "$INTENTS_PROCESSOR" ] && [ -f "$PROTOCOLS" ]; then
+# processor runs by hand below.
+#
+# A missing tool is a hard failure: the README and the roadmap both promise a
+# Shortcuts action, so a release that silently lacks one is a broken release.
+# Set SKIP_INTENTS=1 to build without it on a machine that cannot.
+if [ "${SKIP_INTENTS:-0}" = "1" ]; then
+    WITH_INTENTS=0
+    echo "SKIP_INTENTS=1: building without the Shortcuts actions"
+    swift build -c release
+else
+    if [ ! -x "$INTENTS_PROCESSOR" ]; then
+        echo "error: $INTENTS_PROCESSOR not found." >&2
+        echo "Install Xcode, or set SKIP_INTENTS=1 to build without Shortcuts actions." >&2
+        exit 1
+    fi
     WITH_INTENTS=1
     swift build -c release \
         -Xswiftc -emit-const-values \
         -Xswiftc -Xfrontend -Xswiftc -const-gather-protocols-file \
         -Xswiftc -Xfrontend -Xswiftc "$PROTOCOLS"
-else
-    WITH_INTENTS=0
-    echo "warning: App Intents metadata tools not found; building without Shortcuts actions"
-    swift build -c release
 fi
 
 mkdir -p build
@@ -44,7 +52,6 @@ if [ "$WITH_INTENTS" = "1" ]; then
     find .build -path "*release/Dogear.build/*.swiftconstvalues" > "$CONST_VALS"
     ls Sources/Dogear/*.swift > "$SOURCE_LIST"
     TRIPLE="$(swift -print-target-info | sed -n 's/.*"triple": "\([^"]*\)".*/\1/p' | head -1)"
-    # A failure here costs the Shortcuts actions, never the build.
     "$INTENTS_PROCESSOR" \
         --output "$APP/Contents/Resources" \
         --toolchain-dir "$TOOLCHAIN" \
@@ -56,7 +63,8 @@ if [ "$WITH_INTENTS" = "1" ]; then
         --target-triple "$TRIPLE" \
         --source-file-list "$SOURCE_LIST" \
         --swift-const-vals-list "$CONST_VALS" \
-        --force || echo "warning: App Intents metadata step failed; no Shortcuts actions"
+        --force
+    test -f "$APP/Contents/Resources/Metadata.appintents/extract.actionsdata"
     rm -f "$CONST_VALS" "$SOURCE_LIST"
 fi
 

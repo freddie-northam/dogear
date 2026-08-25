@@ -29,8 +29,7 @@ public struct Place: Codable, Equatable, Sendable {
 }
 
 /// One line of pasted text, ready to look up.
-public struct PlaceQuery: Equatable, Sendable, Identifiable {
-    public let id = UUID()
+public struct PlaceQuery: Equatable, Sendable {
     /// The place itself, as the user wrote it.
     public var name: String
     /// The city or area that narrows the search. Nil when the line had none.
@@ -45,10 +44,6 @@ public struct PlaceQuery: Equatable, Sendable, Identifiable {
     public var searchText: String {
         guard let near, !near.isEmpty else { return name }
         return "\(name), \(near)"
-    }
-
-    public static func == (lhs: PlaceQuery, rhs: PlaceQuery) -> Bool {
-        lhs.name == rhs.name && lhs.near == rhs.near
     }
 }
 
