@@ -88,7 +88,7 @@ public struct FolderPlanner: Sendable {
         let sample = waiting.prefix(sampleSize).map { "- " + oneLine($0.title) }.joined(separator: "\n")
         let prompt = """
             These saved links do not fit any existing folder. \
-            Existing folders: \(existing.joined(separator: ", ")).
+            Existing folders: \(folderList(existing)).
             Propose at most \(maximumFolders) new folder names that would group them well. \
             Use short plain names. Do not repeat an existing folder. \
             Reply with ONLY a comma separated list of names and nothing else.
@@ -105,7 +105,7 @@ public struct FolderPlanner: Sendable {
             .joined(separator: "\n")
         let prompt = """
             Assign each numbered link to exactly one folder from this list: \
-            \(choices.map(oneLine).joined(separator: ", ")), \(Library.unsorted).
+            \(folderList(choices)), \(Library.unsorted).
             Use \(Library.unsorted) when genuinely unclear. \
             Reply with ONLY lines of the form N=Folder, one per link, nothing else.
 
@@ -129,8 +129,10 @@ public struct FolderPlanner: Sendable {
                   let number = Int(parts[0].trimmingCharacters(in: .whitespaces)),
                   number >= 1, number <= batch.count else { continue }
             let name = parts[1].trimmingCharacters(in: .whitespaces)
-            guard let folder = choices.first(where: { $0.caseInsensitiveCompare(name) == .orderedSame })
-            else { continue }
+            guard let folder = choices.first(where: {
+                $0.caseInsensitiveCompare(name) == .orderedSame
+                    || oneLine($0).caseInsensitiveCompare(name) == .orderedSame
+            }) else { continue }
             assignments[batch[number - 1].id] = folder
         }
         return assignments
@@ -154,6 +156,15 @@ public struct FolderPlanner: Sendable {
         return Array(names.prefix(maximumFolders))
     }
 
+    /// Folder names as they appear in a prompt: one line each, always.
+    ///
+    /// Every folder list that reaches a prompt goes through here. The first
+    /// version of this fix flattened one of the two prompts and left the
+    /// other, which is exactly the mistake a single crossing point prevents.
+    private func folderList(_ names: [String]) -> String {
+        names.map(oneLine).joined(separator: ", ")
+    }
+
     /// True when a name is ordinary printable text on one line.
     ///
     /// A page writes its own title, and those titles are what the model is
@@ -172,7 +183,7 @@ public struct FolderPlanner: Sendable {
 
     /// Titles arrive from pages and can carry newlines, which would break the
     /// one-line-per-link shape the reply is parsed against.
-    private func oneLine(_ title: String) -> String {
+    func oneLine(_ title: String) -> String {
         title.components(separatedBy: .newlines.union(.controlCharacters))
             .filter { !$0.isEmpty }.joined(separator: " ")
     }
