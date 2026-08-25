@@ -25,6 +25,7 @@ private struct GeneralSettings: View {
     @AppStorage("detectCopiedLinks") private var detectCopiedLinks = true
     @AppStorage(DockPresence.defaultsKey) private var showDockIcon = true
     @AppStorage(AppModel.spotlightKey) private var spotlightIndexing = true
+    @AppStorage(DogearApp.hotKeyDefaultsKey) private var captureHotKey = ""
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
 
     var body: some View {
@@ -40,6 +41,12 @@ private struct GeneralSettings: View {
                 Toggle(isOn: $detectCopiedLinks) {
                     Text("Detect copied links")
                     Text("Dogear checks if the clipboard holds a link. It reads the clipboard only when you save.")
+                }
+                LabeledContent {
+                    ShortcutRecorder(stored: $captureHotKey)
+                } label: {
+                    Text("Save the copied link")
+                    Text("Press this shortcut in any app. Dogear saves the link and shows a tick in the menu bar.")
                 }
             }
             Section("Search") {
