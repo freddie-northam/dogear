@@ -369,14 +369,38 @@ struct LibraryWindow: View {
         planningFolders = true
         Task {
             defer { planningFolders = false }
-            let plan = await FolderSuggestions.plan(
-                for: model.store.library.bookmarks, folders: model.store.library.folders)
-            if plan.isEmpty {
-                fileForMeResult = "Nothing to suggest. Everything waiting already fits a folder you have."
-            } else {
-                folderPlan = plan
+            do {
+                let plan = try await currentPlan()
+                if plan.isEmpty {
+                    fileForMeResult = "Nothing to suggest. Everything waiting already fits a folder you have."
+                } else {
+                    folderPlan = plan
+                }
+            } catch CLIModelError.commandNotFound(let path) {
+                fileForMeResult = "No command at \(path). Check the path in Settings, under Filing."
+            } catch CLIModelError.timedOut {
+                fileForMeResult = "The command did not answer in time."
+            } catch CLIModelError.failed(_, let message) {
+                fileForMeResult = message.isEmpty
+                    ? "The command failed."
+                    : "The command failed: \(message.prefix(80))"
+            } catch {
+                fileForMeResult = "The command failed."
             }
         }
+    }
+
+    /// The model names folders from the links themselves, so it can propose
+    /// one the categorizer has never heard of. Without the opt-in, the
+    /// categorizer answers about itself, which needs no network and no setup.
+    private func currentPlan() async throws -> FolderPlan {
+        let bookmarks = model.store.library.bookmarks
+        let folders = model.store.library.folders
+        guard let settings = FilingDefaults.settings else {
+            return await FolderSuggestions.plan(for: bookmarks, folders: folders)
+        }
+        let planner = FolderPlanner(runner: ProcessCLIModelRunner(settings: settings))
+        return try await planner.plan(for: bookmarks, folders: folders)
     }
 
     private var trimmedQuery: String {

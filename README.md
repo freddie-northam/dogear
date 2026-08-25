@@ -27,8 +27,40 @@ you open it.
 - **Light.** One megabyte on disk. About 13 MB of memory in the menu bar.
   Zero third-party dependencies, only Apple's frameworks.
 - **Private.** Your library is one JSON file on your Mac. No account, no
-  server, no telemetry.
+  server, no telemetry. One feature can send text off your Mac, and it is
+  off until you turn it on: see [Folder suggestions](#folder-suggestions).
 - **Calm.** No notifications, ever. You open Dogear; it never interrupts you.
+
+## Folder suggestions
+
+Dogear files a link by matching words in its title, and it can only file into
+a folder you already have. A library full of things your folders have no name
+for stays in Unsorted, and nothing tells you why.
+
+Folder suggestions fix that. Dogear reads the links waiting in Unsorted and
+shows you folders worth making, each with the number of links that would move
+into it. You choose which to make, and nothing moves until you accept.
+
+On its own Dogear can only offer folders it already knows how to fill, such
+as Developer for a saved repository. Turn the setting below on and it asks a
+model to name folders from your links themselves, which can propose one
+Dogear has never heard of.
+
+**That setting sends the titles of your waiting bookmarks off your Mac.** It
+is off by default, Dogear never turns it on for you, and the suggestions
+above keep working without it.
+
+It uses a command line tool you already have and are already signed in to,
+such as Claude Code or Codex. Dogear does not bundle a model, does not ask
+for an API key, and has no account of its own. Your titles go to that tool
+and to whichever provider you signed in to, under your own subscription.
+
+To turn it on, open Settings and give Dogear the full path to the command,
+for example `/opt/homebrew/bin/codex`. A full path is needed because an app
+opened from the Finder cannot see the same `PATH` your terminal does. Use
+Test to confirm the command answers before you rely on it.
+
+Everything else in Dogear stays on your Mac whether this is on or off.
 
 ## How it works
 

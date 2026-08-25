@@ -30,6 +30,18 @@ public struct FallbackCategorizer: Categorizer {
 }
 
 public enum CategorizerFactory {
+    /// Whether this Mac can run Apple's on-device model. Settings shows it,
+    /// because the difference between the two categorizers is large and was
+    /// invisible: a Mac without the model filed by keyword and never said so.
+    public static var usesAppleModel: Bool {
+        #if canImport(FoundationModels)
+        if #available(macOS 26.0, *) {
+            return SystemLanguageModel.default.availability == .available
+        }
+        #endif
+        return false
+    }
+
     public static func make() -> Categorizer {
         #if canImport(FoundationModels)
         if #available(macOS 26.0, *), SystemLanguageModel.default.availability == .available {
