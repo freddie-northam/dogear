@@ -647,4 +647,88 @@ private func storeSeeded(folders: [String]) throws -> BookmarkStore {
     let store = try BookmarkStore(directory: dir)
     #expect(store.library.bookmarks.count == 1)
     #expect(store.library.bookmarks[0].lastShownAt == nil)
+    #expect(store.library.bookmarks[0].place == nil)
+}
+
+// MARK: Places
+
+private func testPlace(_ name: String, latitude: Double = 51.5, longitude: Double = -0.09) -> Place {
+    Place(name: name, address: "\(name) Street", latitude: latitude, longitude: longitude)
+}
+
+@Test func addPlacesSavesOneBookmarkPerPlaceInTheChosenFolder() throws {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    let places = [testPlace("Bao Borough", longitude: -0.09), testPlace("Kagari", longitude: 139.7)]
+    let saved = store.add(places: places, to: "Restaurants")
+    #expect(saved.map(\.title) == ["Bao Borough", "Kagari"])
+    #expect(saved.allSatisfy { $0.folder == "Restaurants" })
+    #expect(saved.allSatisfy { $0.place != nil })
+    // The user chose the folder, so the categorizer must leave these alone.
+    #expect(saved.allSatisfy { $0.manuallyFiled })
+}
+
+@Test func aPlaceBookmarkStoresAnHTTPSMapLink() throws {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    let saved = try #require(store.add(places: [testPlace("Bao Borough")], to: "Restaurants").first)
+    let url = try #require(URL(string: saved.url))
+    #expect(URLCleaner.isCapturable(url))
+    #expect(url.host == "maps.apple.com")
+    #expect(saved.place?.latitude == 51.5)
+}
+
+@Test func addPlacesSkipsAPlaceAlreadySaved() throws {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    _ = store.add(places: [testPlace("Bao Borough")], to: "Restaurants")
+    let again = store.add(places: [testPlace("Bao Borough")], to: "Restaurants")
+    #expect(again.isEmpty)
+    #expect(store.library.bookmarks.count == 1)
+}
+
+@Test func addPlacesFallsBackToUnsortedForAFolderThatIsGone() throws {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    let saved = try #require(store.add(places: [testPlace("Kagari")], to: "Nowhere").first)
+    #expect(saved.folder == Library.unsorted)
+}
+
+@Test func addPlacesPersistsAcrossReload() throws {
+    let temp = TempDirectory()
+    let dir = temp.url
+    let store = try BookmarkStore(directory: dir)
+    _ = store.add(places: [testPlace("Bao Borough")], to: "Restaurants")
+    let reloaded = try BookmarkStore(directory: dir)
+    #expect(reloaded.library.bookmarks.first?.place?.name == "Bao Borough")
+    #expect(reloaded.library.bookmarks.first?.place?.address == "Bao Borough Street")
+}
+
+@Test func searchFindsAPlaceByItsAddress() throws {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    _ = store.add(places: [Place(name: "Kagari", address: "Ginza, Tokyo",
+                                 latitude: 35.6, longitude: 139.7)], to: "Restaurants")
+    #expect(store.search("ginza").count == 1)
+    #expect(store.search("nowhere").isEmpty)
+}
+
+@Test func addPlacesWritesOnceForTheWholeBatch() throws {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    var changes = 0
+    store.onChange = { changes += 1 }
+    _ = store.add(places: [testPlace("A", longitude: 1), testPlace("B", longitude: 2),
+                           testPlace("C", longitude: 3)], to: "Restaurants")
+    #expect(changes == 1)
+}
+
+@Test func addPlacesDoesNotNotifyWhenNothingIsNew() throws {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    _ = store.add(places: [testPlace("A")], to: "Restaurants")
+    var changes = 0
+    store.onChange = { changes += 1 }
+    _ = store.add(places: [testPlace("A")], to: "Restaurants")
+    #expect(changes == 0)
 }

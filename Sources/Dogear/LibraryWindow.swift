@@ -62,6 +62,7 @@ struct LibraryWindow: View {
     @State private var selectedFolderIDs: Set<String> = []
     @State private var fileForMeResult: String?
     @State private var importFileResult: String?
+    @State private var isAddingPlaces = false
     @AppStorage("libraryView") private var viewRaw = "grid"
     @AppStorage("librarySort") private var sortRaw = LibrarySort.lastSaved.rawValue
     @AppStorage("notesImportSelection") private var selectionJSON = ""
@@ -104,6 +105,10 @@ struct LibraryWindow: View {
                 selectedFolderIDs: $selectedFolderIDs,
                 continueToFolders: continueToFolders,
                 run: runNotesImport)
+        }
+        .sheet(isPresented: $isAddingPlaces) {
+            PlacesImportSheet()
+                .environmentObject(model)
         }
         .onChange(of: selectedFolderIDs) { _, ids in saveSelection(ids) }
         .alert("No Link Found", isPresented: $pasteFailed) {
@@ -329,6 +334,11 @@ struct LibraryWindow: View {
                     importBookmarksFile()
                 } label: {
                     Label("Import Bookmarks File...", systemImage: "doc.badge.plus")
+                }
+                Button {
+                    isAddingPlaces = true
+                } label: {
+                    Label("Add Places...", systemImage: "mappin.and.ellipse")
                 }
                 Divider()
                 Button {
@@ -952,11 +962,15 @@ struct BookmarkActions: ViewModifier {
         } label: {
             Label("Edit Note", systemImage: "note.text")
         }
-        Button {
-            let id = bookmark.id
-            Task { await model.enrichment.enrich(id: id) }
-        } label: {
-            Label("Refresh Metadata", systemImage: "arrow.clockwise")
+        if !bookmark.isPlace {
+            // A place has no page behind it; a fetch would only overwrite the
+            // name the user approved.
+            Button {
+                let id = bookmark.id
+                Task { await model.enrichment.enrich(id: id) }
+            } label: {
+                Label("Refresh Metadata", systemImage: "arrow.clockwise")
+            }
         }
         Divider()
         Button {
@@ -974,7 +988,7 @@ struct BookmarkActions: ViewModifier {
         } label: {
             Label("Show QR Code", systemImage: "qrcode")
         }
-        if bookmark.folder == "Restaurants" {
+        if bookmark.isPlace || bookmark.folder == "Restaurants" {
             Button {
                 openInMaps()
             } label: {
@@ -990,6 +1004,12 @@ struct BookmarkActions: ViewModifier {
     }
 
     private func openInMaps() {
+        // A resolved place knows its own coordinates. Anything else can only
+        // ask the map to search for the title.
+        if let url = bookmark.place?.mapsURL {
+            NSWorkspace.shared.open(url)
+            return
+        }
         var parts = URLComponents(string: "https://maps.apple.com/")!
         parts.queryItems = [URLQueryItem(name: "q", value: bookmark.title)]
         if let url = parts.url { NSWorkspace.shared.open(url) }
@@ -1094,7 +1114,7 @@ struct BookmarkCard: View {
                     .lineLimit(2, reservesSpace: true)
                 // The note line always reserves its height, so every card in a
                 // row is the same size whether or not a note exists.
-                Text(bookmark.note ?? " ")
+                Text(bookmark.note ?? bookmark.place?.address ?? " ")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1, reservesSpace: true)
@@ -1149,7 +1169,8 @@ struct BookmarkCard: View {
             RoundedRectangle(cornerRadius: 6)
                 .fill(.quaternary)
                 .frame(height: 110)
-                .overlay(Image(systemName: "link").foregroundStyle(.tertiary))
+                .overlay(Image(systemName: bookmark.isPlace ? "mappin.and.ellipse" : "link")
+                    .foregroundStyle(.tertiary))
         }
     }
 

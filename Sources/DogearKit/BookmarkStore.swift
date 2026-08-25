@@ -125,6 +125,29 @@ public final class BookmarkStore {
         return (bookmark, true)
     }
 
+    /// Saves resolved places as bookmarks in one write. A place bookmark
+    /// carries the map link as its URL, so dedupe and export need no second
+    /// path. The folder is the one the user chose in the import sheet, so the
+    /// record is marked as filed by hand and the categorizer leaves it alone.
+    /// Returns the new bookmarks; a place already saved is skipped.
+    public func add(places: [Place], to folder: String) -> [Bookmark] {
+        guard !places.isEmpty else { return [] }
+        let target = library.folders.contains(folder) ? folder : Library.unsorted
+        var new: [Bookmark] = []
+        for place in places.reversed() {
+            guard let url = place.mapsURL, let (bookmark, isNew) = insert(url: url), isNew,
+                  let index = library.bookmarks.firstIndex(where: { $0.id == bookmark.id }) else { continue }
+            library.bookmarks[index].title = place.name
+            library.bookmarks[index].folder = target
+            library.bookmarks[index].manuallyFiled = true
+            library.bookmarks[index].place = place
+            new.append(library.bookmarks[index])
+        }
+        new.reverse()
+        if !new.isEmpty { mutated() }
+        return new
+    }
+
     public func update(_ bookmark: Bookmark) {
         guard let index = library.bookmarks.firstIndex(where: { $0.id == bookmark.id }) else { return }
         var bookmark = bookmark
@@ -280,6 +303,7 @@ public final class BookmarkStore {
             $0.title.lowercased().contains(needle)
                 || ($0.author?.lowercased().contains(needle) ?? false)
                 || ($0.note?.lowercased().contains(needle) ?? false)
+                || ($0.place?.address?.lowercased().contains(needle) ?? false)
                 || $0.url.lowercased().contains(needle)
         }
     }

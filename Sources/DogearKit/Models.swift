@@ -22,11 +22,14 @@ public struct Bookmark: Codable, Identifiable, Equatable, Sendable {
     /// When the pick row last showed this bookmark. Optional for the same
     /// reason as favoritedAt: an older library file must still load.
     public var lastShownAt: Date?
+    /// Set when the bookmark stands for a place on the map instead of a page
+    /// on the web. Optional, so an older library file still loads.
+    public var place: Place?
 
     public init(id: UUID, url: String, title: String, author: String?, note: String?,
                 folder: String, source: Source, createdAt: Date, doneAt: Date?,
                 hasThumbnail: Bool, manuallyFiled: Bool, favoritedAt: Date? = nil,
-                lastShownAt: Date? = nil) {
+                lastShownAt: Date? = nil, place: Place? = nil) {
         self.id = id
         self.url = url
         self.title = title
@@ -40,10 +43,12 @@ public struct Bookmark: Codable, Identifiable, Equatable, Sendable {
         self.manuallyFiled = manuallyFiled
         self.favoritedAt = favoritedAt
         self.lastShownAt = lastShownAt
+        self.place = place
     }
 
     public var isDone: Bool { doneAt != nil }
     public var isFavorite: Bool { favoritedAt != nil }
+    public var isPlace: Bool { place != nil }
 }
 
 extension Bookmark {

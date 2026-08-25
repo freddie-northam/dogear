@@ -134,6 +134,31 @@ final class AppModel: ObservableObject {
         return store.autoFile(assignments)
     }
 
+    /// Saves resolved places and draws a map for each one. Places never go
+    /// through enrichment: there is no page to read, and a fetch of the map
+    /// link would only overwrite the name the user just approved. Returns how
+    /// many were saved.
+    func importPlaces(_ places: [Place], to folder: String) -> Int {
+        let saved = store.add(places: places, to: folder)
+        guard !saved.isEmpty else { return 0 }
+        let thumbnails = thumbnails
+        let store = store
+        Task { @MainActor in
+            for bookmark in saved {
+                guard let place = bookmark.place,
+                      let data = await PlaceSnapshot.pngData(for: place),
+                      thumbnails.store(data, for: bookmark.id) else { continue }
+                // Re-read the record: the user may have renamed or refiled it
+                // while the map was drawing.
+                guard var fresh = store.library.bookmarks.first(where: { $0.id == bookmark.id })
+                else { continue }
+                fresh.hasThumbnail = true
+                store.update(fresh)
+            }
+        }
+        return saved.count
+    }
+
     func capture(urls: [URL]) -> CaptureResult {
         // The one capture gate: every caller (text, drop, import) inherits it.
         // A dropped file:// URL must never become a bookmark or reach enrichment.
