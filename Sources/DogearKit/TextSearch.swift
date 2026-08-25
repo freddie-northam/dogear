@@ -29,6 +29,83 @@ enum TextSearch {
         var isEmpty: Bool { bytes.isEmpty }
     }
 
+    /// Text prepared once so that many queries can be run against it.
+    ///
+    /// Search prepares the query and sweeps many bookmarks. Filing is the
+    /// other way round: one bookmark's text tested against a few hundred
+    /// keywords. Preparing the text once turns that from a per-keyword cost
+    /// into a per-bookmark one.
+    struct Haystack {
+        fileprivate let lowered: String
+        fileprivate let bytes: [UInt8]
+        fileprivate let isASCII: Bool
+
+        init(_ text: String) {
+            lowered = text.lowercased()
+            bytes = Array(lowered.utf8)
+            isASCII = !bytes.contains { $0 >= 0x80 }
+        }
+    }
+
+    /// True when prepared text contains the query, ignoring case. Both sides
+    /// are lowercased already, so a byte compare is exact for ASCII; anything
+    /// else falls back to String, for the reason `matches(_:_:)` gives.
+    static func matches(_ haystack: Haystack, _ query: Query) -> Bool {
+        guard !query.isEmpty else { return false }
+        guard haystack.isASCII, query.isASCII else {
+            return haystack.lowered.contains(query.lowered)
+        }
+        return haystack.bytes.withUnsafeBufferPointer { hay in
+            query.bytes.withUnsafeBufferPointer { needle in
+                Self.scan(hay, needle) != nil
+            }
+        }
+    }
+
+    /// True when the query appears in prepared text bounded by non-letters, so
+    /// "ai" matches "ai agents" but not "email".
+    static func containsWord(_ query: Query, in haystack: Haystack) -> Bool {
+        guard !query.isEmpty else { return false }
+        guard haystack.isASCII, query.isASCII else {
+            return KeywordCategorizer.containsWord(query.lowered, in: haystack.lowered)
+        }
+        return haystack.bytes.withUnsafeBufferPointer { hay in
+            query.bytes.withUnsafeBufferPointer { needle in
+                var from = 0
+                while let start = Self.scan(hay, needle, from: from) {
+                    let beforeOK = start == 0 || !Self.isASCIILetter(hay[start - 1])
+                    let end = start + needle.count
+                    let afterOK = end == hay.count || !Self.isASCIILetter(hay[end])
+                    if beforeOK, afterOK { return true }
+                    from = start + 1
+                }
+                return false
+            }
+        }
+    }
+
+    /// Index of the first match at or after `from`, or nil. Both sides are
+    /// already lowercase here, so this is a plain byte compare.
+    private static func scan(_ haystack: UnsafeBufferPointer<UInt8>,
+                             _ needle: UnsafeBufferPointer<UInt8>,
+                             from: Int = 0) -> Int? {
+        guard !needle.isEmpty, haystack.count >= needle.count else { return nil }
+        let limit = haystack.count - needle.count
+        var start = from
+        while start <= limit {
+            var offset = 0
+            while offset < needle.count, haystack[start + offset] == needle[offset] { offset += 1 }
+            if offset == needle.count { return start }
+            start += 1
+        }
+        return nil
+    }
+
+    private static func isASCIILetter(_ byte: UInt8) -> Bool {
+        (byte >= UInt8(ascii: "a") && byte <= UInt8(ascii: "z"))
+            || (byte >= UInt8(ascii: "A") && byte <= UInt8(ascii: "Z"))
+    }
+
     /// True when `haystack` contains the query, ignoring case.
     ///
     /// The byte scan runs only when the query and the text are both ASCII,
