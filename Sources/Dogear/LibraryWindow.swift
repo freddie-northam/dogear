@@ -61,6 +61,8 @@ struct LibraryWindow: View {
     @State private var importState: NotesImportState = .confirm
     @State private var selectedFolderIDs: Set<String> = []
     @State private var fileForMeResult: String?
+    @State private var folderPlan: FolderPlan?
+    @State private var planningFolders = false
     @State private var importFileResult: String?
     @AppStorage("libraryView") private var viewRaw = "grid"
     @AppStorage("librarySort") private var sortRaw = LibrarySort.lastSaved.rawValue
@@ -126,6 +128,12 @@ struct LibraryWindow: View {
             Button("OK") { model.storageError = nil }
         } message: {
             Text(model.storageError ?? "")
+        }
+        .sheet(item: $folderPlan) { plan in
+            FolderSuggestionSheet(plan: plan) { filed in
+                fileForMeResult = "Dogear filed \(filed) bookmark\(filed == 1 ? "" : "s")."
+            }
+            .environmentObject(model)
         }
         .alert("File These for Me", isPresented: Binding(
             get: { fileForMeResult != nil },
@@ -267,6 +275,12 @@ struct LibraryWindow: View {
                     } label: {
                         Label("File These for Me", systemImage: "sparkles")
                     }
+                    Button {
+                        suggestFolders()
+                    } label: {
+                        Label("Suggest Folders...", systemImage: "folder.badge.questionmark")
+                    }
+                    .disabled(planningFolders)
                 }
                 if folder != Library.unsorted {
                     Button {
@@ -346,6 +360,24 @@ struct LibraryWindow: View {
     }
 
     // MARK: Content
+
+    /// Works out which folders would be worth making, and shows the plan.
+    /// Filing only ever picks from folders that exist, so a link whose subject
+    /// has no folder waits with no explanation. This is that explanation, with
+    /// a number attached.
+    private func suggestFolders() {
+        planningFolders = true
+        Task {
+            defer { planningFolders = false }
+            let plan = await FolderSuggestions.plan(
+                for: model.store.library.bookmarks, folders: model.store.library.folders)
+            if plan.isEmpty {
+                fileForMeResult = "Nothing to suggest. Everything waiting already fits a folder you have."
+            } else {
+                folderPlan = plan
+            }
+        }
+    }
 
     private var trimmedQuery: String {
         query.trimmingCharacters(in: .whitespacesAndNewlines)

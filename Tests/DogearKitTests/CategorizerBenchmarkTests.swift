@@ -81,7 +81,7 @@ private func benchReport(_ label: String, iterations: Int, _ body: () async -> V
         }
 
         await benchReport("Suggest Folders (scoring pass)", iterations: 1) {
-            _ = await FolderSuggestions.suggest(for: bookmarks, folders: folders)
+            _ = await FolderSuggestions.plan(for: bookmarks, folders: folders)
         }
     }
 }

@@ -17,6 +17,25 @@ public struct FolderSuggestion: Equatable, Sendable {
     }
 }
 
+/// A proposal: folders to make, and where every waiting bookmark would go.
+///
+/// Nothing here has happened yet. The plan is shown, the user accepts the
+/// folders worth having, and only then is anything moved.
+public struct FolderPlan: Equatable, Sendable, Identifiable {
+    public var id: [String] { suggestions.map(\.name) }
+    public let suggestions: [FolderSuggestion]
+    /// Where each waiting bookmark would land. Worked out once, so accepting
+    /// a plan costs nothing.
+    public let assignments: [UUID: String]
+
+    public init(suggestions: [FolderSuggestion], assignments: [UUID: String]) {
+        self.suggestions = suggestions
+        self.assignments = assignments
+    }
+
+    public var isEmpty: Bool { suggestions.isEmpty }
+}
+
 /// Finds folders worth making, by asking what the categorizer already knows.
 ///
 /// A rule like "a github.com link belongs in Developer" does nothing while no
@@ -43,19 +62,19 @@ public enum FolderSuggestions {
     /// folder added, so a suggestion cannot promise a placement the app would
     /// not actually make. Suggestions come back with the largest first, and a
     /// candidate that would file nothing is left out.
-    public static func suggest(
+    public static func plan(
         for bookmarks: [Bookmark],
         folders: [String],
         categorizer: Categorizer = KeywordCategorizer(),
         exampleLimit: Int = 3
-    ) async -> [FolderSuggestion] {
+    ) async -> FolderPlan {
         let waiting = bookmarks.filter {
             $0.folder == Library.unsorted && !$0.isDone && !$0.manuallyFiled
         }
-        guard !waiting.isEmpty else { return [] }
+        guard !waiting.isEmpty else { return FolderPlan(suggestions: [], assignments: [:]) }
 
         let candidates = knownFolders.filter { !folders.contains($0) }
-        guard !candidates.isEmpty else { return [] }
+        guard !candidates.isEmpty else { return FolderPlan(suggestions: [], assignments: [:]) }
 
         // Every candidate is offered at once, and each bookmark goes to the
         // one folder it fits best. Scoring the candidates separately counted
@@ -86,8 +105,15 @@ public enum FolderSuggestions {
         }
         // Largest first, then by name, so the order never depends on how a
         // Dictionary happened to iterate.
-        return suggestions.sorted {
-            $0.count == $1.count ? $0.name < $1.name : $0.count > $1.count
+        suggestions.sort { left, right in
+            if left.count != right.count { return left.count > right.count }
+            return left.name < right.name
         }
+
+        var assignments: [UUID: String] = [:]
+        for (folder, found) in matched {
+            for bookmark in found { assignments[bookmark.id] = folder }
+        }
+        return FolderPlan(suggestions: suggestions, assignments: assignments)
     }
 }
