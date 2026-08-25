@@ -37,6 +37,9 @@ you open it.
 2. The bookmark icon in the menu bar fills when a link is ready.
 3. Click the icon and press Return. Done.
 
+Set a shortcut in Settings and step 2 goes away: press it in any app and
+Dogear saves the copied link, with a tick in the menu bar to say so.
+
 Dogear fetches the title, the author, and a thumbnail, and files the link into
 a folder: Recipes, Restaurants, Shows, Music, or Articles. On macOS 26 with
 Apple Intelligence, an on-device model picks the folder. On earlier systems,
@@ -51,10 +54,15 @@ Archive, which stays searchable. Undo with Command Z.
 - Grid view or list view. Sort by last saved, oldest first, title, or site.
 - Your own folders, in the order you drag them into.
 - Favourites, notes, and a QR code to open any link on your phone.
+- Places: restaurants and hotels that live in a note with no link. Paste
+  "City ~ Name" lines, check what the map found, and each one becomes a card
+  with its address and a map of its corner. A click opens it in Maps.
 - Import from Apple Notes, or from a browser bookmarks file. Paste a block of
   text and Dogear saves every link in it.
-- Export a folder or the whole library as Markdown.
+- Export as Markdown, or as a bookmarks file every browser reads.
 - Save from any app: select a link, right-click, then Services, Save to Dogear.
+- Find a saved link from Spotlight, without opening Dogear.
+- Save Links to Dogear, an action for Shortcuts.
 
 ## Install
 
@@ -75,7 +83,7 @@ You need Xcode 16 or later. Nothing else.
 ```bash
 git clone https://github.com/freddie-northam/dogear
 cd dogear
-swift test              # 155 tests, all offline
+swift test              # 194 tests, all offline
 Scripts/make-app.sh     # builds build/Dogear.app
 open build/Dogear.app
 ```
@@ -83,10 +91,17 @@ open build/Dogear.app
 ## Privacy
 
 Dogear stores everything in one local JSON file, with a backup beside it.
-The app makes network requests only to fetch metadata for links you save.
-It checks the clipboard's shape without a content read, and reads the
+There is no account, no server, and no telemetry.
+
+The app goes out to the network for two things, both of which you start:
+it fetches the title, author, and thumbnail for a link you save, and it
+sends a place you paste into Add Places to Apple's map service to find it.
+Nothing else leaves your Mac.
+
+Dogear checks the clipboard's shape without a content read, and reads the
 content only when the clipboard holds a link. Import from Notes and Save to
-Dogear read only what you choose to import or select.
+Dogear read only what you choose to import or select. Spotlight search is a
+list the system keeps on this Mac; one setting turns it off and removes it.
 
 ## License
 

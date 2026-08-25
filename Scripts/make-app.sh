@@ -86,6 +86,9 @@ cat > "$APP/Contents/Info.plist" <<PLIST
             <array><string>public.url</string><string>public.utf8-plain-text</string></array>
         </dict>
     </array>
+    <!-- A Spotlight result hands the app this activity type. -->
+    <key>NSUserActivityTypes</key>
+    <array><string>com.apple.corespotlightitem</string></array>
     <key>NSAppleEventsUsageDescription</key><string>Dogear reads your notes to find links you saved.</string>
     <key>NSHumanReadableCopyright</key><string>MIT License</string>
 </dict>

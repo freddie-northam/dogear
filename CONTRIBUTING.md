@@ -54,6 +54,14 @@ A fetcher either parses the page body or calls its own endpoint; see
 `Tests/DogearKitTests/Fixtures`. Use `TikTokFetcherTests.swift` or
 `XFetcherTests.swift` as the pattern.
 
+### Add a place source
+
+`PlaceResolver` (`Sources/DogearKit/Place.swift`) turns a `PlaceQuery` into a
+`Place`. `MapKitPlaceResolver` (`Sources/Dogear/`) is the one implementation.
+It lives in the app, not the kit, because MKLocalSearch takes no stand-in and
+the file could carry no test. Keep a new resolver there for the same reason,
+and test the parsing in `PlaceParser` instead.
+
 ### Add a categorizer
 
 Implement `Categorizer` (`Sources/DogearKit/Categorizer.swift`):
@@ -74,3 +82,5 @@ through iCloud. Keep these rules:
   example).
 - Writes stay atomic, with `.bak` rotation, as in
   `BookmarkStore.saveNow()`.
+- A place is a bookmark whose `url` is an Apple Maps link. Keep it that way:
+  dedupe, export, and the http(s) rule then need no second path.
