@@ -105,7 +105,7 @@ public struct FolderPlanner: Sendable {
             .joined(separator: "\n")
         let prompt = """
             Assign each numbered link to exactly one folder from this list: \
-            \(choices.joined(separator: ", ")), \(Library.unsorted).
+            \(choices.map(oneLine).joined(separator: ", ")), \(Library.unsorted).
             Use \(Library.unsorted) when genuinely unclear. \
             Reply with ONLY lines of the form N=Folder, one per link, nothing else.
 
@@ -144,7 +144,7 @@ public struct FolderPlanner: Sendable {
         for raw in answer.split(separator: ",") {
             let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
                 .trimmingCharacters(in: CharacterSet(charactersIn: "\"'.`"))
-            guard !name.isEmpty, name.count <= 30,
+            guard !name.isEmpty, name.count <= 30, isPlainName(name),
                   name.caseInsensitiveCompare(Library.unsorted) != .orderedSame,
                   !existing.contains(where: { $0.caseInsensitiveCompare(name) == .orderedSame }),
                   !names.contains(where: { $0.caseInsensitiveCompare(name) == .orderedSame })
@@ -152,6 +152,22 @@ public struct FolderPlanner: Sendable {
             names.append(name)
         }
         return Array(names.prefix(maximumFolders))
+    }
+
+    /// True when a name is ordinary printable text on one line.
+    ///
+    /// A page writes its own title, and those titles are what the model is
+    /// asked to name folders from, so a proposed name is downstream of text an
+    /// attacker controls. A name carrying a newline would be pasted straight
+    /// into the next prompt, where a line like `2=Music` is exactly the shape
+    /// the reply is parsed against: one hostile title could then steer where
+    /// every other link is filed, and the plan is built before anyone sees it.
+    /// Such a name is refused outright rather than repaired, because the user
+    /// approves what they are shown and it must be what gets created.
+    func isPlainName(_ name: String) -> Bool {
+        !name.unicodeScalars.contains {
+            CharacterSet.controlCharacters.contains($0) || CharacterSet.newlines.contains($0)
+        }
     }
 
     /// Titles arrive from pages and can carry newlines, which would break the
