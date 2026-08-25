@@ -10,6 +10,8 @@ struct SettingsView: View {
                 .tabItem { Label("General", systemImage: "gearshape") }
             LibrarySettings()
                 .tabItem { Label("Library", systemImage: "books.vertical") }
+            FilingSettings()
+                .tabItem { Label("Filing", systemImage: "folder.badge.gearshape") }
             HelpSettings()
                 .tabItem { Label("Help", systemImage: "questionmark.circle") }
             AboutSettings()
@@ -53,6 +55,112 @@ private struct GeneralSettings: View {
             }
         }
         .formStyle(.grouped)
+    }
+}
+
+// MARK: - Filing
+
+/// Where the keys live. Shared with LibraryWindow, which reads them to decide
+/// whether to offer folder suggestions at all.
+enum FilingDefaults {
+    static let enabledKey = "folderSuggestionsEnabled"
+    static let commandKey = "folderSuggestionsCommand"
+
+    static var settings: CLIModelSettings? {
+        let defaults = UserDefaults.standard
+        guard defaults.bool(forKey: enabledKey) else { return nil }
+        let path = defaults.string(forKey: commandKey) ?? ""
+        guard !path.isEmpty else { return nil }
+        // `claude -p <prompt>` and `codex exec <prompt>` differ only here.
+        let arguments = path.hasSuffix("codex") ? ["exec"] : ["-p"]
+        return CLIModelSettings(commandPath: path, arguments: arguments)
+    }
+}
+
+private struct FilingSettings: View {
+    @AppStorage(FilingDefaults.enabledKey) private var enabled = false
+    @AppStorage(FilingDefaults.commandKey) private var commandPath = ""
+    @State private var testResult: String?
+    @State private var testing = false
+
+    private var whichCategorizer: String {
+        CategorizerFactory.usesAppleModel
+            ? "Dogear files with the model built into macOS."
+            : "Dogear files by matching words in a title. The model built into macOS needs macOS 26."
+    }
+
+    var body: some View {
+        Form {
+            Section("How Dogear files now") {
+                Text(whichCategorizer)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            Section("Folder suggestions") {
+                Toggle(isOn: $enabled) {
+                    Text("Suggest folders from my links")
+                    Text("Dogear reads the links waiting in Unsorted and proposes folders "
+                         + "for them. This sends their titles to the command below, and to "
+                         + "whichever provider you signed in to there. Nothing else in "
+                         + "Dogear leaves your Mac. Nothing moves until you accept.")
+                }
+                if enabled {
+                    LabeledContent("Command") {
+                        TextField("/opt/homebrew/bin/codex", text: $commandPath)
+                            .textFieldStyle(.roundedBorder)
+                            .autocorrectionDisabled()
+                    }
+                    Text("Give the full path. An app opened from the Finder cannot see the "
+                         + "same PATH your terminal does, so a bare name will not be found.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    HStack {
+                        if !CLIModelSettings.findLikelyCommands().isEmpty {
+                            Menu("Find One") {
+                                ForEach(CLIModelSettings.findLikelyCommands(), id: \.self) { path in
+                                    Button(path) { commandPath = path; testResult = nil }
+                                }
+                            }
+                        }
+                        Button(testing ? "Testing..." : "Test") { test() }
+                            .disabled(commandPath.isEmpty || testing)
+                        if let testResult {
+                            Text(testResult).font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    /// Asks the command something with one right answer, so a reply proves it
+    /// runs, is signed in, and answers in a usable shape.
+    private func test() {
+        testing = true
+        testResult = nil
+        let path = commandPath
+        Task {
+            let arguments = path.hasSuffix("codex") ? ["exec"] : ["-p"]
+            let runner = ProcessCLIModelRunner(settings: CLIModelSettings(
+                commandPath: path, arguments: arguments, timeout: .seconds(60)))
+            do {
+                let answer = try await runner.run(
+                    prompt: "Reply with exactly the word READY and nothing else.")
+                testResult = answer.localizedCaseInsensitiveContains("ready")
+                    ? "Works."
+                    : "Answered, but not as expected: \(answer.prefix(40))"
+            } catch CLIModelError.commandNotFound(let path) {
+                testResult = "No command at \(path)."
+            } catch CLIModelError.timedOut {
+                testResult = "No answer in time."
+            } catch CLIModelError.failed(_, let message) {
+                testResult = message.isEmpty ? "The command failed." : String(message.prefix(60))
+            } catch {
+                testResult = "The command failed."
+            }
+            testing = false
+        }
     }
 }
 

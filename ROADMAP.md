@@ -44,6 +44,22 @@ next, and what the team chose to leave out.
 
 Nothing is scheduled. New ideas start as deferred decisions below.
 
+## Decisions
+
+- Folder suggestions send bookmark titles off the Mac, which no other part
+  of Dogear does. The team chose to allow it because the alternative is
+  worse: on a real 247 link library, keyword rules filed 66% and left the
+  rest with no explanation. The feature is off by default, it names what it
+  sends before it sends it, and it uses a tool the user already pays for, so
+  Dogear still has no account, no key, and no server of its own. A user who
+  never turns it on keeps a fully local app.
+
+- Apple's on-device model is used when the Mac has it, but it is not the
+  answer on its own. It can only choose from folders that already exist, so
+  on a library whose folders do not fit its contents it correctly answers
+  Unsorted every time. Folders that match the library matter more than the
+  model that picks between them.
+
 ## Deferred by decision
 
 - Nested folders and sidebar dividers: one flat level of folders keeps
