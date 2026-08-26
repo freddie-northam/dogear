@@ -626,7 +626,7 @@ struct LibraryWindow: View {
     private func exportMarkdownFile() {
         export(named: "Dogear.md",
                type: UTType(filenameExtension: "md") ?? .plainText,
-               contents: exportMarkdown(model.store.library))
+               contents: MarkdownExport.export(model.store.library))
     }
 
     /// The door back out to a browser: every browser reads this format, and
@@ -692,20 +692,6 @@ func hostName(_ bookmark: Bookmark) -> String {
 /// A markdown export of the whole library: one `## <Folder>` section per
 /// non-empty folder, in `library.folders` order, then an `## Archive`
 /// section for done bookmarks if any exist.
-private func exportMarkdown(_ library: Library) -> String {
-    var sections: [String] = []
-    for folder in library.folders {
-        let items = library.bookmarks.filter { $0.folder == folder && !$0.isDone }
-        guard !items.isEmpty else { continue }
-        sections.append("## \(folder)\n\n\(Bookmark.markdownList(items))")
-    }
-    let archived = library.bookmarks.filter(\.isDone)
-    if !archived.isEmpty {
-        sections.append("## Archive\n\n\(Bookmark.markdownList(archived))")
-    }
-    return sections.joined(separator: "\n\n")
-}
-
 /// Lists every Notes folder across every account, on the main thread:
 /// NSAppleScript is documented main-thread-only. This is the first Apple
 /// event of an import, so it is also the consent trigger. Returns nil when
