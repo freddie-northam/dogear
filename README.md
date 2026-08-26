@@ -83,7 +83,7 @@ You need Xcode 16 or later. Nothing else.
 ```bash
 git clone https://github.com/freddie-northam/dogear
 cd dogear
-swift test              # 194 tests, all offline
+swift test              # the whole suite, all offline
 Scripts/make-app.sh     # builds build/Dogear.app
 open build/Dogear.app
 ```
