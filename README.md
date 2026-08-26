@@ -93,10 +93,10 @@ open build/Dogear.app
 Dogear stores everything in one local JSON file, with a backup beside it.
 There is no account, no server, and no telemetry.
 
-The app goes out to the network for two things, both of which you start:
-it fetches the title, author, and thumbnail for a link you save, and it
-sends a place you paste into Add Places to Apple's map service to find it.
-Nothing else leaves your Mac.
+The app goes out to the network only for things you start:
+it fetches the title, author, and thumbnail for a link you save, and for a
+place you add it sends the text you pasted to Apple's map service to find
+the place, then draws a small map of it. Nothing else leaves your Mac.
 
 Dogear checks the clipboard's shape without a content read, and reads the
 content only when the clipboard holds a link. Import from Notes and Save to
