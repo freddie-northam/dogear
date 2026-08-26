@@ -40,7 +40,6 @@ struct DogearApp: App {
     @Environment(\.openWindow) private var openWindow
     @State private var serviceProvider: ServiceProvider?
     @State private var dockObserver = DockReopenObserver()
-    @State private var didSaveFromHotKey = false
     @AppStorage(DogearApp.hotKeyDefaultsKey) private var captureHotKey = ""
 
     static let hotKeyDefaultsKey = "captureHotKey" 
@@ -98,7 +97,7 @@ struct DogearApp: App {
     }
 
     private var menuBarIcon: NSImage {
-        if didSaveFromHotKey { return savedIcon }
+        if model.showsSavedTick { return savedIcon }
         return clipboard.linkDetected ? linkDetectedIcon : idleIcon
     }
 
@@ -114,11 +113,8 @@ struct DogearApp: App {
     private func captureFromClipboard() {
         Task { @MainActor in
             guard let text = await clipboard.readLink(),
-                  model.capture(text: text).total > 0 else { return }
+                  model.captureWithoutWindow(text: text).total > 0 else { return }
             clipboard.consume()
-            didSaveFromHotKey = true
-            try? await Task.sleep(for: .seconds(1.2))
-            didSaveFromHotKey = false
         }
     }
 
@@ -128,7 +124,7 @@ struct DogearApp: App {
         guard serviceProvider == nil else { return }
         let model = model
         let provider = ServiceProvider { text in
-            _ = model.capture(text: text)
+            model.captureWithoutWindow(text: text)
         }
         serviceProvider = provider
         NSApp.servicesProvider = provider

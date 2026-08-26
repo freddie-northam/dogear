@@ -22,6 +22,9 @@ final class AppModel: ObservableObject {
     @Published var storageError: String?
     /// Set when a Spotlight result asks the library to show a bookmark.
     @Published var spotlightRequest: String?
+    /// True for a moment after a save that had no window on screen. The menu
+    /// bar shows a tick, because the app sends no notifications.
+    @Published private(set) var showsSavedTick = false
 
     private var spotlightTask: Task<Void, Never>?
 
@@ -222,6 +225,21 @@ final class AppModel: ObservableObject {
               let data = await PlaceSnapshot.pngData(for: place),
               thumbnails.store(data, for: bookmark.id) else { return nil }
         return bookmark.id
+    }
+
+    /// A save with nothing on screen: the shortcut, the Services item, and
+    /// the Shortcuts action. All three go through here so the confirmation
+    /// belongs to the save rather than to one of the three callers.
+    @discardableResult
+    func captureWithoutWindow(text: String) -> CaptureResult {
+        let result = capture(text: text)
+        guard result.total > 0 else { return result }
+        showsSavedTick = true
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(1.2))
+            self?.showsSavedTick = false
+        }
+        return result
     }
 
     func capture(urls: [URL]) -> CaptureResult {

@@ -18,7 +18,7 @@ struct SaveLinkIntent: AppIntent {
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<Int> {
         let model = try await Self.readyModel()
-        return .result(value: model.capture(text: text).new)
+        return .result(value: model.captureWithoutWindow(text: text).new)
     }
 
     /// The app may still be starting when the intent runs, so wait for the
