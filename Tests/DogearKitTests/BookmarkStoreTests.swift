@@ -807,3 +807,37 @@ private func testPlace(_ name: String, latitude: Double = 51.5, longitude: Doubl
     #expect(withPlace.subtitle == "Ginza, Tokyo")
     #expect(base.subtitle == nil)
 }
+
+@Test func migrationDropsARecordWhoseURLIsNotHTTP() throws {
+    let temp = TempDirectory()
+    let dir = temp.url
+    // Schema version 1: a library written before the http(s) gate existed.
+    let older = """
+        {"folders":["Recipes","Unsorted"],"schemaVersion":1,"bookmarks":[
+        {"id":"\(UUID().uuidString)","url":"file:///etc/hosts","title":"Local","folder":"Recipes",
+        "source":"web","createdAt":0,"hasThumbnail":false,"manuallyFiled":false},
+        {"id":"\(UUID().uuidString)","url":"https://a.com/p","title":"Pasta","folder":"Recipes",
+        "source":"web","createdAt":0,"hasThumbnail":false,"manuallyFiled":false}]}
+        """
+    try older.write(to: dir.appendingPathComponent("library.json"), atomically: true, encoding: .utf8)
+    let store = try BookmarkStore(directory: dir)
+    #expect(store.library.bookmarks.map(\.url) == ["https://a.com/p"])
+    // The drop is persisted, so it happens once and not on every launch.
+    let reloaded = try BookmarkStore(directory: dir)
+    #expect(reloaded.library.bookmarks.count == 1)
+}
+
+@Test func migrationKeepsEveryHTTPRecord() throws {
+    let temp = TempDirectory()
+    let dir = temp.url
+    let older = """
+        {"folders":["Recipes","Unsorted"],"schemaVersion":1,"bookmarks":[
+        {"id":"\(UUID().uuidString)","url":"http://a.com/one","title":"One","folder":"Recipes",
+        "source":"web","createdAt":0,"hasThumbnail":false,"manuallyFiled":false},
+        {"id":"\(UUID().uuidString)","url":"https://b.com/two","title":"Two","folder":"Recipes",
+        "source":"web","createdAt":0,"hasThumbnail":false,"manuallyFiled":false}]}
+        """
+    try older.write(to: dir.appendingPathComponent("library.json"), atomically: true, encoding: .utf8)
+    let store = try BookmarkStore(directory: dir)
+    #expect(store.library.bookmarks.count == 2)
+}

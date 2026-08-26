@@ -55,9 +55,12 @@ public final class BookmarkStore {
         var canonicalized: [Bookmark] = []
         var indexByURL: [String: Int] = [:]
         for var bookmark in library.bookmarks {
-            if let url = URL(string: bookmark.url) {
-                bookmark.url = URLCleaner.canonicalString(url)
-            }
+            // The same gate every other path applies. A record whose URL is not
+            // http(s) cannot be opened, edited, or re-saved, so it is already
+            // inert; migration is where a one-shot cleanup belongs, and leaving
+            // it in would let it reach an href in an export.
+            guard let url = URL(string: bookmark.url), URLCleaner.isCapturable(url) else { continue }
+            bookmark.url = URLCleaner.canonicalString(url)
             if let existingIndex = indexByURL[bookmark.url] {
                 if canonicalized[existingIndex].note == nil {
                     canonicalized[existingIndex].note = bookmark.note

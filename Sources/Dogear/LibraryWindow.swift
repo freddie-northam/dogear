@@ -67,7 +67,7 @@ struct LibraryWindow: View {
     @AppStorage("librarySort") private var sortRaw = LibrarySort.lastSaved.rawValue
     @AppStorage("notesImportSelection") private var selectionJSON = ""
     @AppStorage("notesImportCursors") private var cursorsJSON = "{}"
-    private let archiveID = "__archive__"
+    private let archiveID = AppModel.archiveID
     private let favoritesID = "__favorites__"
 
     var body: some View {
@@ -111,9 +111,10 @@ struct LibraryWindow: View {
                 .environmentObject(model)
         }
         .onChange(of: selectedFolderIDs) { _, ids in saveSelection(ids) }
-        .onChange(of: model.spotlightRequest) { _, request in
-            guard let request else { return }
-            query = request
+        .onChange(of: model.spotlightRequest?.query) { _, _ in
+            guard let request = model.spotlightRequest else { return }
+            selection = request.folder
+            query = request.query
             model.spotlightRequest = nil
         }
         .alert("No Link Found", isPresented: $pasteFailed) {
