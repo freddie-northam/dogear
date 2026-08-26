@@ -40,7 +40,6 @@ struct DogearApp: App {
     @Environment(\.openWindow) private var openWindow
     @State private var serviceProvider: ServiceProvider?
     @State private var dockObserver = DockReopenObserver()
-    @State private var hotKey = HotKeyMonitor()
     @State private var didSaveFromHotKey = false
     @AppStorage(DogearApp.hotKeyDefaultsKey) private var captureHotKey = ""
 
@@ -106,7 +105,8 @@ struct DogearApp: App {
     // MARK: Shortcut
 
     private func applyHotKey() {
-        hotKey.register(HotKeyCombo(defaultsValue: captureHotKey), action: captureFromClipboard)
+        HotKeyMonitor.shared.register(HotKeyCombo(defaultsValue: captureHotKey),
+                                      action: captureFromClipboard)
     }
 
     /// The shortcut path skips the popover: there is nothing to confirm, and

@@ -7,20 +7,30 @@ import SwiftUI
 /// the user already runs, so Dogear asks instead of guessing.
 struct ShortcutRecorder: View {
     @Binding var stored: String
+    @ObservedObject private var monitorState = HotKeyMonitor.shared
     @State private var isRecording = false
     @State private var monitor: Any?
 
     private var combo: HotKeyCombo? { HotKeyCombo(defaultsValue: stored) }
 
     var body: some View {
-        HStack(spacing: 8) {
-            Button(action: toggle) {
-                Text(label)
-                    .font(.body.monospaced())
-                    .frame(minWidth: 110)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Button(action: toggle) {
+                    Text(label)
+                        .font(.body.monospaced())
+                        .frame(minWidth: 110)
+                }
+                if combo != nil, !isRecording {
+                    Button("Clear") { stored = "" }
+                }
             }
-            if combo != nil, !isRecording {
-                Button("Clear") { stored = "" }
+            // Without this the shortcut sits there looking correct and does
+            // nothing, which reads as a broken app rather than a taken key.
+            if monitorState.isUnavailable, !isRecording {
+                Text("Another app already uses this shortcut. Record a different one.")
+                    .font(.caption)
+                    .foregroundStyle(.red)
             }
         }
         .onDisappear(perform: stopListening)
