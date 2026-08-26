@@ -64,11 +64,12 @@ private func bookmark(_ title: String) -> Bookmark {
     let writer = SpotlightWriter(index: index)
 
     let publishing = Task { await writer.write([bookmark("Pasta")]) }
-    // The publish is parked inside deleteEverything; opt out now.
-    let clearing = Task { await writer.clear() }
-    try? await Task.sleep(for: .milliseconds(50))
+    // Wait for the publish to park inside deleteEverything, so the clear
+    // provably arrives during a write rather than racing it to the actor.
+    try? await Task.sleep(for: .milliseconds(20))
+    await writer.clear()
     await index.openGate()
-    _ = await (publishing.value, clearing.value)
+    await publishing.value
 
     let calls = await index.calls
     #expect(calls.contains(.recordStamp("")))
@@ -79,10 +80,12 @@ private func bookmark(_ title: String) -> Bookmark {
     let index = RecordingIndex(gated: true)
     let writer = SpotlightWriter(index: index)
     let publishing = Task { await writer.write([bookmark("Pasta")]) }
-    let clearing = Task { await writer.clear() }
-    try? await Task.sleep(for: .milliseconds(50))
+    // Wait for the publish to park inside deleteEverything, so the clear
+    // provably arrives during a write rather than racing it to the actor.
+    try? await Task.sleep(for: .milliseconds(20))
+    await writer.clear()
     await index.openGate()
-    _ = await (publishing.value, clearing.value)
+    await publishing.value
 
     // Each operation deletes exactly once, and the clear's stamp lands last,
     // so the two never interleaved.
@@ -117,11 +120,13 @@ private func bookmark(_ title: String) -> Bookmark {
     let newest = [bookmark("Three")]
     let first = Task { await writer.write([bookmark("One")]) }
     try? await Task.sleep(for: .milliseconds(20))
-    let second = Task { await writer.write([bookmark("Two")]) }
-    let third = Task { await writer.write(newest) }
-    try? await Task.sleep(for: .milliseconds(50))
+    // Enqueued in order from one task, not from two racing ones: the contract
+    // is that the last request in wins, so the test has to decide which is
+    // last rather than leave it to the scheduler.
+    await writer.write([bookmark("Two")])
+    await writer.write(newest)
     await index.openGate()
-    _ = await (first.value, second.value, third.value)
+    await first.value
 
     // Two publishes, not three: the middle request is superseded rather than
     // replayed, so the index lands on the newest library and not a stale one.

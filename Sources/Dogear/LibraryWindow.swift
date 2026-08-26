@@ -111,7 +111,7 @@ struct LibraryWindow: View {
                 .environmentObject(model)
         }
         .onChange(of: selectedFolderIDs) { _, ids in saveSelection(ids) }
-        .onChange(of: model.spotlightRequest?.query) { _, _ in
+        .onChange(of: model.spotlightRequest) { _, _ in
             guard let request = model.spotlightRequest else { return }
             selection = request.folder
             query = request.query

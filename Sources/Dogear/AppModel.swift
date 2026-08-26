@@ -20,9 +20,12 @@ final class AppModel: ObservableObject {
     let thumbnails: ThumbnailCache
     @Published var revision = 0
     @Published var storageError: String?
-    /// Set when a Spotlight result asks the library to show a bookmark: the
-    /// folder to open and the text to search for.
-    @Published var spotlightRequest: (folder: String, query: String)?
+    /// Set when a Spotlight result asks the library to show a bookmark.
+    struct SpotlightReveal: Equatable {
+        let folder: String
+        let query: String
+    }
+    @Published var spotlightRequest: SpotlightReveal?
     /// True for a moment after a save that had no window on screen. The menu
     /// bar shows a tick, because the app sends no notifications.
     @Published private(set) var showsSavedTick = false
@@ -107,8 +110,9 @@ final class AppModel: ObservableObject {
         // alone dropped the user into an all-folders result list, so a done
         // bookmark and a filed one looked the same and two similar titles
         // gave no way to tell which one Spotlight had matched.
-        spotlightRequest = (folder: bookmark.isDone ? AppModel.archiveID : bookmark.folder,
-                            query: bookmark.title)
+        spotlightRequest = SpotlightReveal(
+            folder: bookmark.isDone ? AppModel.archiveID : bookmark.folder,
+            query: bookmark.title)
     }
 
     /// The sidebar's identifier for the archive, shared with the library window.

@@ -16,14 +16,8 @@ public enum BookmarksHTML {
             "<H1>Bookmarks</H1>",
             "<DL><p>",
         ]
-        let archived = library.bookmarks.filter(\.isDone)
-        for folder in library.folders {
-            let items = library.bookmarks.filter { $0.folder == folder && !$0.isDone }
-            guard !items.isEmpty else { continue }
-            lines.append(contentsOf: section(named: folder, items: items))
-        }
-        if !archived.isEmpty {
-            lines.append(contentsOf: section(named: "Archive", items: archived))
+        for section in library.exportSections {
+            lines.append(contentsOf: self.section(named: section.name, items: section.bookmarks))
         }
         lines.append("</DL><p>")
         return lines.joined(separator: "\n") + "\n"

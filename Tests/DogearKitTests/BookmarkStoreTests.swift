@@ -841,3 +841,29 @@ private func testPlace(_ name: String, latitude: Double = 51.5, longitude: Doubl
     let store = try BookmarkStore(directory: dir)
     #expect(store.library.bookmarks.count == 2)
 }
+
+@Test func everythingThePopoverAsksTheStoreForOnOpenIsUnder50ms() throws {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    for i in 0..<5000 {
+        _ = store.addForTesting(urlString: "https://example.com/item/\(i)")
+    }
+    store.saveNow()
+
+    // The design spec sets 150 ms from popover open to ready, and verifies it
+    // by hand with Instruments. These are every store call that open makes:
+    // the pick and the record of it, the counts line, and the three rows of
+    // the recents or favourites list. Holding them well inside the budget is
+    // what leaves room for the part only Instruments can see, the view build.
+    let start = ContinuousClock.now
+    let picked = try #require(store.pick())
+    store.markShown(id: picked.id)
+    _ = store.counts()
+    _ = Array(store.library.bookmarks.filter { !$0.isDone }.prefix(3))
+    _ = Array(store.favorites().prefix(3))
+    let elapsed = ContinuousClock.now - start
+
+    if ProcessInfo.processInfo.environment["PERF"] != nil {
+        #expect(elapsed < .milliseconds(50))
+    }
+}

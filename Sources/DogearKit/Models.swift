@@ -97,6 +97,26 @@ extension Bookmark {
     }
 }
 
+extension Library {
+    /// The library as an export sees it: one section per folder in the user's
+    /// own order, empty folders dropped, and the archive last. Both exporters
+    /// walked this shape themselves and had to agree by hand; a bookmark that
+    /// is done leaves its folder section in the app, and it must leave it in a
+    /// file too.
+    public var exportSections: [(name: String, bookmarks: [Bookmark])] {
+        var sections = folders.compactMap { folder -> (name: String, bookmarks: [Bookmark])? in
+            let items = bookmarks.filter { $0.folder == folder && !$0.isDone }
+            return items.isEmpty ? nil : (name: folder, bookmarks: items)
+        }
+        let archived = bookmarks.filter(\.isDone)
+        if !archived.isEmpty { sections.append((name: Library.archiveName, bookmarks: archived)) }
+        return sections
+    }
+
+    /// The heading a done bookmark files under in an export.
+    public static let archiveName = "Archive"
+}
+
 public struct Library: Codable, Equatable, Sendable {
     public var folders: [String]
     public var bookmarks: [Bookmark]
