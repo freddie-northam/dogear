@@ -77,6 +77,9 @@ through iCloud. Keep these rules:
 - One JSON document (`Library`, in `Sources/DogearKit/Models.swift`) holds
   the whole library. Do not split it into multiple files.
 - Every `Bookmark` keeps a stable `UUID` id. Never reuse or regenerate one.
+- `createdAt` is set once, when the bookmark is made. It is a `var` only so
+  that the redirect-collision merge in `EnrichmentService` can backdate a
+  survivor to the older of two records. Nothing else may write it.
 - Add new `Bookmark` fields as optional only. A missing key must decode as
   `nil`, so an older library file still loads (see `favoritedAt` for an
   example).

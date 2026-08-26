@@ -104,3 +104,11 @@ struct StubPlaceResolver: PlaceResolver {
     #expect(!Place.isMapHost(try #require(URL(string: "https://maps.apple.com.evil.test/?q=a"))))
     #expect(!Place.isMapHost(try #require(URL(string: "https://example.com/maps.apple.com"))))
 }
+
+@Test func aGeneralShortenedLinkIsNotAMap() throws {
+    // goo.gl shortens anything. Only its maps subdomain serves a map, and
+    // host matching is by suffix, so a bare "goo.gl" entry would have made
+    // every shortened link in the library offer Open in Maps.
+    #expect(!Place.isMapHost(try #require(URL(string: "https://goo.gl/abc123"))))
+    #expect(Place.isMapHost(try #require(URL(string: "https://maps.app.goo.gl/abc123"))))
+}

@@ -55,10 +55,14 @@ public final class BookmarkStore {
         var canonicalized: [Bookmark] = []
         var indexByURL: [String: Int] = [:]
         for var bookmark in library.bookmarks {
-            // The same gate every other path applies. A record whose URL is not
-            // http(s) cannot be opened, edited, or re-saved, so it is already
-            // inert; migration is where a one-shot cleanup belongs, and leaving
-            // it in would let it reach an href in an export.
+            // The same gate every other path applies. This drops two kinds of
+            // record: a URL that will not parse, and one whose scheme is not
+            // http(s). Both are already inert, because opening, editing, and
+            // re-saving all apply the same two checks, and leaving either in
+            // would still let it reach an href in an export.
+            // ponytail: a dropped record leaves its cached thumbnail behind.
+            // The store has no reach into the thumbnail directory; sweep the
+            // orphans there if that cache ever grows enough to notice.
             guard let url = URL(string: bookmark.url), URLCleaner.isCapturable(url) else { continue }
             bookmark.url = URLCleaner.canonicalString(url)
             if let existingIndex = indexByURL[bookmark.url] {

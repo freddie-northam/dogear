@@ -32,8 +32,11 @@ extension Place {
     /// Hosts whose pages are a map. A bookmark pointing at one of these opens
     /// in Maps even without a resolved place behind it, which is what a link
     /// copied out of Maps looks like.
+    /// Only hosts that serve a map. `goo.gl` on its own is Google's general
+    /// shortener and points at anything, so it must not appear here: matching
+    /// is by suffix, and a bare entry would swallow every shortened link.
     static let mapHosts: Set<String> = [
-        "maps.apple.com", "maps.google.com", "maps.app.goo.gl", "goo.gl",
+        "maps.apple.com", "maps.google.com", "maps.app.goo.gl",
     ]
 
     static func isMapHost(_ url: URL) -> Bool {

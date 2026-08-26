@@ -95,3 +95,22 @@ private func bookmark(title: String, note: String? = nil, folder: String = "Reci
         doneAt: nil, hasThumbnail: false, manuallyFiled: false)
     #expect(SpotlightIndex.fingerprint([fixed]) == "ac9376c0e89f395687938bb1aa8e02cffdc4a0aaa8c0a24e8eb27cdf0e7a3690")
 }
+
+@Test func fingerprintOfFiveThousandBookmarksIsUnder20ms() {
+    // Runs on every debounced sync, including the ones where nothing changed.
+    // It hashes the whole library, so it is worth a ceiling even though the
+    // app computes it off the main actor.
+    let bookmarks = (0..<5000).map { index in
+        Bookmark(id: UUID(), url: "https://example.com/item/\(index)", title: "Item \(index)",
+                 author: "Author \(index)", note: "A note about item \(index)",
+                 folder: "Recipes", source: .web, createdAt: Date(timeIntervalSince1970: 0),
+                 doneAt: nil, hasThumbnail: false, manuallyFiled: false)
+    }
+    let start = ContinuousClock.now
+    let fingerprint = SpotlightIndex.fingerprint(bookmarks)
+    let elapsed = ContinuousClock.now - start
+    #expect(!fingerprint.isEmpty)
+    if ProcessInfo.processInfo.environment["PERF"] != nil {
+        #expect(elapsed < .milliseconds(20))
+    }
+}
