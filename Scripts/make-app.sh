@@ -2,7 +2,35 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-swift build -c release
+TOOLCHAIN="$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain"
+INTENTS_PROCESSOR="$TOOLCHAIN/usr/bin/appintentsmetadataprocessor"
+PROTOCOLS="Scripts/appintents-protocols.json"
+
+# Shortcuts finds an app's intents through a metadata bundle that Xcode
+# normally builds behind a build phase. SwiftPM has no such phase, so the
+# compiler is asked for the constant values the processor reads, and the
+# processor runs by hand below.
+#
+# A missing tool is a hard failure: the README and the roadmap both promise a
+# Shortcuts action, so a release that silently lacks one is a broken release.
+# Set SKIP_INTENTS=1 to build without it on a machine that cannot.
+if [ "${SKIP_INTENTS:-0}" = "1" ]; then
+    WITH_INTENTS=0
+    echo "SKIP_INTENTS=1: building without the Shortcuts actions"
+    swift build -c release
+else
+    if [ ! -x "$INTENTS_PROCESSOR" ]; then
+        echo "error: $INTENTS_PROCESSOR not found." >&2
+        echo "Install Xcode, or set SKIP_INTENTS=1 to build without Shortcuts actions." >&2
+        exit 1
+    fi
+    WITH_INTENTS=1
+    swift build -c release \
+        -Xswiftc -emit-const-values \
+        -Xswiftc -Xfrontend -Xswiftc -const-gather-protocols-file \
+        -Xswiftc -Xfrontend -Xswiftc "$PROTOCOLS"
+fi
+
 mkdir -p build
 rm -rf build/AppIcon.iconset
 swift Scripts/make-icon.swift
@@ -17,6 +45,28 @@ cp .build/release/Dogear "$APP/Contents/MacOS/Dogear"
 # the dSYM that swift build leaves beside the binary.
 strip -x "$APP/Contents/MacOS/Dogear"
 cp build/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+
+if [ "$WITH_INTENTS" = "1" ]; then
+    CONST_VALS="$(mktemp)"
+    SOURCE_LIST="$(mktemp)"
+    find .build -path "*release/Dogear.build/*.swiftconstvalues" > "$CONST_VALS"
+    ls Sources/Dogear/*.swift > "$SOURCE_LIST"
+    TRIPLE="$(swift -print-target-info | sed -n 's/.*"triple": "\([^"]*\)".*/\1/p' | head -1)"
+    "$INTENTS_PROCESSOR" \
+        --output "$APP/Contents/Resources" \
+        --toolchain-dir "$TOOLCHAIN" \
+        --module-name Dogear \
+        --sdk-root "$(xcrun --show-sdk-path)" \
+        --xcode-version "$(xcodebuild -version | tail -1 | awk '{print $3}')" \
+        --platform-family macosx \
+        --deployment-target 15.4 \
+        --target-triple "$TRIPLE" \
+        --source-file-list "$SOURCE_LIST" \
+        --swift-const-vals-list "$CONST_VALS" \
+        --force
+    test -f "$APP/Contents/Resources/Metadata.appintents/extract.actionsdata"
+    rm -f "$CONST_VALS" "$SOURCE_LIST"
+fi
 
 VERSION="$(tr -d '[:space:]' < VERSION)"
 cat > "$APP/Contents/Info.plist" <<PLIST
@@ -44,6 +94,9 @@ cat > "$APP/Contents/Info.plist" <<PLIST
             <array><string>public.url</string><string>public.utf8-plain-text</string></array>
         </dict>
     </array>
+    <!-- A Spotlight result hands the app this activity type. -->
+    <key>NSUserActivityTypes</key>
+    <array><string>com.apple.corespotlightitem</string></array>
     <key>NSAppleEventsUsageDescription</key><string>Dogear reads your notes to find links you saved.</string>
     <key>NSHumanReadableCopyright</key><string>MIT License</string>
 </dict>

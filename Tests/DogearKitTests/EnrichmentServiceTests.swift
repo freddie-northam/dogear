@@ -347,3 +347,41 @@ private final class InterceptingHTTPClient: HTTPClient, @unchecked Sendable {
 
     #expect(await !service.thumbnails.exists(for: duplicate.id))
 }
+
+@Test func redirectCollisionKeepsEveryStoredFieldOnTheSurvivor() async throws {
+    let short = URL(string: "https://vm.tiktok.com/SHORT/")!
+    let full = URL(string: "https://www.tiktok.com/@a/video/123")!
+    let oembed = try Data(contentsOf: Bundle.module.url(
+        forResource: "tiktok-oembed", withExtension: "json", subdirectory: "Fixtures")!)
+    var client = StubHTTPClient(responses: [full: Data(), TikTokFetcher.oembedURL(for: full): oembed])
+    client.redirects = [short: full]
+    let (store, service) = try await makeEnvironment(client: client)
+
+    let (survivor, _) = store.add(url: full)!
+    store.markShown(id: survivor.id)
+    let shownAt = store.library.bookmarks.first { $0.id == survivor.id }?.lastShownAt
+
+    let (duplicate, _) = store.add(url: short)!
+    await service.enrich(id: duplicate.id)
+
+    // The merge used to rebuild the record field by field, so any field added
+    // to Bookmark after that code was written was dropped on the floor.
+    let merged = try #require(store.library.bookmarks.first { $0.id == survivor.id })
+    #expect(store.library.bookmarks.count == 1)
+    #expect(merged.lastShownAt == shownAt)
+}
+
+@Test func enrichLeavesAPlaceAlone() async throws {
+    let (store, service) = try await makeEnvironment(client: StubHTTPClient(responses: [:]))
+    let place = Place(name: "Kagari", address: "Ginza, Tokyo", latitude: 35.6, longitude: 139.7)
+    let saved = try #require(store.add(places: [place], to: "Restaurants").first)
+
+    await service.enrich(id: saved.id)
+
+    // A map link has no page worth reading: a fetch would replace the name the
+    // user approved and refile the card by the map host.
+    let after = try #require(store.library.bookmarks.first { $0.id == saved.id })
+    #expect(after.title == "Kagari")
+    #expect(after.folder == "Restaurants")
+    #expect(after.place == place)
+}

@@ -2,23 +2,6 @@ import DogearKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-enum NotesImportState: Equatable {
-    case confirm
-    case running(String)
-    case choosing([NotesFolder])
-    case finished(String)
-}
-
-/// One Notes folder, as returned by the Notes scripting dictionary: a
-/// read-only id (stable across renames) and a display name.
-struct NotesFolder: Identifiable, Equatable {
-    let id: String
-    let name: String
-}
-
-/// One alert, one state: the collision message replaces the rename prompt's
-/// content in place instead of a second `.alert` firing from the first's
-/// own dismissal, which SwiftUI can drop silently.
 enum RenameState: Equatable {
     case idle
     case editing(folder: String)
@@ -62,11 +45,12 @@ struct LibraryWindow: View {
     @State private var selectedFolderIDs: Set<String> = []
     @State private var fileForMeResult: String?
     @State private var importFileResult: String?
+    @State private var isAddingPlaces = false
     @AppStorage("libraryView") private var viewRaw = "grid"
     @AppStorage("librarySort") private var sortRaw = LibrarySort.lastSaved.rawValue
     @AppStorage("notesImportSelection") private var selectionJSON = ""
     @AppStorage("notesImportCursors") private var cursorsJSON = "{}"
-    private let archiveID = "__archive__"
+    private let archiveID = AppModel.archiveID
     private let favoritesID = "__favorites__"
 
     var body: some View {
@@ -105,7 +89,17 @@ struct LibraryWindow: View {
                 continueToFolders: continueToFolders,
                 run: runNotesImport)
         }
+        .sheet(isPresented: $isAddingPlaces) {
+            PlacesImportSheet()
+                .environmentObject(model)
+        }
         .onChange(of: selectedFolderIDs) { _, ids in saveSelection(ids) }
+        .onChange(of: model.spotlightRequest) { _, _ in
+            guard let request = model.spotlightRequest else { return }
+            selection = request.folder
+            query = request.query
+            model.spotlightRequest = nil
+        }
         .alert("No Link Found", isPresented: $pasteFailed) {
             Button("OK") {}
         } message: {
@@ -330,11 +324,21 @@ struct LibraryWindow: View {
                 } label: {
                     Label("Import Bookmarks File...", systemImage: "doc.badge.plus")
                 }
+                Button {
+                    isAddingPlaces = true
+                } label: {
+                    Label("Add Places...", systemImage: "mappin.and.ellipse")
+                }
                 Divider()
                 Button {
-                    exportLibrary()
+                    exportMarkdownFile()
                 } label: {
-                    Label("Export Library...", systemImage: "square.and.arrow.up")
+                    Label("Export as Markdown...", systemImage: "square.and.arrow.up")
+                }
+                Button {
+                    exportBookmarksFile()
+                } label: {
+                    Label("Export Bookmarks File...", systemImage: "square.and.arrow.up.on.square")
                 }
             } label: {
                 Image(systemName: "plus")
@@ -603,14 +607,26 @@ struct LibraryWindow: View {
         }
     }
 
-    private func exportLibrary() {
+    private func exportMarkdownFile() {
+        export(named: "Dogear.md",
+               type: UTType(filenameExtension: "md") ?? .plainText,
+               contents: MarkdownExport.export(model.store.library))
+    }
+
+    /// The door back out to a browser: every browser reads this format, and
+    /// so does Dogear's own Import Bookmarks File.
+    private func exportBookmarksFile() {
+        export(named: "Dogear.html", type: .html,
+               contents: BookmarksHTML.export(model.store.library))
+    }
+
+    private func export(named name: String, type: UTType, contents: String) {
         let panel = NSSavePanel()
-        panel.nameFieldStringValue = "Dogear.md"
-        panel.allowedContentTypes = [UTType(filenameExtension: "md") ?? .plainText]
+        panel.nameFieldStringValue = name
+        panel.allowedContentTypes = [type]
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        let markdown = exportMarkdown(model.store.library)
         do {
-            try markdown.write(to: url, atomically: true, encoding: String.Encoding.utf8)
+            try contents.write(to: url, atomically: true, encoding: String.Encoding.utf8)
         } catch {
             model.storageError = "Dogear could not export your bookmarks: \(error.localizedDescription)"
         }
@@ -660,147 +676,10 @@ func hostName(_ bookmark: Bookmark) -> String {
 /// A markdown export of the whole library: one `## <Folder>` section per
 /// non-empty folder, in `library.folders` order, then an `## Archive`
 /// section for done bookmarks if any exist.
-private func exportMarkdown(_ library: Library) -> String {
-    var sections: [String] = []
-    for folder in library.folders {
-        let items = library.bookmarks.filter { $0.folder == folder && !$0.isDone }
-        guard !items.isEmpty else { continue }
-        sections.append("## \(folder)\n\n\(Bookmark.markdownList(items))")
-    }
-    let archived = library.bookmarks.filter(\.isDone)
-    if !archived.isEmpty {
-        sections.append("## Archive\n\n\(Bookmark.markdownList(archived))")
-    }
-    return sections.joined(separator: "\n\n")
-}
-
 /// Lists every Notes folder across every account, on the main thread:
 /// NSAppleScript is documented main-thread-only. This is the first Apple
 /// event of an import, so it is also the consent trigger. Returns nil when
 /// Notes cannot be read: permission denied or Notes unavailable.
-private func readNotesFolders() -> [NotesFolder]? {
-    let source = "tell application \"Notes\" to get {id of every folder, name of every folder}"
-    var errorInfo: NSDictionary?
-    guard let descriptor = NSAppleScript(source: source)?.executeAndReturnError(&errorInfo),
-          errorInfo == nil,
-          descriptor.numberOfItems == 2,
-          let ids = descriptor.atIndex(1),
-          let names = descriptor.atIndex(2),
-          ids.numberOfItems == names.numberOfItems else { return nil }
-    let count = ids.numberOfItems
-    guard count > 0 else { return [] }
-    return (1...count).compactMap { index -> NotesFolder? in
-        guard let id = ids.atIndex(index)?.stringValue,
-              let name = names.atIndex(index)?.stringValue else { return nil }
-        return NotesFolder(id: id, name: name)
-    }
-}
-
-/// Reads every non-password-protected note body in one folder, over Apple
-/// events, on the main thread. When `secondsSince` is given, only notes
-/// modified within that many seconds of now are read (an incremental read);
-/// nil means a full read. Returns nil when the folder cannot be read.
-private func readNotesBody(folderID: String, secondsSince: Int?) -> String? {
-    let escapedID = folderID
-        .replacingOccurrences(of: "\\", with: "\\\\")
-        .replacingOccurrences(of: "\"", with: "\\\"")
-    var whose = "password protected is false"
-    var cutoffLine = ""
-    if let secondsSince {
-        cutoffLine = "set cutoff to (current date) - \(secondsSince)\n"
-        whose += " and modification date > cutoff"
-    }
-    let source = "tell application \"Notes\"\n" +
-        "set f to first folder whose id is \"\(escapedID)\"\n" +
-        cutoffLine +
-        "get body of every note of f whose \(whose)\n" +
-        "end tell"
-    var errorInfo: NSDictionary?
-    guard let descriptor = NSAppleScript(source: source)?.executeAndReturnError(&errorInfo),
-          errorInfo == nil else { return nil }
-    // A list descriptor is 1-indexed. Zero items covers both an empty folder
-    // and a scalar result, whose text still comes back as stringValue.
-    guard descriptor.numberOfItems > 0 else { return descriptor.stringValue ?? "" }
-    return (1...descriptor.numberOfItems)
-        .compactMap { descriptor.atIndex($0)?.stringValue }
-        .joined(separator: "\n")
-}
-
-private struct NotesImportSheet: View {
-    @Binding var state: NotesImportState
-    @Binding var selectedFolderIDs: Set<String>
-    let continueToFolders: () -> Void
-    let run: () -> Void
-    @Environment(\.dismiss) private var dismiss
-
-    private var title: String {
-        if case .choosing = state { return "Which folders?" }
-        return "Import from Notes"
-    }
-
-    var body: some View {
-        VStack(spacing: 12) {
-            Text(title).font(.headline)
-            switch state {
-            case .confirm:
-                Text("Dogear reads your notes on this Mac to find links. macOS asks you for permission one time. Nothing leaves your Mac.")
-                    .font(.callout)
-                    .fixedSize(horizontal: false, vertical: true)
-                HStack {
-                    Button("Cancel") { dismiss() }
-                    Spacer()
-                    Button("Continue", action: continueToFolders)
-                        .buttonStyle(.borderedProminent)
-                        .keyboardShortcut(.defaultAction)
-                }
-            case .running(let label):
-                ProgressView(label)
-                // Cancel cannot interrupt the in-flight Apple event (the
-                // call is synchronous on the main actor); it only lets the
-                // user dismiss once the event has returned.
-                Button("Cancel") { state = .confirm }
-            case .choosing(let folders):
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 4) {
-                        ForEach(folders) { folder in
-                            Toggle(folder.name, isOn: Binding(
-                                get: { selectedFolderIDs.contains(folder.id) },
-                                set: { isOn in
-                                    if isOn { selectedFolderIDs.insert(folder.id) }
-                                    else { selectedFolderIDs.remove(folder.id) }
-                                }
-                            ))
-                        }
-                    }
-                }
-                .frame(maxHeight: 220)
-                HStack {
-                    Button("Select all") { selectedFolderIDs = Set(folders.map(\.id)) }
-                    Button("Select none") { selectedFolderIDs = [] }
-                    Spacer()
-                }
-                HStack {
-                    Button("Cancel") { dismiss() }
-                    Spacer()
-                    Button("Import", action: run)
-                        .buttonStyle(.borderedProminent)
-                        .keyboardShortcut(.defaultAction)
-                        .disabled(selectedFolderIDs.isEmpty)
-                }
-            case .finished(let message):
-                Text(message)
-                    .font(.callout)
-                    .fixedSize(horizontal: false, vertical: true)
-                Button("Done") { dismiss() }
-                    .buttonStyle(.borderedProminent)
-                    .keyboardShortcut(.defaultAction)
-            }
-        }
-        .padding(20)
-        .frame(width: 320)
-    }
-}
-
 private struct NewFolderRow: View {
     @EnvironmentObject var model: AppModel
     @State private var isAdding = false
@@ -857,441 +736,3 @@ private struct NewFolderRow: View {
 
 /// The context menu, edit alerts, and QR popover that every bookmark
 /// presentation shares, so the grid card and the list row behave the same.
-struct BookmarkActions: ViewModifier {
-    @EnvironmentObject var model: AppModel
-    @Environment(\.undoManager) private var undoManager
-    let bookmark: Bookmark
-    @State private var isEditingTitle = false
-    @State private var draftTitle = ""
-    @State private var isEditingNote = false
-    @State private var draftNote = ""
-    @State private var showingQRCode = false
-
-    func body(content: Content) -> some View {
-        content
-            .contextMenu { menu }
-            .popover(isPresented: $showingQRCode) { QRPopover(bookmark: bookmark) }
-            .alert("Edit Title", isPresented: $isEditingTitle) {
-                TextField("Title", text: $draftTitle)
-                Button("Save") {
-                    if var current = model.store.library.bookmarks.first(where: { $0.id == bookmark.id }) {
-                        current.title = draftTitle
-                        model.store.update(current)
-                    }
-                }
-                Button("Cancel", role: .cancel) {}
-            }
-            .alert("Edit Note", isPresented: $isEditingNote) {
-                TextField("Note", text: $draftNote)
-                Button("Save") {
-                    if var current = model.store.library.bookmarks.first(where: { $0.id == bookmark.id }) {
-                        current.note = draftNote.isEmpty ? nil : draftNote
-                        model.store.update(current)
-                    }
-                }
-                Button("Cancel", role: .cancel) {}
-            }
-    }
-
-    @ViewBuilder private var menu: some View {
-        if bookmark.isDone {
-            Button {
-                model.store.markUndone(id: bookmark.id)
-            } label: {
-                Label("Move Back", systemImage: "arrow.uturn.backward")
-            }
-        } else {
-            Button {
-                model.markDone(bookmark.id, undoManager: undoManager)
-            } label: {
-                Label("Mark Done", systemImage: "checkmark.circle")
-            }
-        }
-        Button {
-            model.store.toggleFavorite(id: bookmark.id)
-        } label: {
-            Label(
-                bookmark.isFavorite ? "Remove from Favourites" : "Add to Favourites",
-                systemImage: bookmark.isFavorite ? "star.slash" : "star"
-            )
-        }
-        Menu {
-            ForEach(model.store.library.folders, id: \.self) { folder in
-                Button(folder) { model.store.refile(id: bookmark.id, to: folder) }
-            }
-        } label: {
-            Label("Move To", systemImage: "folder")
-        }
-        Divider()
-        Button {
-            draftTitle = bookmark.title
-            isEditingTitle = true
-        } label: {
-            Label("Edit Title", systemImage: "pencil")
-        }
-        Button {
-            draftNote = bookmark.note ?? ""
-            isEditingNote = true
-        } label: {
-            Label("Edit Note", systemImage: "note.text")
-        }
-        Button {
-            let id = bookmark.id
-            Task { await model.enrichment.enrich(id: id) }
-        } label: {
-            Label("Refresh Metadata", systemImage: "arrow.clockwise")
-        }
-        Divider()
-        Button {
-            copyToPasteboard(bookmark.url)
-        } label: {
-            Label("Copy Link", systemImage: "link")
-        }
-        Button {
-            copyToPasteboard(bookmark.markdownLink)
-        } label: {
-            Label("Copy as Markdown", systemImage: "doc.on.doc")
-        }
-        Button {
-            showingQRCode = true
-        } label: {
-            Label("Show QR Code", systemImage: "qrcode")
-        }
-        if bookmark.folder == "Restaurants" {
-            Button {
-                openInMaps()
-            } label: {
-                Label("Open in Maps", systemImage: "map")
-            }
-        }
-        Divider()
-        Button(role: .destructive) {
-            model.deleteBookmark(bookmark, undoManager: undoManager)
-        } label: {
-            Label("Delete", systemImage: "trash")
-        }
-    }
-
-    private func openInMaps() {
-        var parts = URLComponents(string: "https://maps.apple.com/")!
-        parts.queryItems = [URLQueryItem(name: "q", value: bookmark.title)]
-        if let url = parts.url { NSWorkspace.shared.open(url) }
-    }
-}
-
-extension View {
-    func bookmarkActions(_ bookmark: Bookmark) -> some View {
-        modifier(BookmarkActions(bookmark: bookmark))
-    }
-}
-
-private struct QRPopover: View {
-    let bookmark: Bookmark
-
-    var body: some View {
-        VStack(spacing: 8) {
-            Text(bookmark.title).font(.headline).lineLimit(1)
-            if let qr = QRCode.image(for: bookmark.url) {
-                Image(qr, scale: 1, label: Text("QR code for \(bookmark.title)"))
-                    .interpolation(.none)
-                    .resizable()
-                    .frame(width: 180, height: 180)
-                    .padding(8)
-                    // A QR code needs a light background to scan, in dark
-                    // mode too, so this white is deliberate.
-                    .background(.white, in: RoundedRectangle(cornerRadius: 8))
-            } else {
-                Text("Dogear could not make a QR code for this link.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            Text("Scan with your iPhone camera.")
-                .font(.caption).foregroundStyle(.secondary)
-        }
-        .padding(14)
-        .frame(width: 220)
-    }
-}
-
-// MARK: - Grid
-
-struct BookmarkGrid: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    // Read here so a sort change animates the reorder. Folder clicks and
-    // search keystrokes replace the whole list and must stay hard cuts, so
-    // the grid does not key its animation on the bookmark ids.
-    @AppStorage("librarySort") private var sortRaw = LibrarySort.lastSaved.rawValue
-    let bookmarks: [Bookmark]
-
-    private let columns = [GridItem(.adaptive(minimum: 220), spacing: 16)]
-
-    var body: some View {
-        ScrollView {
-            LazyVGrid(columns: columns, spacing: 16) {
-                ForEach(bookmarks) { bookmark in
-                    BookmarkCard(bookmark: bookmark)
-                        // A card that is marked done or deleted leaves toward the
-                        // sidebar, where Archive lives, so the motion says where
-                        // it went. A card that arrives grows into place; it did
-                        // not come from the sidebar. Reduced motion keeps the
-                        // fade only.
-                        .transition(reduceMotion
-                            ? .opacity
-                            : .asymmetric(
-                                insertion: .opacity.combined(with: .scale(scale: 0.96)),
-                                removal: .opacity.combined(with: .move(edge: .leading))))
-                }
-            }
-            .padding(16)
-            .animation(Motion.shuffle, value: sortRaw)
-        }
-    }
-}
-
-struct BookmarkCard: View {
-    @EnvironmentObject var model: AppModel
-    let bookmark: Bookmark
-    @State private var isHovering = false
-
-    var body: some View {
-        if let url = URL(string: bookmark.url) {
-            card.draggable(url)
-        } else {
-            card
-        }
-    }
-
-    private var card: some View {
-        // One click opens, the same as the popover rows: a card is a button.
-        // The shared style gives the press its feel on pointer-down, and the
-        // star is a button of its own inside the label, so it wins its own
-        // clicks.
-        Button(action: open) {
-            VStack(alignment: .leading, spacing: 6) {
-                thumbnail
-                    .overlay(alignment: .topTrailing) {
-                        FavoriteStar(bookmark: bookmark)
-                            .opacity(isHovering || bookmark.isFavorite ? 1 : 0)
-                    }
-                Text(bookmark.title)
-                    .font(.headline)
-                    .lineLimit(2, reservesSpace: true)
-                // The note line always reserves its height, so every card in a
-                // row is the same size whether or not a note exists.
-                Text(bookmark.note ?? " ")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1, reservesSpace: true)
-                HStack(spacing: 6) {
-                    // The folder speaks through its symbol and color; the word,
-                    // the domain, and the raw link are noise at card size.
-                    Image(systemName: folderSymbol(for: bookmark.folder))
-                        .font(.caption2)
-                        .foregroundStyle(folderColor(for: bookmark.folder))
-                        .help(bookmark.folder)
-                        .accessibilityLabel(bookmark.folder)
-                    if let author = bookmark.author {
-                        Text(author).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                    }
-                    Spacer()
-                    Text(bookmark.createdAt, format: .dateTime.day().month())
-                        .font(.caption2).foregroundStyle(.tertiary)
-                }
-            }
-            .padding(12)
-            .background(isHovering ? .quaternary : .quinary, in: RoundedRectangle(cornerRadius: 10))
-            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.separator, lineWidth: 0.5))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.pressable(scale: 0.98))
-        .animation(Motion.hover, value: isHovering)
-        .onHover { isHovering = $0 }
-        .pointerStyle(.link)
-        .bookmarkActions(bookmark)
-    }
-
-    @ViewBuilder private var thumbnail: some View {
-        if bookmark.hasThumbnail,
-           let image = model.thumbnails.image(for: bookmark.id) {
-            Image(nsImage: image)
-                .resizable().aspectRatio(contentMode: .fill)
-                .frame(minWidth: 0, maxWidth: .infinity)
-                .frame(height: 110)
-                .clipped()
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-        } else if bookmark.source == .x {
-            // A text post reads as a quote, not as a missing image.
-            RoundedRectangle(cornerRadius: 6)
-                .fill(.quaternary)
-                .frame(height: 110)
-                .overlay(
-                    Image(systemName: "quote.opening")
-                        .font(.title3)
-                        .foregroundStyle(folderColor(for: bookmark.folder))
-                )
-        } else {
-            RoundedRectangle(cornerRadius: 6)
-                .fill(.quaternary)
-                .frame(height: 110)
-                .overlay(Image(systemName: "link").foregroundStyle(.tertiary))
-        }
-    }
-
-    private func open() {
-        openBookmarkURL(bookmark.url)
-    }
-}
-
-struct FavoriteStar: View {
-    @EnvironmentObject var model: AppModel
-    let bookmark: Bookmark
-
-    var body: some View {
-        Button {
-            model.store.toggleFavorite(id: bookmark.id)
-        } label: {
-            Image(systemName: bookmark.isFavorite ? "star.fill" : "star")
-                .font(.caption)
-                .foregroundStyle(.pink)
-                .padding(4)
-                .background(.thinMaterial, in: Circle())
-        }
-        .buttonStyle(.borderless)
-        .pointerStyle(.link)
-        .help(bookmark.isFavorite ? "Remove from Favourites" : "Add to Favourites")
-        .accessibilityLabel(bookmark.isFavorite ? "Remove from Favourites" : "Add to Favourites")
-        .padding(6)
-    }
-}
-
-// MARK: - List
-
-struct BookmarkList: View {
-    enum Grouping {
-        case none
-        case date
-        case site
-    }
-
-    let bookmarks: [Bookmark]
-    let grouping: Grouping
-
-    var body: some View {
-        List {
-            ForEach(groups, id: \.title) { group in
-                if let title = group.title {
-                    Section(title) {
-                        rows(group.items)
-                    }
-                } else {
-                    rows(group.items)
-                }
-            }
-        }
-        .listStyle(.inset)
-    }
-
-    private func rows(_ items: [Bookmark]) -> some View {
-        ForEach(items) { bookmark in
-            BookmarkListRow(bookmark: bookmark)
-        }
-    }
-
-    private var groups: [(title: String?, items: [Bookmark])] {
-        switch grouping {
-        case .none:
-            return [(nil, bookmarks)]
-        case .site:
-            let grouped = Dictionary(grouping: bookmarks, by: hostName)
-            return grouped.keys.sorted().map { ($0.isEmpty ? "Other" : $0, grouped[$0] ?? []) }
-        case .date:
-            return dateGroups
-        }
-    }
-
-    /// Finder-style recency sections.
-    private var dateGroups: [(title: String?, items: [Bookmark])] {
-        let calendar = Calendar.current
-        let now = Date()
-        var buckets: [(String, [Bookmark])] = [
-            ("Today", []), ("Yesterday", []), ("Previous 7 Days", []),
-            ("Previous 30 Days", []), ("Older", []),
-        ]
-        for bookmark in bookmarks {
-            let date = bookmark.createdAt
-            let index: Int
-            if calendar.isDateInToday(date) {
-                index = 0
-            } else if calendar.isDateInYesterday(date) {
-                index = 1
-            } else if let days = calendar.dateComponents([.day], from: date, to: now).day, days < 7 {
-                index = 2
-            } else if let days = calendar.dateComponents([.day], from: date, to: now).day, days < 30 {
-                index = 3
-            } else {
-                index = 4
-            }
-            buckets[index].1.append(bookmark)
-        }
-        return buckets.filter { !$0.1.isEmpty }.map { ($0.0, $0.1) }
-    }
-}
-
-struct BookmarkListRow: View {
-    @EnvironmentObject var model: AppModel
-    let bookmark: Bookmark
-    @State private var isHovering = false
-
-    var body: some View {
-        // One click opens here too; the wide row takes a smaller give than
-        // the card so the press reads the same to the eye.
-        Button(action: open) {
-            HStack(spacing: 10) {
-                badge
-                Text(bookmark.title).lineLimit(1)
-                if let note = bookmark.note, !note.isEmpty {
-                    Text(note).font(.caption).foregroundStyle(.tertiary).lineLimit(1)
-                }
-                Spacer(minLength: 8)
-                if bookmark.isFavorite {
-                    Image(systemName: "star.fill")
-                        .font(.caption2)
-                        .foregroundStyle(.pink)
-                }
-                Text(bookmark.createdAt, format: .dateTime.day().month())
-                    .font(.caption).foregroundStyle(.tertiary)
-            }
-            .padding(.horizontal, 4)
-            .padding(.vertical, 2)
-            .background(.quaternary.opacity(isHovering ? 0.6 : 0), in: RoundedRectangle(cornerRadius: 6))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.pressable(scale: 0.99))
-        .pointerStyle(.link)
-        .onHover { isHovering = $0 }
-        .bookmarkActions(bookmark)
-        .draggable(URL(string: bookmark.url) ?? URL(fileURLWithPath: "/"))
-    }
-
-    @ViewBuilder private var badge: some View {
-        if bookmark.hasThumbnail,
-           let image = model.thumbnails.image(for: bookmark.id) {
-            Image(nsImage: image)
-                .resizable().aspectRatio(contentMode: .fill)
-                .frame(width: 24, height: 24)
-                .clipShape(RoundedRectangle(cornerRadius: 5))
-        } else {
-            Circle()
-                .fill(folderColor(for: bookmark.folder).opacity(0.2))
-                .frame(width: 24, height: 24)
-                .overlay(
-                    Image(systemName: bookmark.source == .x ? "quote.opening" : folderSymbol(for: bookmark.folder))
-                        .font(.system(size: 10))
-                        .foregroundStyle(folderColor(for: bookmark.folder))
-                )
-        }
-    }
-
-    private func open() {
-        openBookmarkURL(bookmark.url)
-    }
-}

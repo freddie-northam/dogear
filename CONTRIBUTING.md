@@ -54,6 +54,14 @@ A fetcher either parses the page body or calls its own endpoint; see
 `Tests/DogearKitTests/Fixtures`. Use `TikTokFetcherTests.swift` or
 `XFetcherTests.swift` as the pattern.
 
+### Add a place source
+
+`PlaceResolver` (`Sources/DogearKit/Place.swift`) turns a `PlaceQuery` into a
+`Place`. `MapKitPlaceResolver` (`Sources/Dogear/`) is the one implementation.
+It lives in the app, not the kit, because MKLocalSearch takes no stand-in and
+the file could carry no test. Keep a new resolver there for the same reason,
+and test the parsing in `PlaceParser` instead.
+
 ### Add a categorizer
 
 Implement `Categorizer` (`Sources/DogearKit/Categorizer.swift`):
@@ -69,8 +77,16 @@ through iCloud. Keep these rules:
 - One JSON document (`Library`, in `Sources/DogearKit/Models.swift`) holds
   the whole library. Do not split it into multiple files.
 - Every `Bookmark` keeps a stable `UUID` id. Never reuse or regenerate one.
+- The same rule covers a stored type nested inside a bookmark, such as
+  `Place`. A required field added to one of those breaks every older library,
+  because the whole document fails to decode, not just that field.
+- `createdAt` is set once, when the bookmark is made. It is a `var` only so
+  that the redirect-collision merge in `EnrichmentService` can backdate a
+  survivor to the older of two records. Nothing else may write it.
 - Add new `Bookmark` fields as optional only. A missing key must decode as
   `nil`, so an older library file still loads (see `favoritedAt` for an
   example).
 - Writes stay atomic, with `.bak` rotation, as in
   `BookmarkStore.saveNow()`.
+- A place is a bookmark whose `url` is an Apple Maps link. Keep it that way:
+  dedupe, export, and the http(s) rule then need no second path.

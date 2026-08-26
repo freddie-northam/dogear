@@ -46,7 +46,7 @@ struct CapturePopover: View {
         .frame(width: 350)
         .animation(Motion.reveal, value: hint)
         .onAppear {
-            pick = model.store.pick()
+            rollPick()
             Task { await prefill() }
         }
         .onChange(of: text) {
@@ -59,9 +59,10 @@ struct CapturePopover: View {
             guard let id = pick?.id else { return }
             let fresh = model.store.library.bookmarks.first { $0.id == id }
             if let fresh, !fresh.isDone {
+                // The same bookmark, with fresher text: not a new showing.
                 pick = fresh
             } else {
-                pick = model.store.pick(excluding: id)
+                rollPick(excluding: id)
             }
         }
         .alert("Storage Error", isPresented: Binding(
@@ -183,11 +184,7 @@ struct CapturePopover: View {
 
     private func prefill() async {
         hint = nil
-        // Check the clipboard shape first; read the content only on a positive match.
-        let detected = try? await NSPasteboard.general.detectedPatterns(for: [\.links])
-        guard detected?.contains(\.links) == true,
-              text.isEmpty,
-              let clip = clipboard.readClipboard(),
+        guard text.isEmpty, let clip = await clipboard.readLink(),
               URLCleaner.firstHTTPURL(in: clip) != nil else { return }
         text = clip
     }
@@ -200,7 +197,7 @@ struct CapturePopover: View {
         }
         clipboard.consume()
         text = ""
-        if pick == nil { pick = model.store.pick() }
+        if pick == nil { rollPick() }
         if result.total > 1 {
             hint = result.new == 0
                 ? "All \(result.total) were already saved."
@@ -210,6 +207,14 @@ struct CapturePopover: View {
         } else {
             hint = "Already saved. It moved to the top of the library."
         }
+    }
+
+    /// Draws the next pick and records that the row showed it. Every draw
+    /// goes through here, so the library never forgets what the user saw.
+    private func rollPick(excluding excluded: UUID? = nil) {
+        let next = model.store.pick(excluding: excluded)
+        if let next { model.store.markShown(id: next.id) }
+        pick = next
     }
 
     // MARK: Waiting for you
@@ -267,12 +272,12 @@ struct CapturePopover: View {
                 HoverIconButton(symbol: "checkmark", label: "Mark done", hoverColor: .green) {
                     withAnimation(Motion.reveal) {
                         model.markDone(pick.id, undoManager: undoManager)
-                        self.pick = model.store.pick(excluding: pick.id)
+                        rollPick(excluding: pick.id)
                     }
                 }
                 HoverIconButton(symbol: "arrow.clockwise", label: "Show another", hoverColor: .primary) {
                     withAnimation(Motion.reveal) {
-                        self.pick = model.store.pick(excluding: pick.id)
+                        rollPick(excluding: pick.id)
                     }
                 }
             }

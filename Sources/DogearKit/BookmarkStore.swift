@@ -55,9 +55,16 @@ public final class BookmarkStore {
         var canonicalized: [Bookmark] = []
         var indexByURL: [String: Int] = [:]
         for var bookmark in library.bookmarks {
-            if let url = URL(string: bookmark.url) {
-                bookmark.url = URLCleaner.canonicalString(url)
-            }
+            // The same gate every other path applies. This drops two kinds of
+            // record: a URL that will not parse, and one whose scheme is not
+            // http(s). Both are already inert, because opening, editing, and
+            // re-saving all apply the same two checks, and leaving either in
+            // would still let it reach an href in an export.
+            // ponytail: a dropped record leaves its cached thumbnail behind.
+            // The store has no reach into the thumbnail directory; sweep the
+            // orphans there if that cache ever grows enough to notice.
+            guard let url = URL(string: bookmark.url), URLCleaner.isCapturable(url) else { continue }
+            bookmark.url = URLCleaner.canonicalString(url)
             if let existingIndex = indexByURL[bookmark.url] {
                 if canonicalized[existingIndex].note == nil {
                     canonicalized[existingIndex].note = bookmark.note
@@ -125,6 +132,29 @@ public final class BookmarkStore {
         return (bookmark, true)
     }
 
+    /// Saves resolved places as bookmarks in one write. A place bookmark
+    /// carries the map link as its URL, so dedupe and export need no second
+    /// path. The folder is the one the user chose in the import sheet, so the
+    /// record is marked as filed by hand and the categorizer leaves it alone.
+    /// Returns the new bookmarks; a place already saved is skipped.
+    public func add(places: [Place], to folder: String) -> [Bookmark] {
+        guard !places.isEmpty else { return [] }
+        let target = library.folders.contains(folder) ? folder : Library.unsorted
+        var new: [Bookmark] = []
+        for place in places.reversed() {
+            guard let url = place.mapsURL, let (bookmark, isNew) = insert(url: url), isNew,
+                  let index = library.bookmarks.firstIndex(where: { $0.id == bookmark.id }) else { continue }
+            library.bookmarks[index].title = place.name
+            library.bookmarks[index].folder = target
+            library.bookmarks[index].manuallyFiled = true
+            library.bookmarks[index].place = place
+            new.append(library.bookmarks[index])
+        }
+        new.reverse()
+        if !new.isEmpty { mutated() }
+        return new
+    }
+
     public func update(_ bookmark: Bookmark) {
         guard let index = library.bookmarks.firstIndex(where: { $0.id == bookmark.id }) else { return }
         var bookmark = bookmark
@@ -185,6 +215,23 @@ public final class BookmarkStore {
                   library.bookmarks[index].folder == Library.unsorted,
                   library.folders.contains(assignment.folder) else { continue }
             library.bookmarks[index].folder = assignment.folder
+            applied += 1
+        }
+        if applied > 0 { mutated() }
+        return applied
+    }
+
+    /// Marks a batch as having a thumbnail on disk, with one write. Setting
+    /// the flag by id cannot clobber a rename or a refile the user made while
+    /// the image was being drawn, and an id that is gone is skipped. Returns
+    /// the number applied.
+    @discardableResult
+    public func markThumbnails(_ ids: [UUID]) -> Int {
+        var applied = 0
+        for id in ids {
+            guard let index = library.bookmarks.firstIndex(where: { $0.id == id }),
+                  !library.bookmarks[index].hasThumbnail else { continue }
+            library.bookmarks[index].hasThumbnail = true
             applied += 1
         }
         if applied > 0 { mutated() }
@@ -280,6 +327,7 @@ public final class BookmarkStore {
             $0.title.lowercased().contains(needle)
                 || ($0.author?.lowercased().contains(needle) ?? false)
                 || ($0.note?.lowercased().contains(needle) ?? false)
+                || ($0.place?.address?.lowercased().contains(needle) ?? false)
                 || $0.url.lowercased().contains(needle)
         }
     }
@@ -310,18 +358,42 @@ public final class BookmarkStore {
         return Counts(byFolder: byFolder, favorites: favorites, archived: archived)
     }
 
-    /// A not-done bookmark to resurface. Filed bookmarks come before Unsorted
-    /// ones, and the draw is random among the ten oldest candidates, so the
-    /// longest-waiting saves come back first. The given id is excluded when
-    /// another candidate exists, so "show another" never repeats itself.
+    /// The next bookmark to resurface. Filed bookmarks come before Unsorted
+    /// ones. Among those, one the row has never shown comes first, then the
+    /// one shown longest ago, and the longest-waiting save breaks the tie.
+    /// The row therefore works through the whole library before it shows
+    /// anything twice. The given id is excluded when another candidate
+    /// exists, so "show another" always moves on.
+    ///
+    /// The draw used to be random among the ten oldest, which repeated itself
+    /// on a small library. Recording each showing replaces the randomness:
+    /// the order already varies, and now it never doubles back early.
     public func pick(excluding excluded: UUID? = nil) -> Bookmark? {
         let waiting = library.bookmarks.filter { !$0.isDone }
         let pool = waiting.filter { $0.id != excluded }
         let candidates = pool.isEmpty ? waiting : pool
         let filed = candidates.filter { $0.folder != Library.unsorted }
         let preferred = filed.isEmpty ? candidates : filed
-        let oldest = preferred.sorted { $0.createdAt < $1.createdAt }.prefix(10)
-        return oldest.randomElement()
+        return preferred.min { left, right in
+            // A never-shown bookmark reads as shown in the distant past, so it
+            // comes ahead of everything the user has already seen.
+            let leftShown = left.lastShownAt ?? .distantPast
+            let rightShown = right.lastShownAt ?? .distantPast
+            if leftShown != rightShown { return leftShown < rightShown }
+            return left.createdAt < right.createdAt
+        }
+    }
+
+    /// Records that the pick row showed this bookmark, so the next draw
+    /// prefers one the user has not seen. This writes but does not notify:
+    /// nothing on screen changes, so a redraw would be wasted work.
+    /// ponytail: one whole-library write per popover open, measured at 17 ms
+    /// with 5,000 bookmarks against a 150 ms popover budget. Coalesce the
+    /// write if that margin ever closes.
+    public func markShown(id: UUID) {
+        guard let index = library.bookmarks.firstIndex(where: { $0.id == id }) else { return }
+        library.bookmarks[index].lastShownAt = Date()
+        saveNow()
     }
 
     // MARK: Persistence

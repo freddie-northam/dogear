@@ -20,6 +20,17 @@ final class AppModel: ObservableObject {
     let thumbnails: ThumbnailCache
     @Published var revision = 0
     @Published var storageError: String?
+    /// Set when a Spotlight result asks the library to show a bookmark.
+    struct SpotlightReveal: Equatable {
+        let folder: String
+        let query: String
+    }
+    @Published var spotlightRequest: SpotlightReveal?
+    /// True for a moment after a save that had no window on screen. The menu
+    /// bar shows a tick, because the app sends no notifications.
+    @Published private(set) var showsSavedTick = false
+
+    private var spotlightTask: Task<Void, Never>?
 
     init() {
         // DOGEAR_DATA_DIR points the app at another library: screenshots and
@@ -46,7 +57,13 @@ final class AppModel: ObservableObject {
             thumbnails: thumbnails,
             client: client
         )
-        store.onChange = { [weak self] in self?.revision += 1 }
+        store.onChange = { [weak self] in
+            self?.revision += 1
+            self?.scheduleSpotlightSync()
+        }
+        // A library saved before this version was never published, so index
+        // once at launch. The delay keeps it clear of the first frame.
+        scheduleSpotlightSync()
         AppModel.shared = self
         store.onWriteFailure = { [weak self] error in
             self?.storageError = "Dogear could not save your bookmarks: \(error.localizedDescription)"
@@ -55,6 +72,52 @@ final class AppModel: ObservableObject {
 
     /// Saves every http(s) link in the text. Deduplication applies per URL,
     /// so a link that appears twice in one paste counts once.
+    // MARK: Spotlight
+
+    /// Republishes the library after the changes stop. A paste of fifty links
+    /// fires onChange once, but a burst of enrichments fires it fifty times,
+    /// and each one would otherwise rebuild the whole index.
+    private func scheduleSpotlightSync() {
+        // Nothing to publish and nothing to clear: the toggle already cleared
+        // the index once when the user turned it off. Without this, every
+        // capture and every enrichment would ask Spotlight to delete an empty
+        // domain, for as long as the app runs.
+        guard SpotlightSync.isEnabled else { return }
+        spotlightTask?.cancel()
+        spotlightTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            self?.syncSpotlight()
+        }
+    }
+
+    /// Publishes the library, or clears it when the user turns the setting off.
+    func syncSpotlight() {
+        guard SpotlightSync.isEnabled else {
+            SpotlightSync.removeAll()
+            return
+        }
+        SpotlightSync.replaceAll(with: store.library.bookmarks)
+    }
+
+    /// Answers a Spotlight result by asking the library to search for it. The
+    /// library, not the browser, is the honest destination: it shows the note
+    /// and the folder the user filed it under.
+    func showFromSpotlight(id: String) {
+        guard let uuid = UUID(uuidString: id),
+              let bookmark = store.library.bookmarks.first(where: { $0.id == uuid }) else { return }
+        // Open the folder the bookmark actually lives in. Searching the title
+        // alone dropped the user into an all-folders result list, so a done
+        // bookmark and a filed one looked the same and two similar titles
+        // gave no way to tell which one Spotlight had matched.
+        spotlightRequest = SpotlightReveal(
+            folder: bookmark.isDone ? AppModel.archiveID : bookmark.folder,
+            query: bookmark.title)
+    }
+
+    /// The sidebar's identifier for the archive, shared with the library window.
+    static let archiveID = "__archive__"
+
     // MARK: Forgiveness
 
     /// Every destructive action registers its inverse here, so Undo works the
@@ -132,6 +195,64 @@ final class AppModel: ObservableObject {
             }
         }
         return store.autoFile(assignments)
+    }
+
+    /// Saves resolved places and draws a map for each one. Places never go
+    /// through enrichment: there is no page to read, and a fetch of the map
+    /// link would only overwrite the name the user just approved. Returns how
+    /// many were saved.
+    func importPlaces(_ places: [Place], to folder: String) -> Int {
+        let saved = store.add(places: places, to: folder)
+        guard !saved.isEmpty else { return 0 }
+        let thumbnails = thumbnails
+        let store = store
+        Task { @MainActor in
+            // At most four maps drawing at once, the same cap capture uses:
+            // twenty places must not draw one map after another.
+            var drawn: [UUID] = []
+            await withTaskGroup(of: UUID?.self) { group in
+                var iterator = saved.makeIterator()
+                for _ in 0..<4 {
+                    guard let bookmark = iterator.next() else { break }
+                    group.addTask { await AppModel.drawMap(for: bookmark, into: thumbnails) }
+                }
+                for await id in group {
+                    if let id { drawn.append(id) }
+                    guard let bookmark = iterator.next() else { continue }
+                    group.addTask { await AppModel.drawMap(for: bookmark, into: thumbnails) }
+                }
+            }
+            // One write for the batch. A write per map would undo the batching
+            // add(places:) just did.
+            store.markThumbnails(drawn)
+        }
+        return saved.count
+    }
+
+    /// Draws one map off the main actor and returns the id when an image
+    /// landed on disk. Nonisolated on purpose: inheriting the main actor here
+    /// would make the task group draw the maps one at a time.
+    private nonisolated static func drawMap(for bookmark: Bookmark,
+                                            into thumbnails: ThumbnailCache) async -> UUID? {
+        guard let place = bookmark.place,
+              let data = await PlaceSnapshot.pngData(for: place),
+              thumbnails.store(data, for: bookmark.id) else { return nil }
+        return bookmark.id
+    }
+
+    /// A save with nothing on screen: the shortcut, the Services item, and
+    /// the Shortcuts action. All three go through here so the confirmation
+    /// belongs to the save rather than to one of the three callers.
+    @discardableResult
+    func captureWithoutWindow(text: String) -> CaptureResult {
+        let result = capture(text: text)
+        guard result.total > 0 else { return result }
+        showsSavedTick = true
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(1.2))
+            self?.showsSavedTick = false
+        }
+        return result
     }
 
     func capture(urls: [URL]) -> CaptureResult {
