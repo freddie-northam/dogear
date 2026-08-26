@@ -64,6 +64,16 @@ extension String {
 }
 
 extension Bookmark {
+    /// Where to open this bookmark on a map, or nil when it is not a place at
+    /// all. A resolved place goes to its own coordinates. A link the user
+    /// copied out of Maps opens itself. Everything else has no honest answer,
+    /// so the app offers nothing rather than guessing from the title.
+    public var mapsURL: URL? {
+        if let place { return place.mapsURL }
+        guard let url = URL(string: url), Place.isMapHost(url) else { return nil }
+        return url
+    }
+
     /// The line under the title. A place the user has not written a note on
     /// still has something to say: where it is.
     public var subtitle: String? { note ?? place?.address }

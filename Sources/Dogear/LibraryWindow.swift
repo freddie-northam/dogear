@@ -979,9 +979,9 @@ struct BookmarkActions: ViewModifier {
         } label: {
             Label("Show QR Code", systemImage: "qrcode")
         }
-        if bookmark.isPlace || bookmark.folder == "Restaurants" {
+        if let mapsURL = bookmark.mapsURL {
             Button {
-                openInMaps()
+                NSWorkspace.shared.open(mapsURL)
             } label: {
                 Label("Open in Maps", systemImage: "map")
             }
@@ -994,17 +994,6 @@ struct BookmarkActions: ViewModifier {
         }
     }
 
-    private func openInMaps() {
-        // A resolved place knows its own coordinates. Anything else can only
-        // ask the map to search for the title.
-        if let url = bookmark.place?.mapsURL {
-            NSWorkspace.shared.open(url)
-            return
-        }
-        var parts = URLComponents(string: "https://maps.apple.com/")!
-        parts.queryItems = [URLQueryItem(name: "q", value: bookmark.title)]
-        if let url = parts.url { NSWorkspace.shared.open(url) }
-    }
 }
 
 extension View {

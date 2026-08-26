@@ -69,3 +69,38 @@ struct StubPlaceResolver: PlaceResolver {
     #expect(await resolver.resolve(PlaceQuery(name: "Kagari", near: "Tokyo")) == found)
     #expect(await resolver.resolve(PlaceQuery(name: "Nowhere", near: nil)) == nil)
 }
+
+@Test func mapsURLGoesToTheResolvedCoordinates() throws {
+    let place = Place(name: "Kagari", address: "Ginza", latitude: 35.6, longitude: 139.7)
+    var bookmark = Bookmark(id: UUID(), url: "https://example.com/a", title: "Kagari",
+                            author: nil, note: nil, folder: "Restaurants", source: .web,
+                            createdAt: Date(), doneAt: nil, hasThumbnail: false,
+                            manuallyFiled: true)
+    bookmark.place = place
+    #expect(bookmark.mapsURL == place.mapsURL)
+}
+
+@Test func mapsURLOpensALinkCopiedOutOfMaps() throws {
+    let bookmark = Bookmark(id: UUID(), url: "https://maps.apple.com/?q=Bao", title: "Bao",
+                            author: nil, note: nil, folder: "Unsorted", source: .web,
+                            createdAt: Date(), doneAt: nil, hasThumbnail: false,
+                            manuallyFiled: false)
+    #expect(bookmark.mapsURL?.absoluteString == "https://maps.apple.com/?q=Bao")
+}
+
+@Test func mapsURLIsNilForAPageThatIsNotAMap() {
+    // The folder name used to decide this, so an article filed under
+    // Restaurants offered to open a map that searched for its title.
+    let bookmark = Bookmark(id: UUID(), url: "https://example.com/review", title: "A review",
+                            author: nil, note: nil, folder: "Restaurants", source: .web,
+                            createdAt: Date(), doneAt: nil, hasThumbnail: false,
+                            manuallyFiled: false)
+    #expect(bookmark.mapsURL == nil)
+}
+
+@Test func mapHostMatchingCoversSubdomainsAndRejectsLookalikes() throws {
+    #expect(Place.isMapHost(try #require(URL(string: "https://maps.apple.com/?q=a"))))
+    #expect(Place.isMapHost(try #require(URL(string: "https://www.maps.google.com/?q=a"))))
+    #expect(!Place.isMapHost(try #require(URL(string: "https://maps.apple.com.evil.test/?q=a"))))
+    #expect(!Place.isMapHost(try #require(URL(string: "https://example.com/maps.apple.com"))))
+}

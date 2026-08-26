@@ -28,6 +28,20 @@ public struct Place: Codable, Equatable, Sendable {
     }
 }
 
+extension Place {
+    /// Hosts whose pages are a map. A bookmark pointing at one of these opens
+    /// in Maps even without a resolved place behind it, which is what a link
+    /// copied out of Maps looks like.
+    static let mapHosts: Set<String> = [
+        "maps.apple.com", "maps.google.com", "maps.app.goo.gl", "goo.gl",
+    ]
+
+    static func isMapHost(_ url: URL) -> Bool {
+        guard let host = url.host?.lowercased() else { return false }
+        return mapHosts.contains { host == $0 || host.hasSuffix("." + $0) }
+    }
+}
+
 /// One line of pasted text, ready to look up.
 public struct PlaceQuery: Equatable, Sendable {
     /// The place itself, as the user wrote it.
