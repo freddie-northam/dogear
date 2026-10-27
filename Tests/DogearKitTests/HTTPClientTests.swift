@@ -69,13 +69,14 @@ private func stubbedClient() -> URLSessionHTTPClient {
 @Test(arguments: [
     "127.0.0.1", "10.1.2.3", "172.16.0.1", "172.31.255.255", "192.168.1.1", "169.254.169.254",
     "0.0.0.0", "100.64.0.1", "224.0.0.1", "::1", "::", "fc00::1", "fd12::1", "fe80::1",
-    "::ffff:127.0.0.1", "::ffff:192.168.0.1",
+    "::ffff:127.0.0.1", "::ffff:192.168.0.1", "fec0::1", "64:ff9b:1::1", "2001::1", "100::1",
+    "2002:c0a8:0101::1", "2001:db8::1", "ff02::1",
 ])
 func aPrivateAddressIsNotPublic(address: String) {
     #expect(NetworkDestination.isPublic(address: address) == false)
 }
 
-@Test(arguments: ["8.8.8.8", "172.15.0.1", "172.32.0.1", "100.128.0.1", "93.184.215.14", "2606:4700::1111"])
+@Test(arguments: ["8.8.8.8", "172.15.0.1", "172.32.0.1", "100.128.0.1", "93.184.215.14", "2606:4700::1111", "2002:0808:0808::1"])
 func aPublicAddressIsPublic(address: String) {
     #expect(NetworkDestination.isPublic(address: address))
 }

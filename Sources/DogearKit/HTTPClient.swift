@@ -185,13 +185,12 @@ public enum NetworkDestination {
             default: return b[0] < 224
             }
         }
-        // IPv4-mapped (::ffff:a.b.c.d) and NAT64 (64:ff9b::a.b.c.d) addresses carry an IPv4 address in the last four bytes.
+        // These IPv6 forms carry an IPv4 address: mapped (::ffff:0:0/96), NAT64 (64:ff9b::/96), and 6to4 (2002::/16).
         if b[0..<10].allSatisfy({ $0 == 0 }) && b[10] == 0xFF && b[11] == 0xFF { return isPublic(Array(b[12...])) }
         if b[0..<12] == [0, 0x64, 0xFF, 0x9B, 0, 0, 0, 0, 0, 0, 0, 0] { return isPublic(Array(b[12...])) }
-        if b[0..<12].allSatisfy({ $0 == 0 }) { return false }
-        if b[0] & 0xFE == 0xFC || b[0] == 0xFF { return false }
-        if b[0] == 0xFE && b[1] & 0xC0 == 0x80 { return false }
-        if b[0..<4] == [0x20, 0x01, 0x0D, 0xB8] { return false }
-        return true
+        if b[0] == 0x20 && b[1] == 0x02 { return isPublic(Array(b[2..<6])) }
+        // Only global unicast (2000::/3) is public, less Teredo (2001::/32) and documentation (2001:db8::/32).
+        if b[0..<4] == [0x20, 0x01, 0, 0] || b[0..<4] == [0x20, 0x01, 0x0D, 0xB8] { return false }
+        return b[0] & 0xE0 == 0x20
     }
 }
