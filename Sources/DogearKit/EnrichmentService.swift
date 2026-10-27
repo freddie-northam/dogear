@@ -18,48 +18,43 @@ public final class EnrichmentService {
     }
 
     public func enrich(id: UUID) async {
-        guard let started = store.library.bookmarks.first(where: { $0.id == id }),
+        guard let started = current(id), !started.isPlace,
               let url = URL(string: started.url) else { return }
-        guard !started.isPlace else { return }
 
         let result = await metadata.fetch(for: url)
         let resolved = URLCleaner.canonicalString(result.resolvedURL)
-
-        guard var bookmark = store.library.bookmarks.first(where: { $0.id == id }) else { return }
-
-        bookmark.url = resolved
-
         guard let fetched = result.metadata else {
-            save(bookmark)
+            guard var latest = current(id) else { return }
+            latest.url = resolved
+            save(latest)
             return
         }
 
-        if let title = fetched.title, !title.isEmpty { bookmark.title = title }
-        bookmark.author = fetched.author ?? bookmark.author
-        bookmark.source = fetched.source
-
-        if !bookmark.manuallyFiled {
-            let folders = store.library.folders
-            let guess = await categorizer.categorize(fetched, url: result.resolvedURL, folders: folders)
-            bookmark.folder = (guess.flatMap { folders.contains($0) ? $0 : nil }) ?? Library.unsorted
+        var guess: String?
+        if current(id)?.manuallyFiled == false {
+            guess = await categorizer.categorize(fetched, url: result.resolvedURL, folders: store.library.folders)
         }
-
+        var storedThumbnail = false
         if let thumbnailURL = fetched.thumbnailURL,
-           let data = try? await client.data(from: thumbnailURL, limit: FetchLimit.thumbnail),
-           thumbnails.store(data, for: bookmark.id) {
-            bookmark.hasThumbnail = true
+           let data = try? await client.data(from: thumbnailURL, limit: FetchLimit.thumbnail) {
+            storedThumbnail = thumbnails.store(data, for: id)
         }
 
-        guard var latest = store.library.bookmarks.first(where: { $0.id == id }) else { return }
-        latest.url = bookmark.url
-        latest.title = bookmark.title
-        latest.author = bookmark.author
-        latest.source = bookmark.source
-        latest.hasThumbnail = bookmark.hasThumbnail
+        // Every await above lets the user edit this bookmark, so apply onto the record as it is now.
+        guard var latest = current(id) else { return }
+        latest.url = resolved
+        if let title = fetched.title, !title.isEmpty { latest.title = title }
+        latest.author = fetched.author ?? latest.author
+        latest.source = fetched.source
+        if storedThumbnail { latest.hasThumbnail = true }
         if !latest.manuallyFiled {
-            latest.folder = store.library.folders.contains(bookmark.folder) ? bookmark.folder : Library.unsorted
+            latest.folder = guess.flatMap { store.library.folders.contains($0) ? $0 : nil } ?? Library.unsorted
         }
         save(latest)
+    }
+
+    private func current(_ id: UUID) -> Bookmark? {
+        store.library.bookmarks.first { $0.id == id }
     }
 
     private func save(_ latest: Bookmark) {
@@ -73,13 +68,11 @@ public final class EnrichmentService {
                 survivor.folder = latest.folder
                 survivor.manuallyFiled = true
             }
-            var merged = survivor
-            merged.createdAt = min(survivor.createdAt, latest.createdAt)
-            merged.doneAt = nil
+            survivor.createdAt = min(survivor.createdAt, latest.createdAt)
             store.remove(id: latest.id)
             thumbnails.remove(for: latest.id)
-            store.update(merged)
-            store.add(url: URL(string: merged.url)!)
+            store.update(survivor)
+            store.add(url: URL(string: survivor.url)!)
             return
         }
         store.update(latest)
