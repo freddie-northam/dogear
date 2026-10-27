@@ -193,15 +193,93 @@ import Testing
         URL(string: "https://a.com/1")!,
         URL(string: "https://a.com/old")!,
         URL(string: "https://a.com/2")!,
-    ])
+    ], duplicates: .resave)
     #expect(changes == 1)
     #expect(result.new.map(\.url) == ["https://a.com/1", "https://a.com/2"])
-    #expect(result.touched == 3)
-    // The batch sits at the top in paste order; the re-added duplicate is
-    // bumped above older items and no longer done.
+    #expect(result.existing.map(\.id) == [existing.id])
     #expect(store.bookmarks(in: Library.unsorted).map(\.url)
         == ["https://a.com/1", "https://a.com/old", "https://a.com/2"])
     #expect(store.archive().isEmpty)
+}
+
+private func storeWithADoneMiddle(_ dir: URL) throws -> (BookmarkStore, changes: () -> Int) {
+    let store = try BookmarkStore(directory: dir)
+    _ = store.add(urls: ["https://a.com/1", "https://a.com/2", "https://a.com/3"].map { URL(string: $0)! },
+                  duplicates: .resave)
+    store.markDone(id: store.library.bookmarks[1].id)
+    var changes = 0
+    store.onChange = { changes += 1 }
+    return (store, { changes })
+}
+
+@Test func skipLeavesASavedLinkWhereItIsAndDone() throws {
+    let temp = TempDirectory()
+    let (store, changes) = try storeWithADoneMiddle(temp.url)
+    let before = store.library.bookmarks
+    let modified = try FileManager.default.attributesOfItem(
+        atPath: temp.url.appendingPathComponent("library.json").path)[.modificationDate] as? Date
+    let result = store.add(urls: [URL(string: "https://A.com/2/?utm_source=x")!,
+                                  URL(string: "https://a.com/3")!], duplicates: .skip)
+    #expect(result.new.isEmpty)
+    #expect(result.existing.map(\.url) == ["https://a.com/2", "https://a.com/3"])
+    #expect(store.library.bookmarks == before)
+    #expect(changes() == 0)
+    let after = try FileManager.default.attributesOfItem(
+        atPath: temp.url.appendingPathComponent("library.json").path)[.modificationDate] as? Date
+    #expect(after == modified)
+}
+
+@Test func skipPutsOnlyTheNewLinksOnTopInPasteOrder() throws {
+    let temp = TempDirectory()
+    let (store, changes) = try storeWithADoneMiddle(temp.url)
+    let before = store.library.bookmarks
+    let result = store.add(urls: ["https://b.com/x", "https://a.com/2", "https://b.com/y", "https://b.com/x"]
+        .map { URL(string: $0)! }, duplicates: .skip)
+    #expect(result.new.map(\.url) == ["https://b.com/x", "https://b.com/y"])
+    #expect(result.existing.map(\.url) == ["https://a.com/2"])
+    #expect(store.library.bookmarks.map(\.url) == ["https://b.com/x", "https://b.com/y"] + before.map(\.url))
+    #expect(store.archive().map(\.url) == ["https://a.com/2"])
+    #expect(changes() == 1)
+}
+
+@Test func aBatchDropsNonHTTPLinksAndDoesNotCountThem() throws {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    var changes = 0
+    store.onChange = { changes += 1 }
+    for policy in [DuplicatePolicy.resave, .skip] {
+        let result = store.add(urls: ["file:///etc/hosts", "mailto:a@b.com", "javascript:alert(1)"]
+            .map { URL(string: $0)! }, duplicates: policy)
+        #expect(result.new.isEmpty && result.existing.isEmpty)
+    }
+    #expect(store.library.bookmarks.isEmpty)
+    #expect(changes == 0)
+}
+
+@Test func twoRecordsWithOneURLResolveToTheFirst() throws {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    let (original, _) = store.add(url: URL(string: "https://a.com/1")!)!
+    let removed = store.remove(id: original.id)!
+    let (resaved, _) = store.add(url: URL(string: "https://a.com/1")!)!
+    store.restore(removed.bookmark, at: 1)
+    #expect(store.library.bookmarks.map(\.id) == [resaved.id, original.id])
+    let skipped = store.add(urls: [URL(string: "https://a.com/1")!], duplicates: .skip)
+    #expect(skipped.existing.map(\.id) == [resaved.id])
+    let bumped = store.add(urls: [URL(string: "https://a.com/1")!], duplicates: .resave)
+    #expect(bumped.existing.map(\.id) == [resaved.id])
+    #expect(store.library.bookmarks.map(\.id) == [resaved.id, original.id])
+}
+
+@Test func reAddingADonePlaceLeavesItDone() throws {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    let first = try #require(store.add(places: [testPlace("Bao Borough")], to: "Restaurants").first)
+    _ = store.add(url: URL(string: "https://a.com/newer")!)
+    store.markDone(id: first.id)
+    let before = store.library.bookmarks
+    #expect(store.add(places: [testPlace("Bao Borough")], to: "Restaurants").isEmpty)
+    #expect(store.library.bookmarks == before)
 }
 
 @Test func searchMatchesNote() throws {
@@ -872,5 +950,32 @@ private func testPlace(_ name: String, latitude: Double = 51.5, longitude: Doubl
 
     if ProcessInfo.processInfo.environment["PERF"] != nil {
         #expect(elapsed < .milliseconds(50))
+    }
+}
+
+@MainActor @Test func reimportingAFiveThousandLinkExportWritesNothingUnder200ms() async throws {
+    let temp = TempDirectory()
+    let bookmarks = (0..<5_000).map { i in
+        Bookmark(id: UUID(), url: "https://example.com/item/\(i)", title: "Item \(i)", author: nil, note: nil,
+                 folder: Library.unsorted, source: .web, createdAt: Date(), doneAt: i < 1_000 ? Date() : nil,
+                 hasThumbnail: false, manuallyFiled: false)
+    }
+    try JSONEncoder().encode(Library(folders: Library.defaultFolders, bookmarks: bookmarks,
+                                     schemaVersion: Library.currentSchemaVersion))
+        .write(to: temp.url.appendingPathComponent("library.json"))
+    let store = try BookmarkStore(directory: temp.url)
+    let html = BookmarksHTML.export(store.library)
+    var changes = 0
+    store.onChange = { changes += 1 }
+
+    let start = ContinuousClock.now
+    let outcome = Capture(store: store) { _ in }.save(.bookmarksFile(html: html))
+    let elapsed = ContinuousClock.now - start
+
+    #expect(outcome.alreadySaved == 5_000)
+    #expect(store.archive().count == 1_000)
+    #expect(changes == 0)
+    if ProcessInfo.processInfo.environment["PERF"] != nil {
+        #expect(elapsed < .milliseconds(200))
     }
 }

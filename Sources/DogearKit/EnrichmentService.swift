@@ -37,7 +37,7 @@ public final class EnrichmentService {
         bookmark.url = resolved
 
         guard let fetched = result.metadata else {
-            store.update(bookmark) // keep resolved URL even when enrichment failed
+            save(bookmark) // keep resolved URL even when enrichment failed
             return
         }
 
@@ -70,14 +70,14 @@ public final class EnrichmentService {
         if !latest.manuallyFiled {
             latest.folder = store.library.folders.contains(bookmark.folder) ? bookmark.folder : Library.unsorted
         }
+        save(latest)
+    }
 
-        // Post-redirect dedupe: the resolved URL may match an existing bookmark. Checked
-        // here, immediately before the write, so no suspension point separates the check
-        // from the write and a concurrent enrichment cannot land the same URL in between.
-        // Merge into the survivor rather than deleting `latest`: a bookmark reached via
-        // "Refresh Metadata" long after capture may carry a note, a star, a manually
-        // chosen folder, or an earlier save date, none of which should be discarded.
-        if var survivor = store.library.bookmarks.first(where: { $0.url == latest.url && $0.id != id }) {
+    private func save(_ latest: Bookmark) {
+        // A redirect can resolve to the URL of a bookmark that already exists.
+        // No await sits between this check and the write, so no concurrent enrichment can add the URL first.
+        // Merge, not only delete `latest`: it may carry a note, a star, a chosen folder or an earlier save date.
+        if var survivor = store.library.bookmarks.first(where: { $0.url == latest.url && $0.id != latest.id }) {
             survivor.note = survivor.note ?? latest.note
             survivor.favoritedAt = survivor.favoritedAt ?? latest.favoritedAt
             if latest.manuallyFiled && !survivor.manuallyFiled {

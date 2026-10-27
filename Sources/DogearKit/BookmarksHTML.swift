@@ -37,6 +37,23 @@ public enum BookmarksHTML {
         return lines
     }
 
+    /// The http(s) link of every bookmark in a bookmark file, in file order.
+    /// It reads only `HREF` values, so a title or a note that looks like a link never becomes a bookmark.
+    public static func links(in html: String) -> [URL] {
+        html.matches(of: #/(?i)\shref\s*=\s*(?:"([^"]*)"|'([^']*)')/#)
+            .compactMap { match in (match.1 ?? match.2).flatMap { URL(string: unescaped(String($0))) } }
+            .filter(URLCleaner.isCapturable)
+    }
+
+    static func unescaped(_ text: String) -> String {
+        text.replacingOccurrences(of: "&quot;", with: "\"")
+            .replacingOccurrences(of: "&#39;", with: "'")
+            .replacingOccurrences(of: "&apos;", with: "'")
+            .replacingOccurrences(of: "&lt;", with: "<")
+            .replacingOccurrences(of: "&gt;", with: ">")
+            .replacingOccurrences(of: "&amp;", with: "&")
+    }
+
     static func escaped(_ text: String) -> String {
         text.replacingOccurrences(of: "&", with: "&amp;")
             .replacingOccurrences(of: "<", with: "&lt;")
