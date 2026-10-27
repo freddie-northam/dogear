@@ -2,19 +2,14 @@ import DogearKit
 import Foundation
 import SwiftUI
 
-struct CaptureResult {
-    let new: Int
-    let total: Int
-}
-
 @MainActor
 final class AppModel: ObservableObject {
     static weak var shared: AppModel?
-    nonisolated static let concurrencyCap = 4
 
     let directory: URL
     let store: BookmarkStore
     let enrichment: EnrichmentService
+    let capture: Capture
     let thumbnails: ThumbnailCache
     @Published var revision = 0
     @Published var storageError: String?
@@ -44,13 +39,15 @@ final class AppModel: ObservableObject {
             storageError = "Dogear restored your bookmarks from a backup. Recent changes may be missing."
         }
         let client = URLSessionHTTPClient()
-        enrichment = EnrichmentService(
+        let enrichment = EnrichmentService(
             store: store,
             metadata: MetadataService(client: client),
             categorizer: CategorizerFactory.make(),
             thumbnails: thumbnails,
             client: client
         )
+        self.enrichment = enrichment
+        capture = Capture(store: store) { await enrichment.enrich(id: $0) }
         store.onChange = { [weak self] in
             self?.revision += 1
             self?.scheduleSpotlightSync()
@@ -62,6 +59,11 @@ final class AppModel: ObservableObject {
         }
     }
 
+    // MARK: Spotlight
+
+    /// Republishes the library after the changes stop.
+    /// A paste of fifty links fires `onChange` once, but fifty enrichments fire it fifty times.
+    /// Without the delay, each one rebuilds the whole index.
     private func scheduleSpotlightSync() {
         guard SpotlightSync.isEnabled else { return }
         spotlightTask?.cancel()
@@ -130,10 +132,8 @@ final class AppModel: ObservableObject {
         undoManager.setActionName(name)
     }
 
-    func capture(text: String) -> CaptureResult {
-        capture(urls: URLCleaner.allHTTPURLs(in: text))
-    }
-
+    /// Runs the categorizer again on each Unsorted bookmark that is not done, with the current folders.
+    /// Returns how many it filed.
     func fileUnsorted() async -> Int {
         let categorizer = CategorizerFactory.make()
         let unsorted = store.bookmarks(in: Library.unsorted)
@@ -158,20 +158,10 @@ final class AppModel: ObservableObject {
         let thumbnails = thumbnails
         let store = store
         Task { @MainActor in
-            var drawn: [UUID] = []
-            await withTaskGroup(of: UUID?.self) { group in
-                var iterator = saved.makeIterator()
-                for _ in 0..<Self.concurrencyCap {
-                    guard let bookmark = iterator.next() else { break }
-                    group.addTask { await AppModel.drawMap(for: bookmark, into: thumbnails) }
-                }
-                for await id in group {
-                    if let id { drawn.append(id) }
-                    guard let bookmark = iterator.next() else { continue }
-                    group.addTask { await AppModel.drawMap(for: bookmark, into: thumbnails) }
-                }
+            let drawn = await boundedMap(saved, limit: Capture.maxInFlight) {
+                await AppModel.drawMap(for: $0, into: thumbnails)
             }
-            store.markThumbnails(drawn)
+            store.markThumbnails(drawn.compactMap { $0 })
         }
         return saved.count
     }
@@ -188,40 +178,14 @@ final class AppModel: ObservableObject {
     }
 
     @discardableResult
-    func captureWithoutWindow(text: String) -> CaptureResult {
-        let result = capture(text: text)
-        guard result.total > 0 else { return result }
+    func captureWithoutWindow(text: String) -> Capture.Outcome {
+        let outcome = capture.save(.text(text))
+        guard outcome.found > 0 else { return outcome }
         showsSavedTick = true
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(1.2))
             self?.showsSavedTick = false
         }
-        return result
-    }
-
-    func capture(urls: [URL]) -> CaptureResult {
-        let urls = urls.filter {
-            let scheme = $0.scheme?.lowercased()
-            return scheme == "http" || scheme == "https"
-        }
-        let (new, touched) = store.add(urls: urls)
-        let ids = new.map(\.id)
-        if !ids.isEmpty {
-            let enrichment = enrichment
-            Task {
-                await withTaskGroup(of: Void.self) { group in
-                    var iterator = ids.makeIterator()
-                    for _ in 0..<Self.concurrencyCap {
-                        guard let id = iterator.next() else { break }
-                        group.addTask { await enrichment.enrich(id: id) }
-                    }
-                    for await _ in group {
-                        guard let id = iterator.next() else { continue }
-                        group.addTask { await enrichment.enrich(id: id) }
-                    }
-                }
-            }
-        }
-        return CaptureResult(new: ids.count, total: touched)
+        return outcome
     }
 }

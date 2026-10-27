@@ -14,7 +14,7 @@ struct SaveLinkIntent: AppIntent {
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<Int> {
         let model = try await Self.readyModel()
-        return .result(value: model.captureWithoutWindow(text: text).new)
+        return .result(value: model.captureWithoutWindow(text: text).new.count)
     }
 
     @MainActor

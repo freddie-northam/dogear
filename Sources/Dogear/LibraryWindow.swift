@@ -57,10 +57,7 @@ struct LibraryWindow: View {
         } detail: {
             detailContent
                 .dropDestination(for: URL.self) { urls, _ in
-                    let existing = Set(model.store.library.bookmarks.map(\.url))
-                    let fresh = urls.filter { !existing.contains(URLCleaner.canonicalString($0)) }
-                    guard !fresh.isEmpty else { return false }
-                    return model.capture(urls: fresh).total > 0
+                    !model.capture.save(.drop(urls)).new.isEmpty
                 }
         }
         .searchable(text: $query, prompt: "Search bookmarks")
@@ -432,9 +429,11 @@ struct LibraryWindow: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    // MARK: Actions
+
     private func pasteFromClipboard() {
         let text = NSPasteboard.general.string(forType: .string) ?? ""
-        if model.capture(text: text).total == 0 { pasteFailed = true }
+        if model.capture.save(.text(text)).found == 0 { pasteFailed = true }
     }
 
     private func startImport() {
@@ -505,38 +504,9 @@ struct LibraryWindow: View {
             }
         }
         saveCursors(cursors)
-        finishImport(with: combinedBodies, failedFolders: failedFolders, hadIncrementalRead: hadIncrementalRead)
-    }
-
-    private func finishImport(with bodies: String, failedFolders: Int, hadIncrementalRead: Bool) {
-        let existing = Set(model.store.library.bookmarks.map(\.url))
-        let found = URLCleaner.allHTTPURLs(inHTML: bodies)
-        let fresh = NotesImportPlanning.freshURLs(found, existing: existing)
-        var message: String
-        if found.isEmpty {
-            message = hadIncrementalRead
-                ? "No new links since your last import."
-                : "No links found in your notes."
-        } else if fresh.isEmpty {
-            message = found.count == 1
-                ? "All 1 link was already saved."
-                : "All \(found.count) links were already saved."
-        } else {
-            let result = model.capture(urls: fresh)
-            let alreadySaved = found.count - result.new
-            message = result.new == 1 ? "Imported 1 link." : "Imported \(result.new) links."
-            if alreadySaved > 0 {
-                message += alreadySaved == 1
-                    ? " 1 was already saved."
-                    : " \(alreadySaved) were already saved."
-            }
-        }
-        if failedFolders > 0 {
-            message += failedFolders == 1
-                ? " Dogear could not read 1 folder."
-                : " Dogear could not read \(failedFolders) folders."
-        }
-        importState = .finished(message)
+        let outcome = model.capture.save(
+            .notes(html: combinedBodies, incremental: hadIncrementalRead, unreadFolders: failedFolders))
+        importState = .finished(outcome.summary ?? "")
     }
 
     private func importBookmarksFile() {
@@ -545,27 +515,8 @@ struct LibraryWindow: View {
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        let html: String
-        if let text = try? String(contentsOf: url, encoding: .utf8) {
-            html = text
-        } else if let data = try? Data(contentsOf: url) {
-            html = String(decoding: data, as: UTF8.self)
-        } else {
-            importFileResult = "No links found in that file."
-            return
-        }
-        let result = model.capture(urls: URLCleaner.allHTTPURLs(inHTML: html))
-        if result.total == 0 {
-            importFileResult = "No links found in that file."
-        } else if result.new == 0 {
-            importFileResult = result.total == 1
-                ? "This link was already saved."
-                : "All \(result.total) were already saved."
-        } else {
-            importFileResult = result.new == 1
-                ? "Imported 1 link."
-                : "Imported \(result.new) links."
-        }
+        let html = (try? Data(contentsOf: url)).map { String(decoding: $0, as: UTF8.self) } ?? ""
+        importFileResult = model.capture.save(.bookmarksFile(html: html)).summary
     }
 
     private func exportMarkdownFile() {
