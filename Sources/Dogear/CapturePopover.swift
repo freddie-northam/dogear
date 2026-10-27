@@ -190,23 +190,13 @@ struct CapturePopover: View {
     }
 
     private func save() {
-        let result = model.capture(text: text)
-        if result.total == 0 {
-            hint = "That is not a web link. Dogear saves http and https links."
-            return
-        }
+        let outcome = model.capture.save(.text(text))
+        hint = outcome.summary
+        guard outcome.found > 0 else { return }
         clipboard.consume()
         text = ""
         if pick == nil { rollPick() }
-        if result.total > 1 {
-            hint = result.new == 0
-                ? "All \(result.total) were already saved."
-                : "Saved \(result.total) links."
-        } else if result.new == 1 {
-            dismiss()
-        } else {
-            hint = "Already saved. It moved to the top of the library."
-        }
+        if outcome.savedOneNewLink { dismiss() }
     }
 
     /// Draws the next pick and records that the row showed it. Every draw

@@ -2,13 +2,6 @@ import DogearKit
 import Foundation
 import SwiftUI
 
-struct CaptureResult {
-    /// Distinct bookmarks created by this capture.
-    let new: Int
-    /// Distinct bookmarks touched: created plus re-saved duplicates.
-    let total: Int
-}
-
 @MainActor
 final class AppModel: ObservableObject {
     /// The one live model, for scenes that must not eagerly build their view
@@ -17,6 +10,7 @@ final class AppModel: ObservableObject {
 
     let store: BookmarkStore
     let enrichment: EnrichmentService
+    let capture: Capture
     let thumbnails: ThumbnailCache
     @Published var revision = 0
     @Published var storageError: String?
@@ -50,13 +44,15 @@ final class AppModel: ObservableObject {
             storageError = "Dogear restored your bookmarks from a backup. Recent changes may be missing."
         }
         let client = URLSessionHTTPClient()
-        enrichment = EnrichmentService(
+        let enrichment = EnrichmentService(
             store: store,
             metadata: MetadataService(client: client),
             categorizer: CategorizerFactory.make(),
             thumbnails: thumbnails,
             client: client
         )
+        self.enrichment = enrichment
+        capture = Capture(store: store) { await enrichment.enrich(id: $0) }
         store.onChange = { [weak self] in
             self?.revision += 1
             self?.scheduleSpotlightSync()
@@ -70,8 +66,6 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// Saves every http(s) link in the text. Deduplication applies per URL,
-    /// so a link that appears twice in one paste counts once.
     // MARK: Spotlight
 
     /// Republishes the library after the changes stop. A paste of fifty links
@@ -173,10 +167,6 @@ final class AppModel: ObservableObject {
         undoManager.setActionName(name)
     }
 
-    func capture(text: String) -> CaptureResult {
-        capture(urls: URLCleaner.allHTTPURLs(in: text))
-    }
-
     /// Re-runs the categorizer over every not-done Unsorted bookmark against
     /// the current folder list. Returns how many were filed.
     func fileUnsorted() async -> Int {
@@ -207,24 +197,10 @@ final class AppModel: ObservableObject {
         let thumbnails = thumbnails
         let store = store
         Task { @MainActor in
-            // At most four maps drawing at once, the same cap capture uses:
-            // twenty places must not draw one map after another.
-            var drawn: [UUID] = []
-            await withTaskGroup(of: UUID?.self) { group in
-                var iterator = saved.makeIterator()
-                for _ in 0..<4 {
-                    guard let bookmark = iterator.next() else { break }
-                    group.addTask { await AppModel.drawMap(for: bookmark, into: thumbnails) }
-                }
-                for await id in group {
-                    if let id { drawn.append(id) }
-                    guard let bookmark = iterator.next() else { continue }
-                    group.addTask { await AppModel.drawMap(for: bookmark, into: thumbnails) }
-                }
+            let drawn = await boundedMap(saved, limit: Capture.maxInFlight) {
+                await AppModel.drawMap(for: $0, into: thumbnails)
             }
-            // One write for the batch. A write per map would undo the batching
-            // add(places:) just did.
-            store.markThumbnails(drawn)
+            store.markThumbnails(drawn.compactMap { $0 })
         }
         return saved.count
     }
@@ -244,44 +220,14 @@ final class AppModel: ObservableObject {
     /// the Shortcuts action. All three go through here so the confirmation
     /// belongs to the save rather than to one of the three callers.
     @discardableResult
-    func captureWithoutWindow(text: String) -> CaptureResult {
-        let result = capture(text: text)
-        guard result.total > 0 else { return result }
+    func captureWithoutWindow(text: String) -> Capture.Outcome {
+        let outcome = capture.save(.text(text))
+        guard outcome.found > 0 else { return outcome }
         showsSavedTick = true
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(1.2))
             self?.showsSavedTick = false
         }
-        return result
-    }
-
-    func capture(urls: [URL]) -> CaptureResult {
-        // The one capture gate: every caller (text, drop, import) inherits it.
-        // A dropped file:// URL must never become a bookmark or reach enrichment.
-        let urls = urls.filter {
-            let scheme = $0.scheme?.lowercased()
-            return scheme == "http" || scheme == "https"
-        }
-        let (new, touched) = store.add(urls: urls)
-        let ids = new.map(\.id)
-        if !ids.isEmpty {
-            let enrichment = enrichment
-            Task {
-                // At most four enrichments in flight: a big Notes paste must not
-                // open one network fetch per link at once.
-                await withTaskGroup(of: Void.self) { group in
-                    var iterator = ids.makeIterator()
-                    for _ in 0..<4 {
-                        guard let id = iterator.next() else { break }
-                        group.addTask { await enrichment.enrich(id: id) }
-                    }
-                    for await _ in group {
-                        guard let id = iterator.next() else { continue }
-                        group.addTask { await enrichment.enrich(id: id) }
-                    }
-                }
-            }
-        }
-        return CaptureResult(new: ids.count, total: touched)
+        return outcome
     }
 }

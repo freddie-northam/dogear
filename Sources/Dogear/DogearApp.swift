@@ -113,7 +113,7 @@ struct DogearApp: App {
     private func captureFromClipboard() {
         Task { @MainActor in
             guard let text = await clipboard.readLink(),
-                  model.captureWithoutWindow(text: text).total > 0 else { return }
+                  model.captureWithoutWindow(text: text).found > 0 else { return }
             clipboard.consume()
         }
     }
