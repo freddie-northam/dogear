@@ -1,12 +1,5 @@
 import Foundation
 
-public enum NotesImportPlanning {
-    /// Links not already in the library, by canonical URL, in input order.
-    public static func freshURLs(_ found: [URL], existing: Set<String>) -> [URL] {
-        found.filter { !existing.contains(URLCleaner.canonicalString($0)) }
-    }
-}
-
 /// Per-folder cursors: a folder with no entry gets a full read; an entry means
 /// read only notes modified after it. Keyed by the Notes folder id.
 public struct NotesImportCursors: Codable, Equatable {
