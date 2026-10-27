@@ -38,7 +38,7 @@ one. Capture windows with `screencapture -l <window id>`.
 ## Live canaries
 
 `CANARY=1 swift test --filter CanaryTests` runs real fetches against TikTok
-and X. CI runs these each day at 06:00 UTC. A canary failure means that a
+and X. CI runs these once a day. A canary failure means that a
 platform changed its behavior, not that your change broke something.
 
 ## Extension points
@@ -47,8 +47,9 @@ platform changed its behavior, not that your change broke something.
 
 Implement `MetadataFetcher` (`Sources/DogearKit/MetadataFetching.swift`).
 `parse(body:url:)` reads the page that `MetadataService` already downloaded.
-`fetch(_:client:)` downloads the page and parses it, for the live canaries.
-Do not call a second endpoint: a capture makes one request. Register the host in
+`fetch(_:client:)` downloads the page, then calls `parse(body:url:)`.
+Do not call a second endpoint. A capture makes one request, so a rate limit
+on another endpoint cannot leave a bookmark empty. Register the host in
 `MetadataService.fetcher(forHost:)` (`Sources/DogearKit/MetadataService.swift`).
 Add a fixture test under
 `Tests/DogearKitTests/Fixtures`. Use `TikTokFetcherTests.swift` or
