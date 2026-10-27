@@ -103,29 +103,30 @@ public final class BookmarkStore {
     }
 
     func add(urls: [URL], duplicates: DuplicatePolicy) -> Added {
-        let (added, changed) = insert(urls: urls, duplicates: duplicates)
-        if changed { mutated() }
-        return added
+        insert(urls.compactMap(webBookmark), duplicates: duplicates)
     }
 
-    private func insert(urls: [URL], duplicates: DuplicatePolicy) -> (Added, changed: Bool) {
+    /// Saves resolved places as bookmarks in one write.
+    /// A place bookmark carries its map link as its URL, so dedupe and export need no second path.
+    /// The user chose the folder in the import sheet, so the record counts as filed by hand and the categorizer leaves it alone.
+    /// Returns the new bookmarks. A place already saved stays as it is.
+    public func add(places: [Place], to folder: String) -> [Bookmark] {
+        let target = library.folders.contains(folder) ? folder : Library.unsorted
+        return insert(places.compactMap { placeBookmark($0, in: target) }, duplicates: .skip).new
+    }
+
+    private func insert(_ candidates: [Bookmark], duplicates: DuplicatePolicy) -> Added {
         let positions = Dictionary(library.bookmarks.enumerated().map { ($1.url, $0) },
                                    uniquingKeysWith: { first, _ in first })
         var added = Added()
         var top: [Bookmark] = []
         var seen = Set<String>()
         var bumped = Set<UUID>()
-        for url in urls where URLCleaner.isCapturable(url) {
-            let canonical = URLCleaner.canonicalString(url)
-            guard seen.insert(canonical).inserted else { continue }
-            guard let position = positions[canonical] else {
-                let bookmark = Bookmark(
-                    id: UUID(), url: canonical, title: displayTitle(for: url),
-                    author: nil, note: nil, folder: Library.unsorted, source: .web,
-                    createdAt: Date(), doneAt: nil, hasThumbnail: false, manuallyFiled: false
-                )
-                added.new.append(bookmark)
-                top.append(bookmark)
+        for candidate in candidates {
+            guard seen.insert(candidate.url).inserted else { continue }
+            guard let position = positions[candidate.url] else {
+                added.new.append(candidate)
+                top.append(candidate)
                 continue
             }
             var existing = library.bookmarks[position]
@@ -136,33 +137,28 @@ public final class BookmarkStore {
             }
             added.existing.append(existing)
         }
-        guard !top.isEmpty else { return (added, false) }
+        guard !top.isEmpty else { return added }
         library.bookmarks = top + library.bookmarks.filter { !bumped.contains($0.id) }
-        return (added, true)
+        mutated()
+        return added
     }
 
-    /// Saves resolved places as bookmarks in one write. A place bookmark
-    /// carries the map link as its URL, so dedupe and export need no second
-    /// path. The folder is the one the user chose in the import sheet, so the
-    /// record is marked as filed by hand and the categorizer leaves it alone.
-    /// Returns the new bookmarks. A place already saved stays as it is.
-    public func add(places: [Place], to folder: String) -> [Bookmark] {
-        let target = library.folders.contains(folder) ? folder : Library.unsorted
-        let byURL = Dictionary(places.compactMap { place in place.mapsURL.map { (URLCleaner.canonicalString($0), place) } },
-                               uniquingKeysWith: { first, _ in first })
-        let (added, changed) = insert(urls: places.compactMap(\.mapsURL), duplicates: .skip)
-        guard changed else { return [] }
-        let new = added.new.compactMap { bookmark -> Bookmark? in
-            guard let place = byURL[bookmark.url],
-                  let index = library.bookmarks.firstIndex(where: { $0.id == bookmark.id }) else { return nil }
-            library.bookmarks[index].title = place.name
-            library.bookmarks[index].folder = target
-            library.bookmarks[index].manuallyFiled = true
-            library.bookmarks[index].place = place
-            return library.bookmarks[index]
-        }
-        mutated()
-        return new
+    private func webBookmark(for url: URL) -> Bookmark? {
+        guard URLCleaner.isCapturable(url) else { return nil }
+        return Bookmark(
+            id: UUID(), url: URLCleaner.canonicalString(url), title: displayTitle(for: url),
+            author: nil, note: nil, folder: Library.unsorted, source: .web,
+            createdAt: Date(), doneAt: nil, hasThumbnail: false, manuallyFiled: false
+        )
+    }
+
+    private func placeBookmark(_ place: Place, in folder: String) -> Bookmark? {
+        guard let url = place.mapsURL else { return nil }
+        return Bookmark(
+            id: UUID(), url: URLCleaner.canonicalString(url), title: place.name,
+            author: nil, note: nil, folder: folder, source: .web,
+            createdAt: Date(), doneAt: nil, hasThumbnail: false, manuallyFiled: true, place: place
+        )
     }
 
     public func update(_ bookmark: Bookmark) {

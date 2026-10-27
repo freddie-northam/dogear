@@ -548,8 +548,7 @@ struct LibraryWindow: View {
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        let html = (try? String(contentsOf: url, encoding: .utf8))
-            ?? (try? Data(contentsOf: url)).map { String(decoding: $0, as: UTF8.self) } ?? ""
+        let html = (try? Data(contentsOf: url)).map { String(decoding: $0, as: UTF8.self) } ?? ""
         importFileResult = model.capture.save(.bookmarksFile(html: html)).summary
     }
 

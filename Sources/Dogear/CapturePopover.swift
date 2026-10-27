@@ -196,7 +196,7 @@ struct CapturePopover: View {
         clipboard.consume()
         text = ""
         if pick == nil { rollPick() }
-        if hint == nil { dismiss() }
+        if outcome.savedOneNewLink { dismiss() }
     }
 
     /// Draws the next pick and records that the row showed it. Every draw

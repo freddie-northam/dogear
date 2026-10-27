@@ -178,3 +178,20 @@ func summaryTellsTheUserWhatHappened(_ c: SummaryCase) async throws {
     #expect(try Data(contentsOf: libraryFile) == bytesBefore)
     #expect(try BookmarkStore(directory: temp.url).library == before)
 }
+
+@MainActor @Test(arguments: [
+    (saved: 0, new: 1, closes: true),
+    (saved: 1, new: 0, closes: false),
+    (saved: 0, new: 2, closes: false),
+    (saved: 1, new: 1, closes: false),
+])
+func onlyOneNewLinkClosesThePopover(saved: Int, new: Int, closes: Bool) async throws {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    let savedLinks = (0..<saved).map { "https://saved.com/\($0)" }
+    _ = store.add(urls: urls(savedLinks), duplicates: .resave)
+    let links = savedLinks + (0..<new).map { "https://new.com/\($0)" }
+    let outcome = Capture(store: store) { _ in }.save(.text(links.joined(separator: " ")))
+    #expect(outcome.savedOneNewLink == closes)
+    #expect((outcome.summary == nil) == closes)
+}

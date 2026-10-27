@@ -28,6 +28,8 @@ public final class Capture {
         public let enrichment: Task<Void, Never>?
 
         public var found: Int { new.count + alreadySaved }
+        /// True when the save added exactly one new link and nothing else, so the popover closes.
+        public var savedOneNewLink: Bool { found == 1 && new.count == 1 }
     }
 
     /// Background jobs that run at once, so a big import does not open one fetch per link.
