@@ -2,6 +2,7 @@ import AppKit
 import CoreGraphics
 import Foundation
 import ImageIO
+import Synchronization
 import Testing
 import UniformTypeIdentifiers
 @testable import DogearKit
@@ -84,21 +85,25 @@ private func makeEnvironment(client: StubHTTPClient) throws -> (BookmarkStore, E
     #expect(store.library.bookmarks[0].folder == Library.unsorted)
 }
 
-private final class InterceptingHTTPClient: HTTPClient, @unchecked Sendable {
+/// Lets a client callback reach a service that is built after the client.
+@MainActor private final class ServiceSlot {
+    var service: EnrichmentService?
+}
+
+private final class InterceptingHTTPClient: HTTPClient {
     let inner: StubHTTPClient
     let triggerOnCall: Int
-    let onTrigger: @MainActor () async -> Void
-    private var count = 0
+    let onTrigger: @MainActor @Sendable () async -> Void
+    private let count = Mutex(0)
 
-    init(inner: StubHTTPClient, triggerOnCall: Int = 1, onTrigger: @escaping @MainActor () async -> Void) {
+    init(inner: StubHTTPClient, triggerOnCall: Int = 1, onTrigger: @escaping @MainActor @Sendable () async -> Void) {
         self.inner = inner
         self.triggerOnCall = triggerOnCall
         self.onTrigger = onTrigger
     }
 
     private func bumpAndMaybeTrigger() async {
-        count += 1
-        if count == triggerOnCall { await onTrigger() }
+        if count.withLock({ $0 += 1; return $0 }) == triggerOnCall { await onTrigger() }
     }
 
     func data(from url: URL, limit: Int) async throws -> Data {
@@ -207,17 +212,18 @@ private final class InterceptingHTTPClient: HTTPClient, @unchecked Sendable {
     var stub = StubHTTPClient(responses: [target: html])
     stub.redirects = [shortA: target, shortB: target]
 
-    var service: EnrichmentService!
+    let slot = ServiceSlot()
     let client = InterceptingHTTPClient(inner: stub, triggerOnCall: 2) {
-        await service.enrich(id: bookmarkB.id)
+        await slot.service?.enrich(id: bookmarkB.id)
     }
-    service = EnrichmentService(
+    let service = EnrichmentService(
         store: store,
         metadata: MetadataService(client: client),
         categorizer: KeywordCategorizer(),
         thumbnails: try ThumbnailCache(directory: dir.appendingPathComponent("thumbnails")),
         client: client
     )
+    slot.service = service
 
     await service.enrich(id: bookmarkA.id)
 

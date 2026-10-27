@@ -13,6 +13,7 @@ private actor RecordingIndex: SpotlightIndexing {
     private(set) var calls: [Call] = []
     private var stamp: Data?
     private var gate: CheckedContinuation<Void, Never>?
+    private var arrival: CheckedContinuation<Void, Never>?
     private var isGated = false
 
     init(stamp: Data? = nil, gated: Bool = false) {
@@ -26,11 +27,20 @@ private actor RecordingIndex: SpotlightIndexing {
         gate = nil
     }
 
+    func waitUntilGated() async {
+        guard gate == nil else { return }
+        await withCheckedContinuation { continuation in arrival = continuation }
+    }
+
     func lastStamp() async -> Data? { stamp }
 
     func deleteEverything() async {
         if isGated {
-            await withCheckedContinuation { continuation in gate = continuation }
+            await withCheckedContinuation { continuation in
+                gate = continuation
+                arrival?.resume()
+                arrival = nil
+            }
         }
         calls.append(.deleteEverything)
     }
@@ -58,7 +68,7 @@ private func bookmark(_ title: String) -> Bookmark {
     let writer = SpotlightWriter(index: index)
 
     let publishing = Task { await writer.write([bookmark("Pasta")]) }
-    try? await Task.sleep(for: .milliseconds(20))
+    await index.waitUntilGated()
     await writer.clear()
     await index.openGate()
     await publishing.value
@@ -72,7 +82,7 @@ private func bookmark(_ title: String) -> Bookmark {
     let index = RecordingIndex(gated: true)
     let writer = SpotlightWriter(index: index)
     let publishing = Task { await writer.write([bookmark("Pasta")]) }
-    try? await Task.sleep(for: .milliseconds(20))
+    await index.waitUntilGated()
     await writer.clear()
     await index.openGate()
     await publishing.value
@@ -104,7 +114,7 @@ private func bookmark(_ title: String) -> Bookmark {
     let writer = SpotlightWriter(index: index)
     let newest = [bookmark("Three")]
     let first = Task { await writer.write([bookmark("One")]) }
-    try? await Task.sleep(for: .milliseconds(20))
+    await index.waitUntilGated()
     await writer.write([bookmark("Two")])
     await writer.write(newest)
     await index.openGate()
