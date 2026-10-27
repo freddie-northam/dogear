@@ -925,3 +925,36 @@ private func testPlace(_ name: String, latitude: Double = 51.5, longitude: Doubl
         #expect(elapsed < .milliseconds(200))
     }
 }
+
+@Test func savingALinkWithAPasswordKeepsTheLinkAndDropsThePassword() throws {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    store.add(url: URL(string: "https://a.com/x")!)
+    store.add(url: URL(string: "https://u:secret@a.com/x")!)
+    #expect(store.library.bookmarks.map(\.url) == ["https://a.com/x"])
+    let file = try String(contentsOf: temp.url.appendingPathComponent("library.json"), encoding: .utf8)
+    #expect(!file.contains("secret"))
+}
+
+@Test func aLaunchRemovesAStoredPasswordFromTheLibraryAndTheBackup() throws {
+    let temp = TempDirectory()
+    let dir = temp.url
+    let older = """
+        {"folders":["Recipes","Unsorted"],"schemaVersion":2,"bookmarks":[
+        {"id":"\(UUID().uuidString)","url":"https://u:secret@a.com/p","title":"Pasta","folder":"Recipes",
+        "source":"web","createdAt":0,"hasThumbnail":false,"manuallyFiled":false}]}
+        """
+    try older.write(to: dir.appendingPathComponent("library.json"), atomically: true, encoding: .utf8)
+    let store = try BookmarkStore(directory: dir)
+    #expect(store.library.bookmarks.map(\.url) == ["https://a.com/p"])
+    for name in ["library.json", "library.json.bak"] {
+        let text = try String(contentsOf: dir.appendingPathComponent(name), encoding: .utf8)
+        #expect(!text.contains("secret"), "\(name) still holds the password")
+    }
+}
+
+@Test func aLinkToALocalServerIsStillSaved() throws {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    #expect(store.add(url: URL(string: "http://localhost:3000/docs")!)?.isNew == true)
+}
