@@ -1,8 +1,5 @@
 import SwiftUI
 
-/// First-run onboarding: three ideas and one action, then out of the way.
-/// The same content lives in Settings under Help for anyone who wants it
-/// again, so this sheet never needs to be exhaustive.
 struct WelcomeSheet: View {
     @Environment(\.dismiss) private var dismiss
     let pasteFromClipboard: () -> Void

@@ -18,7 +18,7 @@ import Testing
 @Test func truncatesLongTweetTextInTitle() {
     let long = String(repeating: "word ", count: 40)
     let title = XFetcher.composeTitle(author: "someone", text: long)
-    #expect(title.count <= "someone: ".count + 81) // 80 chars + ellipsis
+    #expect(title.count <= "someone: ".count + 81)
     #expect(title.hasSuffix("…"))
 }
 

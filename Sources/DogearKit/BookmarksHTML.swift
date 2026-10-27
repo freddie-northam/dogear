@@ -1,8 +1,6 @@
 import Foundation
 
-/// Writes the library as a Netscape bookmark file, the format every browser
-/// imports. Dogear can already read one; this is the door back out, so a
-/// library is never trapped in the app.
+/// Writes the library as a Netscape bookmark file, which every browser imports.
 public enum BookmarksHTML {
     /// The whole library, one section per folder in the user's own order,
     /// with the archive last. Notes travel as `DD` lines, which browsers keep

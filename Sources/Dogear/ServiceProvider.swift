@@ -1,8 +1,6 @@
 import AppKit
 import DogearKit
 
-/// Receives the Save to Dogear service. NSApp.servicesProvider does not
-/// retain its provider, so DogearApp holds the strong reference.
 final class ServiceProvider: NSObject {
     private let capture: @MainActor (String) -> Void
 

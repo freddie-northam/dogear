@@ -3,8 +3,6 @@ import Foundation
 import Testing
 @testable import DogearKit
 
-/// Records what reached the system index, and lets a test hold a write open
-/// so a second request arrives while the first is still running.
 private actor RecordingIndex: SpotlightIndexing {
     enum Call: Equatable {
         case deleteEverything
@@ -14,8 +12,6 @@ private actor RecordingIndex: SpotlightIndexing {
 
     private(set) var calls: [Call] = []
     private var stamp: Data?
-    /// When set, the next delete waits for this to be released, which is the
-    /// window a second caller arrives in.
     private var gate: CheckedContinuation<Void, Never>?
     private var isGated = false
 
@@ -58,14 +54,10 @@ private func bookmark(_ title: String) -> Bookmark {
 }
 
 @Test func turningTheSettingOffDuringAWriteStillClearsTheIndex() async {
-    // The privacy control: a clear that arrives while a publish is running
-    // must never be the request that gets dropped. It was, once.
     let index = RecordingIndex(gated: true)
     let writer = SpotlightWriter(index: index)
 
     let publishing = Task { await writer.write([bookmark("Pasta")]) }
-    // Wait for the publish to park inside deleteEverything, so the clear
-    // provably arrives during a write rather than racing it to the actor.
     try? await Task.sleep(for: .milliseconds(20))
     await writer.clear()
     await index.openGate()
@@ -80,15 +72,11 @@ private func bookmark(_ title: String) -> Bookmark {
     let index = RecordingIndex(gated: true)
     let writer = SpotlightWriter(index: index)
     let publishing = Task { await writer.write([bookmark("Pasta")]) }
-    // Wait for the publish to park inside deleteEverything, so the clear
-    // provably arrives during a write rather than racing it to the actor.
     try? await Task.sleep(for: .milliseconds(20))
     await writer.clear()
     await index.openGate()
     await publishing.value
 
-    // Each operation deletes exactly once, and the clear's stamp lands last,
-    // so the two never interleaved.
     let calls = await index.calls
     #expect(calls.filter { $0 == .deleteEverything }.count == 2)
     #expect(calls.last == .recordStamp(""))
@@ -99,7 +87,6 @@ private func bookmark(_ title: String) -> Bookmark {
     let stamp = Data(SpotlightIndex.fingerprint(bookmarks).utf8)
     let index = RecordingIndex(stamp: stamp)
     await SpotlightWriter(index: index).write(bookmarks)
-    // The whole point of the stamp: an unchanged library rebuilds nothing.
     #expect(await index.calls.isEmpty)
 }
 
@@ -115,21 +102,14 @@ private func bookmark(_ title: String) -> Bookmark {
 @Test func onlyTheNewestRequestQueuedDuringAWriteRuns() async {
     let index = RecordingIndex(gated: true)
     let writer = SpotlightWriter(index: index)
-    // Built once: the helper mints a fresh id per call, so rebuilding the
-    // same title would not produce the same fingerprint.
     let newest = [bookmark("Three")]
     let first = Task { await writer.write([bookmark("One")]) }
     try? await Task.sleep(for: .milliseconds(20))
-    // Enqueued in order from one task, not from two racing ones: the contract
-    // is that the last request in wins, so the test has to decide which is
-    // last rather than leave it to the scheduler.
     await writer.write([bookmark("Two")])
     await writer.write(newest)
     await index.openGate()
     await first.value
 
-    // Two publishes, not three: the middle request is superseded rather than
-    // replayed, so the index lands on the newest library and not a stale one.
     let published = await index.calls.compactMap { call -> String? in
         if case .publish(_, let stamp) = call { return stamp }
         return nil

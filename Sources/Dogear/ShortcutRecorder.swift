@@ -2,9 +2,6 @@ import AppKit
 import DogearKit
 import SwiftUI
 
-/// Records a shortcut by listening for the next keystroke. macOS has no
-/// stock control for this, and a fixed default would collide with whatever
-/// the user already runs, so Dogear asks instead of guessing.
 struct ShortcutRecorder: View {
     @Binding var stored: String
     @ObservedObject private var monitorState = HotKeyMonitor.shared
@@ -25,8 +22,6 @@ struct ShortcutRecorder: View {
                     Button("Clear") { stored = "" }
                 }
             }
-            // Without this the shortcut sits there looking correct and does
-            // nothing, which reads as a broken app rather than a taken key.
             if monitorState.isUnavailable, !isRecording {
                 Text("Another app already uses this shortcut. Record a different one.")
                     .font(.caption)
@@ -48,15 +43,12 @@ struct ShortcutRecorder: View {
     private func startListening() {
         isRecording = true
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            // Escape leaves the shortcut as it was, the way every other
-            // recorder on the Mac behaves.
             if event.keyCode == 53 {
                 stopListening()
                 return nil
             }
             let candidate = HotKeyCombo(keyCode: UInt32(event.keyCode),
                                         modifiers: carbonModifiers(event.modifierFlags))
-            // A bare key would swallow that keystroke in every other app.
             guard candidate.isValid else { return nil }
             stored = candidate.defaultsValue
             stopListening()

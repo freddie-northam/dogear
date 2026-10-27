@@ -61,7 +61,6 @@ private func bookmark(_ url: String, title: String, folder: String, done: Bool =
     let library = Library(folders: ["Recipes"], bookmarks: [
         bookmark("https://a.com/p", title: "A [bracketed] title", folder: "Recipes"),
     ])
-    // Bookmark.markdownLink owns this rule; the export must not undo it.
     #expect(MarkdownExport.export(library).contains("- [A (bracketed) title](<https://a.com/p>)"))
 }
 
@@ -86,8 +85,6 @@ private func bookmark(_ url: String, title: String, folder: String, done: Bool =
         bookmark("https://a.com/old", title: "Cooked", folder: "Recipes", done: true),
         bookmark("https://a.com/new", title: "To Cook", folder: "Recipes"),
     ])
-    // The two exporters used to walk this shape separately and had to agree by
-    // hand. They read one list now, so this pins that they still do.
     let markdown = MarkdownExport.export(library)
     let html = BookmarksHTML.export(library)
     for section in library.exportSections {

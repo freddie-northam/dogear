@@ -1,7 +1,5 @@
 import Foundation
 
-/// A per-test scratch directory that removes itself. Hold it for the test's
-/// lifetime; the directory is gone when the value is deinitialized.
 final class TempDirectory {
     let url: URL
     init() {

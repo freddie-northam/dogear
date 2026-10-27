@@ -4,8 +4,8 @@ public let DogearUserAgent =
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15"
 
 public enum FetchLimit {
-    public static let html = 1_000_000       // 1 MB
-    public static let thumbnail = 10_000_000 // 10 MB
+    public static let html = 1_000_000
+    public static let thumbnail = 10_000_000
 }
 
 public enum HTTPClientError: Error, Equatable {

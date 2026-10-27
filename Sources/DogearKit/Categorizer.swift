@@ -7,8 +7,6 @@ public protocol Categorizer: Sendable {
 public struct KeywordCategorizer: Categorizer {
     public init() {}
 
-    // Keyword tables for the default folders. Scoring: the folder with the
-    // most keyword hits wins; ties go to the first folder in the user's list.
     static let keywords: [String: [String]] = [
         "Recipes": ["recipe", "ingredient", "bake", "baking", "cook", "cooking", "meal prep",
                     "air fryer", "one-pan", "sourdough", "dessert", "homemade", "from scratch", "vegan"],
@@ -29,7 +27,6 @@ public struct KeywordCategorizer: Categorizer {
     // Ordered, longest domain first: the first match wins, so a more specific domain is
     // always tested before any suffix of it. No pair overlaps today, but a Dictionary
     // iterates in an unspecified order, so the first overlap added would pick at random.
-    // The Code entries are opt-in: they only fire when the user has a folder named Code.
     static let domainHints: [(domain: String, folder: String)] = [
         ("open.spotify.com", "Music"),
         ("music.apple.com", "Music"), ("maps.app.goo.gl", "Restaurants"), ("maps.google.com", "Restaurants"),
@@ -51,8 +48,6 @@ public struct KeywordCategorizer: Categorizer {
             }
         }
 
-        // Tweets are conversational, so one stray keyword ("watch this",
-        // a "recipe" metaphor) misfiles them: X posts need two hits.
         let minimumScore = metadata.source == .x ? 2 : 1
         var best: (folder: String, score: Int)?
         for folder in folders where folder != Library.unsorted {

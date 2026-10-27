@@ -1,7 +1,6 @@
 import DogearKit
 import SwiftUI
 
-/// One line the user pasted, and what the map made of it.
 struct PlaceCandidate: Identifiable {
     let id = UUID()
     let query: PlaceQuery
@@ -16,9 +15,6 @@ private enum PlacesImportStep: Equatable {
     case saved(count: Int)
 }
 
-/// Saves restaurants and hotels that live in a note with no link. The user
-/// pastes the lines, Dogear looks each one up, and nothing is saved until the
-/// user has seen what the map found.
 struct PlacesImportSheet: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
@@ -40,13 +36,10 @@ struct PlacesImportSheet: View {
         .padding(20)
         .frame(width: 480)
         .onAppear {
-            // Restaurants is where these notes belong, when the folder is still there.
             folder = model.store.library.folders.contains("Restaurants")
                 ? "Restaurants" : Library.unsorted
         }
     }
-
-    // MARK: Paste
 
     private var pasteStep: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -81,8 +74,6 @@ struct PlacesImportSheet: View {
         .pickerStyle(.menu)
     }
 
-    // MARK: Searching
-
     private func searchingStep(done: Int, total: Int) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Looking up places").font(.title3.weight(.semibold))
@@ -90,8 +81,6 @@ struct PlacesImportSheet: View {
             Text("\(done) of \(total)").font(.caption).foregroundStyle(.secondary)
         }
     }
-
-    // MARK: Review
 
     private var reviewStep: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -142,8 +131,6 @@ struct PlacesImportSheet: View {
         candidates.filter { $0.isSelected && $0.place != nil }.count
     }
 
-    // MARK: Saved
-
     private func savedStep(count: Int) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Saved").font(.title3.weight(.semibold))
@@ -157,8 +144,6 @@ struct PlacesImportSheet: View {
             }
         }
     }
-
-    // MARK: Actions
 
     private func search() {
         let queries = PlaceParser.parse(text)

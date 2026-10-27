@@ -31,8 +31,6 @@ import Testing
     }
 }
 
-// Serves a canned 2,000-byte body for any request, so the real client's cap
-// enforcement can be tested without hitting the network.
 private final class StubURLProtocol: URLProtocol {
     static let canned = Data(repeating: 0x41, count: 2_000)
 

@@ -30,8 +30,6 @@ struct LibraryWindow: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.undoManager) private var undoManager
     @State private var folderPendingDeletion: String?
-    // DOGEAR_DEMO_FOLDER picks the folder a demo launch opens on, so README
-    // screenshots are reproducible. Real launches open on Unsorted, the inbox.
     @State private var selection: String =
         ProcessInfo.processInfo.environment["DOGEAR_DEMO_FOLDER"] ?? Library.unsorted
     @State private var query = ""
@@ -59,9 +57,6 @@ struct LibraryWindow: View {
         } detail: {
             detailContent
                 .dropDestination(for: URL.self) { urls, _ in
-                    // A card dragged and released over the window must not
-                    // re-add its own bookmark: that would un-archive and
-                    // reorder silently. Only URLs new to the store count.
                     let existing = Set(model.store.library.bookmarks.map(\.url))
                     let fresh = urls.filter { !existing.contains(URLCleaner.canonicalString($0)) }
                     guard !fresh.isEmpty else { return false }
@@ -75,8 +70,6 @@ struct LibraryWindow: View {
             WelcomeSheet(pasteFromClipboard: pasteFromClipboard, importFromNotes: startImport)
         }
         .onAppear {
-            // Onboarding shows once, and only to an empty library: a user who
-            // already has bookmarks has already learned the model.
             if !hasSeenWelcome {
                 hasSeenWelcome = true
                 if model.store.library.bookmarks.isEmpty { showingWelcome = true }
@@ -139,8 +132,6 @@ struct LibraryWindow: View {
         }
     }
 
-    // MARK: Rename alert
-
     private var renameAlertTitle: String {
         if case .collided = renameState { return "Folder Name in Use" }
         return "Rename Folder"
@@ -167,15 +158,11 @@ struct LibraryWindow: View {
         }
     }
 
-    // MARK: Sidebar
-
     private func deleteFolder(_ folder: String) {
         model.deleteFolder(folder, undoManager: undoManager)
         if selection == folder { selection = Library.unsorted }
     }
 
-    /// A populated folder asks before it goes. The dialog names the count and
-    /// promises undo, so the choice is informed rather than alarming.
     private var folderDeletionDialog: some View {
         EmptyView().confirmationDialog(
             "Delete \"\(folderPendingDeletion ?? "")\"?",
@@ -219,15 +206,11 @@ struct LibraryWindow: View {
                     }
                     .badge(counts.byFolder[folder, default: 0])
                     .tag(folder)
-                    // Unsorted is an inbox; it stays pinned last and does not drag.
                     .moveDisabled(folder == Library.unsorted)
                 }
                 .onMove { source, destination in
                     model.store.moveFolders(fromOffsets: source, toOffset: destination)
                 }
-                // The affordance to add a folder is the last row of the list it
-                // adds to, like Finder and Reminders, not a control floating in
-                // the window corner.
                 NewFolderRow()
                     .selectionDisabled()
             }
@@ -270,8 +253,6 @@ struct LibraryWindow: View {
                         Label("Rename Folder", systemImage: "pencil")
                     }
                     Button(role: .destructive) {
-                        // A populated folder asks first; an empty one just goes,
-                        // and Undo brings either back.
                         if counts.byFolder[folder, default: 0] > 0 {
                             folderPendingDeletion = folder
                         } else {
@@ -284,8 +265,6 @@ struct LibraryWindow: View {
             }
         }
     }
-
-    // MARK: Toolbar
 
     @ToolbarContentBuilder private var toolbarContent: some ToolbarContent {
         ToolbarItemGroup {
@@ -349,8 +328,6 @@ struct LibraryWindow: View {
         }
     }
 
-    // MARK: Content
-
     private var trimmedQuery: String {
         query.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -366,8 +343,6 @@ struct LibraryWindow: View {
         return sorted(model.store.bookmarks(in: selection))
     }
 
-    /// The sort menu applies to folder views. Favourites and Archive keep
-    /// their own recency orders: they are time lenses already.
     private func sorted(_ items: [Bookmark]) -> [Bookmark] {
         switch sort {
         case .lastSaved:
@@ -406,8 +381,6 @@ struct LibraryWindow: View {
         } else if bookmarks.isEmpty, model.store.library.bookmarks.isEmpty {
             firstRunEmptyState
         } else if bookmarks.isEmpty {
-            // The folder is empty but the library is not: no capture pitch,
-            // just the folder speaking in its own color.
             ContentUnavailableView {
                 Label {
                     Text("No \(selection.lowercased()) yet")
@@ -459,9 +432,6 @@ struct LibraryWindow: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    // MARK: Actions
-
-    /// The one capture path: same as the popover, fed from the clipboard.
     private func pasteFromClipboard() {
         let text = NSPasteboard.general.string(forType: .string) ?? ""
         if model.capture(text: text).total == 0 { pasteFailed = true }
@@ -472,8 +442,6 @@ struct LibraryWindow: View {
         showingImport = true
     }
 
-    /// Consent step: list folders before any note body is read. A nil result
-    /// means Notes denied the Apple event outright.
     private func continueToFolders() {
         importState = .running("Finding your folders...")
         guard let folders = readNotesFolders() else {
@@ -482,8 +450,6 @@ struct LibraryWindow: View {
             return
         }
         selectedFolderIDs = loadSelection(validFolderIDs: Set(folders.map(\.id)))
-        // Cursors for folders that no longer exist (deleted or renamed away)
-        // are dead weight; drop them against the folder list we just read.
         var cursors = loadCursors()
         cursors.prune(keeping: Set(folders.map(\.id)))
         saveCursors(cursors)
@@ -524,9 +490,6 @@ struct LibraryWindow: View {
         var combinedBodies = ""
         var failedFolders = 0
         let now = Date()
-        // Checked before the loop records any new cursor, so this reflects
-        // whether the read was incremental (a cursor already existed), not
-        // whether this run happened to succeed.
         let hadIncrementalRead = ticked.contains { cursors.secondsSince(folderID: $0.id, now: now) != nil }
         // NSAppleScript is documented main-thread-only (Apple's Thread
         // Safety Summary, Foundation framework), so each read runs on the
@@ -536,8 +499,6 @@ struct LibraryWindow: View {
             let secondsSince = cursors.secondsSince(folderID: folder.id, now: now)
             if let body = readNotesBody(folderID: folder.id, secondsSince: secondsSince) {
                 combinedBodies += body + "\n"
-                // Recorded only on success: a failed folder keeps its old
-                // cursor and is re-read in full (or from its old cursor) next time.
                 cursors.record(folderID: folder.id, at: now)
             } else {
                 failedFolders += 1
@@ -613,8 +574,6 @@ struct LibraryWindow: View {
                contents: MarkdownExport.export(model.store.library))
     }
 
-    /// The door back out to a browser: every browser reads this format, and
-    /// so does Dogear's own Import Bookmarks File.
     private func exportBookmarksFile() {
         export(named: "Dogear.html", type: .html,
                contents: BookmarksHTML.export(model.store.library))
@@ -638,7 +597,6 @@ struct LibraryWindow: View {
         model.store.renameFolder(folder, to: renameDraft)
         let trimmed = renameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         if model.store.library.folders != before {
-            // The rename went through; keep the renamed folder selected.
             if selection == folder { selection = trimmed }
             renameState = .idle
         } else if !trimmed.isEmpty, trimmed != folder {
@@ -650,7 +608,6 @@ struct LibraryWindow: View {
             // dismiss-then-represent of this same alert, not a second one.
             DispatchQueue.main.async { renameState = .collided(folder: folder) }
         } else {
-            // Empty or unchanged name: that reads as a cancel.
             renameState = .idle
         }
     }
@@ -673,13 +630,6 @@ func hostName(_ bookmark: Bookmark) -> String {
     URL(string: bookmark.url)?.host ?? ""
 }
 
-/// A markdown export of the whole library: one `## <Folder>` section per
-/// non-empty folder, in `library.folders` order, then an `## Archive`
-/// section for done bookmarks if any exist.
-/// Lists every Notes folder across every account, on the main thread:
-/// NSAppleScript is documented main-thread-only. This is the first Apple
-/// event of an import, so it is also the consent trigger. Returns nil when
-/// Notes cannot be read: permission denied or Notes unavailable.
 private struct NewFolderRow: View {
     @EnvironmentObject var model: AppModel
     @State private var isAdding = false
@@ -689,8 +639,6 @@ private struct NewFolderRow: View {
 
     var body: some View {
         if isAdding {
-            // Same icon column and text inset as a folder row, so the field
-            // reads as "this row is becoming a folder", not as a form.
             Label {
                 TextField("Folder name", text: $name)
                     .textFieldStyle(.plain)
@@ -731,8 +679,3 @@ private struct NewFolderRow: View {
         isAdding = false
     }
 }
-
-// MARK: - Shared bookmark actions
-
-/// The context menu, edit alerts, and QR popover that every bookmark
-/// presentation shares, so the grid card and the list row behave the same.

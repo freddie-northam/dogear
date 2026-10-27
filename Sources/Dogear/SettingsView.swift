@@ -19,8 +19,6 @@ struct SettingsView: View {
     }
 }
 
-// MARK: - General
-
 private struct GeneralSettings: View {
     @AppStorage("detectCopiedLinks") private var detectCopiedLinks = true
     @AppStorage(DockPresence.defaultsKey) private var showDockIcon = true
@@ -71,10 +69,7 @@ private struct GeneralSettings: View {
     }
 }
 
-// MARK: - Library
-
 private struct LibrarySettings: View {
-    // Resolved when the tab is shown, never at launch; see the Settings scene.
     private var model: AppModel? { AppModel.shared }
     @State private var thumbnailBytes: Int64 = 0
     @State private var clearedThumbnails = false
@@ -142,10 +137,6 @@ private struct LibrarySettings: View {
     }
 }
 
-// MARK: - Help
-
-/// Always-available onboarding: the same four ideas the welcome sheet shows on
-/// first run, here for anyone who skipped it or forgot.
 struct HelpSettings: View {
     var body: some View {
         Form {
@@ -206,8 +197,6 @@ struct HelpRow: View {
         .padding(.vertical, 2)
     }
 }
-
-// MARK: - About
 
 private struct AboutSettings: View {
     private var version: String {

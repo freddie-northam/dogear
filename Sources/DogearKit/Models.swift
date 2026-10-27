@@ -52,10 +52,6 @@ public struct Bookmark: Codable, Identifiable, Equatable, Sendable {
 }
 
 extension String {
-    /// The text on one line: newlines and control characters collapse to
-    /// single spaces. Splitting yields an empty component for each one, so
-    /// dropping the empties turns a run into a single space rather than one
-    /// space per character.
     var singleLine: String {
         components(separatedBy: .newlines.union(.controlCharacters))
             .filter { !$0.isEmpty }
@@ -98,11 +94,8 @@ extension Bookmark {
 }
 
 extension Library {
-    /// The library as an export sees it: one section per folder in the user's
-    /// own order, empty folders dropped, and the archive last. Both exporters
-    /// walked this shape themselves and had to agree by hand; a bookmark that
-    /// is done leaves its folder section in the app, and it must leave it in a
-    /// file too.
+    /// The library as an export sees it.
+    /// It has one section per non-empty folder in the user's order, and the archive last.
     public var exportSections: [(name: String, bookmarks: [Bookmark])] {
         var sections = folders.compactMap { folder -> (name: String, bookmarks: [Bookmark])? in
             let items = bookmarks.filter { $0.folder == folder && !$0.isDone }

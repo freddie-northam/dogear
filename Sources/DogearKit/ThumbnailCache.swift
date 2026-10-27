@@ -3,16 +3,12 @@ import Foundation
 import ImageIO
 import UniformTypeIdentifiers
 
-/// A `final class` (not a struct) because it wraps an `NSCache`: the app
-/// creates exactly one instance in `AppModel` and shares it by reference.
 public final class ThumbnailCache: @unchecked Sendable {
     let directory: URL
     // NSCache is thread-safe, so sharing it across the @unchecked Sendable
     // boundary is safe without extra locking.
     private let decoded = NSCache<NSUUID, NSImage>()
 
-    /// Cards render at ~220 points, so 600 pixels covers Retina with room to
-    /// spare; full-size og:images measured 200 MB across a real library.
     static let maxPixelSize = 600
 
     public init(directory: URL) throws {

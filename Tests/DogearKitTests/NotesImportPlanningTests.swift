@@ -7,7 +7,6 @@ import Testing
         URL(string: "https://Example.com/a/")!,
         URL(string: "https://b.com/x")!,
     ]
-    // Already saved under its canonical form (lowercase host, no trailing slash).
     let existing: Set<String> = ["https://example.com/a"]
     let fresh = NotesImportPlanning.freshURLs(found, existing: existing)
     #expect(fresh.map(\.absoluteString) == ["https://b.com/x"])

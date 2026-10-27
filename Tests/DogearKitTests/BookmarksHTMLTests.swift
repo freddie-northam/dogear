@@ -41,7 +41,6 @@ private func bookmark(_ url: String, title: String, folder: String,
     let recipes = try! #require(html.range(of: "<H3>Recipes</H3>"))
     let archive = try! #require(html.range(of: "<H3>Archive</H3>"))
     #expect(recipes.lowerBound < archive.lowerBound)
-    // A done bookmark leaves its folder section, exactly as it leaves the app.
     let recipesSection = html[recipes.upperBound..<archive.lowerBound]
     #expect(recipesSection.contains("To Cook"))
     #expect(!recipesSection.contains("Cooked"))
@@ -63,7 +62,6 @@ private func bookmark(_ url: String, title: String, folder: String,
     #expect(html.contains("<H3>Fish &amp; &lt;Chips&gt;</H3>"))
     #expect(html.contains("&quot;quoted&quot; &lt;b&gt;title&lt;/b&gt;"))
     #expect(html.contains("HREF=\"https://a.com/p?x=1&amp;y=2\""))
-    // Nothing the user typed may close a tag or an attribute.
     #expect(!html.contains("<b>title"))
 }
 

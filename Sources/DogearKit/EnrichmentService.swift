@@ -20,24 +20,17 @@ public final class EnrichmentService {
     public func enrich(id: UUID) async {
         guard let started = store.library.bookmarks.first(where: { $0.id == id }),
               let url = URL(string: started.url) else { return }
-        // A place has no page behind it. Fetching its map link would replace the
-        // name the user approved with whatever the map site titles that page,
-        // and refile it by the map host. The rule lives here because this is
-        // the only function that could break it.
         guard !started.isPlace else { return }
 
         let result = await metadata.fetch(for: url)
         let resolved = URLCleaner.canonicalString(result.resolvedURL)
 
-        // Re-read: the user may have refiled/edited/completed this bookmark while the
-        // network fetch was in flight. Apply enrichment onto the fresh state, never the
-        // pre-fetch snapshot, so a concurrent edit is never reverted.
         guard var bookmark = store.library.bookmarks.first(where: { $0.id == id }) else { return }
 
         bookmark.url = resolved
 
         guard let fetched = result.metadata else {
-            save(bookmark) // keep resolved URL even when enrichment failed
+            save(bookmark)
             return
         }
 
@@ -57,10 +50,6 @@ public final class EnrichmentService {
             bookmark.hasThumbnail = true
         }
 
-        // Re-read once more: categorize/thumbnail above are another await window where a
-        // concurrent edit can land. Merge enrichment onto the latest state, not the
-        // snapshot captured before those awaits, and only touch folder if it's still
-        // eligible (not manually filed in the meantime).
         guard var latest = store.library.bookmarks.first(where: { $0.id == id }) else { return }
         latest.url = bookmark.url
         latest.title = bookmark.title
@@ -84,17 +73,11 @@ public final class EnrichmentService {
                 survivor.folder = latest.folder
                 survivor.manuallyFiled = true
             }
-            // Copy the survivor and change only the two fields the merge decides.
-            // This used to rebuild through the memberwise initializer, which meant
-            // every field added to Bookmark later was silently dropped here.
             var merged = survivor
             merged.createdAt = min(survivor.createdAt, latest.createdAt)
             merged.doneAt = nil
             store.remove(id: latest.id)
             thumbnails.remove(for: latest.id)
-            // Write the merged fields onto the survivor, then re-add it: add()'s re-add path
-            // finds the existing record by canonical url, clears doneAt, and bumps it to the
-            // top, so the surviving bookmark surfaces like any re-add.
             store.update(merged)
             store.add(url: URL(string: merged.url)!)
             return

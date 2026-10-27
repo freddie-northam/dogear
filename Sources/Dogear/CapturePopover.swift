@@ -14,8 +14,6 @@ struct CapturePopover: View {
     @State private var hint: String?
     @State private var pick: Bookmark?
     @State private var isPickHovering = false
-    // Distinct links in the field, so the button count matches what a save
-    // reports. Held as state and updated per edit, not recomputed per render.
     @State private var detectedURLCount = 0
     @AppStorage("popoverListTab") private var listTab = "recents"
     @State private var isHoveringMore = false
@@ -32,7 +30,6 @@ struct CapturePopover: View {
                 Divider()
                 pickSection(pick)
             }
-            // An empty store gets one friendly line, not tabs over nothing.
             if model.store.library.bookmarks.isEmpty {
                 Text("Copy a link to get started.")
                     .font(.caption)
@@ -53,13 +50,9 @@ struct CapturePopover: View {
             detectedURLCount = Set(URLCleaner.allHTTPURLs(in: text).map(URLCleaner.canonicalString)).count
         }
         .onChange(of: model.revision) {
-            // Enrichment lands title and thumbnail after the pick was rolled;
-            // re-read it by id so the row updates live. A pick that was deleted
-            // or marked done elsewhere rolls over to a fresh one.
             guard let id = pick?.id else { return }
             let fresh = model.store.library.bookmarks.first { $0.id == id }
             if let fresh, !fresh.isDone {
-                // The same bookmark, with fresher text: not a new showing.
                 pick = fresh
             } else {
                 rollPick(excluding: id)
@@ -74,8 +67,6 @@ struct CapturePopover: View {
             Text(model.storageError ?? "")
         }
     }
-
-    // MARK: Header
 
     private var header: some View {
         HStack(spacing: 12) {
@@ -128,8 +119,6 @@ struct CapturePopover: View {
         }
     }
 
-    /// A menu row with an icon that macOS actually renders: an NSImage-backed
-    /// symbol, sized as a menu item glyph.
     private func menuLabel(_ title: String, symbol: String) -> some View {
         let image = NSImage(systemSymbolName: symbol, accessibilityDescription: title)?
             .withSymbolConfiguration(.init(pointSize: 13, weight: .regular))
@@ -144,12 +133,7 @@ struct CapturePopover: View {
         }
     }
 
-    // MARK: Capture
-
     private var captureRow: some View {
-        // Return saves; there is no button to duplicate it. When the field
-        // holds a link (typed or prefilled from the clipboard) a quiet return
-        // glyph on the trailing edge says so, with a count when it holds many.
         HStack(spacing: 6) {
             Image(systemName: "link")
                 .foregroundStyle(.secondary)
@@ -209,15 +193,11 @@ struct CapturePopover: View {
         }
     }
 
-    /// Draws the next pick and records that the row showed it. Every draw
-    /// goes through here, so the library never forgets what the user saw.
     private func rollPick(excluding excluded: UUID? = nil) {
         let next = model.store.pick(excluding: excluded)
         if let next { model.store.markShown(id: next.id) }
         pick = next
     }
-
-    // MARK: Waiting for you
 
     private func pickSection(_ pick: Bookmark) -> some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -233,9 +213,6 @@ struct CapturePopover: View {
                         .lineLimit(1)
                 }
             }
-            // Identity follows the bookmark so a new pick is a new view: the
-            // old row fades out and the new one fades in, instead of the text
-            // and badge snapping in place.
             pickRow(pick)
                 .id(pick.id)
                 .transition(.opacity)
@@ -266,8 +243,6 @@ struct CapturePopover: View {
             .buttonStyle(.pressable(scale: 0.98))
             .pointerStyle(.link)
             Spacer(minLength: 8)
-            // The actions appear with the row hover, Control Center style,
-            // and each names itself through its own hover color.
             if isPickHovering {
                 HoverIconButton(symbol: "checkmark", label: "Mark done", hoverColor: .green) {
                     withAnimation(Motion.reveal) {
@@ -291,8 +266,6 @@ struct CapturePopover: View {
         .onHover { isPickHovering = $0 }
     }
 
-    /// Control Center style badge: the thumbnail in a circle, or the folder
-    /// symbol on a soft circle of the folder color.
     @ViewBuilder private func pickBadge(_ pick: Bookmark) -> some View {
         if pick.hasThumbnail,
            let image = model.thumbnails.image(for: pick.id) {
@@ -311,12 +284,7 @@ struct CapturePopover: View {
         }
     }
 
-    // MARK: Counts
-
     private var countsLine: String? {
-        // Unsorted is an inbox, not a promise, so it stays out of the summary.
-        // The top three filed folders keep the line short enough to never
-        // truncate; an all-unsorted library gets a call to sort instead.
         let counts = model.store.counts()
         let filed = model.store.library.folders
             .filter { $0 != Library.unsorted }
@@ -339,12 +307,8 @@ struct CapturePopover: View {
         return parts.joined(separator: ", ") + " waiting."
     }
 
-    // MARK: Recents and Favourites
-
     private var listSection: some View {
         VStack(alignment: .leading, spacing: 6) {
-            // Quiet text tabs, not segmented chrome: the selected tab reads as
-            // a section title, the other as an available lens.
             HStack(spacing: 12) {
                 listTabButton("Recents", tag: "recents")
                 listTabButton("Favourites", tag: "favourites")
@@ -372,8 +336,6 @@ struct CapturePopover: View {
     }
 
     private var listItems: [Bookmark] {
-        // Recents follow the store's array order, the same order the library
-        // shows: a re-saved duplicate sits on top, matching its hint.
         let items = listTab == "favourites"
             ? model.store.favorites()
             : model.store.library.bookmarks.filter { !$0.isDone }
@@ -416,8 +378,6 @@ private struct PopoverListRow: View {
     }
 }
 
-/// A quiet icon button that reveals its purpose on hover: a circular
-/// highlight plus a meaningful color, with the tooltip as backup.
 struct HoverIconButton: View {
     let symbol: String
     let label: String
