@@ -385,3 +385,23 @@ private final class InterceptingHTTPClient: HTTPClient, @unchecked Sendable {
     #expect(after.folder == "Restaurants")
     #expect(after.place == place)
 }
+
+@Test func redirectCollisionMergesEvenWhenTheFetchFindsNoMetadata() async throws {
+    let short = URL(string: "https://short.example/a")!
+    let target = URL(string: "https://target.example/page")!
+    var client = StubHTTPClient(responses: [target: Data("<html></html>".utf8)])
+    client.redirects = [short: target]
+    let (store, service) = try await makeEnvironment(client: client)
+
+    let (survivor, _) = store.add(url: target)!
+    let (duplicate, _) = store.add(url: short)!
+    var d = try #require(store.library.bookmarks.first { $0.id == duplicate.id })
+    d.note = "keep me"
+    store.update(d)
+
+    await service.enrich(id: duplicate.id)
+
+    let matches = store.library.bookmarks.filter { $0.url == URLCleaner.canonicalString(target) }
+    #expect(matches.map(\.id) == [survivor.id])
+    #expect(matches.first?.note == "keep me")
+}
