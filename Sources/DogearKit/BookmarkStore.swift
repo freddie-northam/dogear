@@ -51,6 +51,7 @@ public final class BookmarkStore {
             library.folders.insert(folder, at: index)
         }
 
+        let hadCredentials = library.bookmarks.contains { URLComponents(string: $0.url).map { $0.user != nil || $0.password != nil } ?? false }
         var canonicalized: [Bookmark] = []
         var indexByURL: [String: Int] = [:]
         for var bookmark in library.bookmarks {
@@ -75,6 +76,11 @@ public final class BookmarkStore {
 
         library.schemaVersion = Library.currentSchemaVersion
         saveNow()
+        // The backup still holds the old file, and with it the passwords.
+        if hadCredentials {
+            try? FileManager.default.removeItem(at: backupURL)
+            try? FileManager.default.copyItem(at: fileURL, to: backupURL)
+        }
     }
 
     @discardableResult

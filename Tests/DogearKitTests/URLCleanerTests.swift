@@ -131,3 +131,12 @@ func skipsBareCodeIdentifiers(text: String) {
 func keepsRealBareDomains(text: String) {
     #expect(URLCleaner.allHTTPURLs(in: "see \(text) later").count == 1)
 }
+
+@Test(arguments: [
+    ("https://u:p@a.com/x", "https://a.com/x"),
+    ("https://u@a.com/x", "https://a.com/x"),
+    ("https://a.com/x?q=1", "https://a.com/x?q=1"),
+])
+func canonicalStringDropsAUserNameAndPassword(input: String, expected: String) {
+    #expect(URLCleaner.canonicalString(URL(string: input)!) == expected)
+}

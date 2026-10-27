@@ -56,12 +56,63 @@ private func stubbedClient() -> URLSessionHTTPClient {
 @Test func realClientThrowsTooLargePastTheLimit() async throws {
     let client = stubbedClient()
     await #expect(throws: HTTPClientError.tooLarge) {
-        _ = try await client.data(from: URL(string: "https://stub.example/x")!, limit: 1_000)
+        _ = try await client.data(from: URL(string: "https://93.184.215.14/x")!, limit: 1_000)
     }
 }
 
 @Test func realClientReturnsTheWholeBodyUnderTheLimit() async throws {
     let client = stubbedClient()
-    let data = try await client.data(from: URL(string: "https://stub.example/x")!, limit: 10_000)
+    let data = try await client.data(from: URL(string: "https://93.184.215.14/x")!, limit: 10_000)
     #expect(data.count == 2_000)
+}
+
+@Test(arguments: [
+    "127.0.0.1", "10.1.2.3", "172.16.0.1", "172.31.255.255", "192.168.1.1", "169.254.169.254",
+    "0.0.0.0", "100.64.0.1", "224.0.0.1", "::1", "::", "fc00::1", "fd12::1", "fe80::1",
+    "::ffff:127.0.0.1", "::ffff:192.168.0.1", "fec0::1", "64:ff9b:1::1", "2001::1", "100::1",
+    "2002:c0a8:0101::1", "2001:db8::1", "ff02::1",
+])
+func aPrivateAddressIsNotPublic(address: String) {
+    #expect(NetworkDestination.isPublic(address: address) == false)
+}
+
+@Test(arguments: ["8.8.8.8", "172.15.0.1", "172.32.0.1", "100.128.0.1", "93.184.215.14", "2606:4700::1111", "2002:0808:0808::1"])
+func aPublicAddressIsPublic(address: String) {
+    #expect(NetworkDestination.isPublic(address: address))
+}
+
+@Test(arguments: ["http://127.0.0.1:8080/", "http://localhost/", "http://[::1]/", "http://192.168.1.1/admin"])
+func theRealClientRefusesAPrivateDestination(url: String) async {
+    await #expect(throws: HTTPClientError.privateDestination) {
+        _ = try await stubbedClient().data(from: URL(string: url)!, limit: 1_000)
+    }
+}
+
+@Test func theRealClientRefusesANameThatDoesNotResolve() async {
+    await #expect(throws: HTTPClientError.privateDestination) {
+        _ = try await stubbedClient().data(from: URL(string: "https://no-such-host.invalid/")!, limit: 1_000)
+    }
+}
+
+private final class RedirectingURLProtocol: URLProtocol {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        let target = URL(string: "http://192.168.1.1/admin")!
+        let response = HTTPURLResponse(url: request.url!, statusCode: 302, httpVersion: nil,
+                                       headerFields: ["Location": target.absoluteString])!
+        client?.urlProtocol(self, wasRedirectedTo: URLRequest(url: target), redirectResponse: response)
+    }
+
+    override func stopLoading() {}
+}
+
+@Test func theRealClientRefusesARedirectToAPrivateDestination() async {
+    let config = URLSessionConfiguration.ephemeral
+    config.protocolClasses = [RedirectingURLProtocol.self]
+    await #expect(throws: HTTPClientError.privateDestination) {
+        _ = try await URLSessionHTTPClient(configuration: config)
+            .data(from: URL(string: "https://93.184.215.14/")!, limit: 1_000)
+    }
 }

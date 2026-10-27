@@ -54,3 +54,22 @@ private func makeBookmark(title: String, url: String) -> Bookmark {
     let bookmark = makeBookmark(title: "Line one\nLine two", url: "https://a.com/x")
     #expect(bookmark.markdownLink == "[Line one Line two](<https://a.com/x>)")
 }
+
+@Test func fetchedMetadataCapsEachFieldLength() {
+    let long = String(repeating: "a", count: 1_000_000)
+    let metadata = FetchedMetadata(title: long, author: long, description: long)
+    #expect(metadata.title?.count == FetchedMetadata.titleLimit)
+    #expect(metadata.author?.count == FetchedMetadata.authorLimit)
+    #expect(metadata.description?.count == FetchedMetadata.descriptionLimit)
+}
+
+@Test func fetchedMetadataRemovesControlAndDirectionCharacters() {
+    let metadata = FetchedMetadata(title: "evil\u{202E}gpj.exe\u{0007}\n", author: "a\u{200F}b")
+    #expect(metadata.title == "evilgpj.exe")
+    #expect(metadata.author == "ab")
+}
+
+@Test(arguments: ["Crème brûlée 🍮", "東京の寿司", "Ünïcode — ok"])
+func fetchedMetadataKeepsAnOrdinaryTitle(title: String) {
+    #expect(FetchedMetadata(title: title).title == title)
+}

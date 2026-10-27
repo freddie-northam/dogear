@@ -76,6 +76,8 @@ public enum URLCleaner {
             parts.host = "x.com"
         }
         parts.fragment = nil
+        parts.user = nil
+        parts.password = nil
         // Strip the trailing slash from the path only: doing it on the serialized
         // string truncates a query value that legitimately ends in "/". Work on the
         // percent-encoded path, because reading `path` decodes %2F into a real
