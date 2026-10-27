@@ -21,12 +21,6 @@ public struct MetadataService: Sendable {
             return (url, nil)
         }
         let fetcher = Self.fetcher(forHost: fetched.finalURL.host)
-        let metadata: FetchedMetadata?
-        if type(of: fetcher).parsesPageBody {
-            metadata = try? fetcher.parse(body: fetched.data, url: fetched.finalURL)
-        } else {
-            metadata = try? await fetcher.fetch(fetched.finalURL, client: client)
-        }
-        return (fetched.finalURL, metadata)
+        return (fetched.finalURL, try? fetcher.parse(body: fetched.data, url: fetched.finalURL))
     }
 }

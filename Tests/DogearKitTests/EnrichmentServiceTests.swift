@@ -245,10 +245,8 @@ private final class InterceptingHTTPClient: HTTPClient, @unchecked Sendable {
 @Test func redirectCollisionMergesIntoTheSurvivor() async throws {
     let short = URL(string: "https://vm.tiktok.com/SHORT/")!
     let full = URL(string: "https://www.tiktok.com/@a/video/123")!
-    let oembed = try Data(contentsOf: Bundle.module.url(forResource: "tiktok-oembed", withExtension: "json", subdirectory: "Fixtures")!)
-    // The TikTok page body itself is irrelevant, but the single-fetch flow still GETs
-    // it to learn the resolved host, so it must be stubbed too.
-    var client = StubHTTPClient(responses: [full: Data(), TikTokFetcher.oembedURL(for: full): oembed])
+    let page = try Data(contentsOf: Bundle.module.url(forResource: "tiktok-video", withExtension: "html", subdirectory: "Fixtures")!)
+    var client = StubHTTPClient(responses: [full: page])
     client.redirects = [short: full]
     let (store, service) = try await makeEnvironment(client: client)
 
@@ -280,10 +278,8 @@ private final class InterceptingHTTPClient: HTTPClient, @unchecked Sendable {
 @Test func redirectCollisionKeepsSurvivorFieldsWhenPresent() async throws {
     let short = URL(string: "https://vm.tiktok.com/SHORT/")!
     let full = URL(string: "https://www.tiktok.com/@a/video/123")!
-    let oembed = try Data(contentsOf: Bundle.module.url(forResource: "tiktok-oembed", withExtension: "json", subdirectory: "Fixtures")!)
-    // The TikTok page body itself is irrelevant, but the single-fetch flow still GETs
-    // it to learn the resolved host, so it must be stubbed too.
-    var client = StubHTTPClient(responses: [full: Data(), TikTokFetcher.oembedURL(for: full): oembed])
+    let page = try Data(contentsOf: Bundle.module.url(forResource: "tiktok-video", withExtension: "html", subdirectory: "Fixtures")!)
+    var client = StubHTTPClient(responses: [full: page])
     client.redirects = [short: full]
     let (store, service) = try await makeEnvironment(client: client)
 
@@ -310,10 +306,8 @@ private final class InterceptingHTTPClient: HTTPClient, @unchecked Sendable {
 @Test func redirectCollisionBumpsTheSurvivorToTheTop() async throws {
     let short = URL(string: "https://vm.tiktok.com/SHORT/")!
     let full = URL(string: "https://www.tiktok.com/@a/video/123")!
-    let oembed = try Data(contentsOf: Bundle.module.url(forResource: "tiktok-oembed", withExtension: "json", subdirectory: "Fixtures")!)
-    // The TikTok page body itself is irrelevant, but the single-fetch flow still GETs
-    // it to learn the resolved host, so it must be stubbed too.
-    var client = StubHTTPClient(responses: [full: Data(), TikTokFetcher.oembedURL(for: full): oembed])
+    let page = try Data(contentsOf: Bundle.module.url(forResource: "tiktok-video", withExtension: "html", subdirectory: "Fixtures")!)
+    var client = StubHTTPClient(responses: [full: page])
     client.redirects = [short: full]
     let (store, service) = try await makeEnvironment(client: client)
 
@@ -332,10 +326,8 @@ private final class InterceptingHTTPClient: HTTPClient, @unchecked Sendable {
 @Test func redirectCollisionRemovesTheDuplicateThumbnail() async throws {
     let short = URL(string: "https://vm.tiktok.com/SHORT/")!
     let full = URL(string: "https://www.tiktok.com/@a/video/123")!
-    let oembed = try Data(contentsOf: Bundle.module.url(forResource: "tiktok-oembed", withExtension: "json", subdirectory: "Fixtures")!)
-    // The TikTok page body itself is irrelevant, but the single-fetch flow still GETs
-    // it to learn the resolved host, so it must be stubbed too.
-    var client = StubHTTPClient(responses: [full: Data(), TikTokFetcher.oembedURL(for: full): oembed])
+    let page = try Data(contentsOf: Bundle.module.url(forResource: "tiktok-video", withExtension: "html", subdirectory: "Fixtures")!)
+    var client = StubHTTPClient(responses: [full: page])
     client.redirects = [short: full]
     let (store, service) = try await makeEnvironment(client: client)
 
@@ -351,9 +343,8 @@ private final class InterceptingHTTPClient: HTTPClient, @unchecked Sendable {
 @Test func redirectCollisionKeepsEveryStoredFieldOnTheSurvivor() async throws {
     let short = URL(string: "https://vm.tiktok.com/SHORT/")!
     let full = URL(string: "https://www.tiktok.com/@a/video/123")!
-    let oembed = try Data(contentsOf: Bundle.module.url(
-        forResource: "tiktok-oembed", withExtension: "json", subdirectory: "Fixtures")!)
-    var client = StubHTTPClient(responses: [full: Data(), TikTokFetcher.oembedURL(for: full): oembed])
+    let page = try Data(contentsOf: Bundle.module.url(forResource: "tiktok-video", withExtension: "html", subdirectory: "Fixtures")!)
+    var client = StubHTTPClient(responses: [full: page])
     client.redirects = [short: full]
     let (store, service) = try await makeEnvironment(client: client)
 

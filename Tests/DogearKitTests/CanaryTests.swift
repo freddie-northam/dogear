@@ -6,11 +6,14 @@ private var canaryEnabled: Bool {
     ProcessInfo.processInfo.environment["CANARY"] != nil
 }
 
-@Test(.enabled(if: canaryEnabled)) func tikTokOEmbedStillWorks() async throws {
+@Test(.enabled(if: canaryEnabled)) func tikTokPageDataStillWorks() async throws {
     let url = URL(string: "https://www.tiktok.com/@gordonramsayofficial/video/7510682972576746775")!
-    let metadata = try await TikTokFetcher().fetch(url, client: URLSessionHTTPClient())
-    #expect(metadata.author != nil)
+    // The service path, the one a capture runs, so the canary also covers the 1 MB page limit.
+    let metadata = try #require(await MetadataService(client: URLSessionHTTPClient()).fetch(for: url).metadata)
+    #expect(metadata.source == .tiktok)
+    #expect(metadata.author == "Gordon Ramsay")
     #expect(metadata.title != nil)
+    #expect(metadata.thumbnailURL != nil)
 }
 
 @Test(.enabled(if: canaryEnabled)) func xOpenGraphStillWorks() async throws {
