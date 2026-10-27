@@ -21,19 +21,16 @@ import Testing
 @Test func resolvesShortLinkThenRoutesByFinalHost() async throws {
     let short = URL(string: "https://vm.tiktok.com/ZM2/")!
     let full = URL(string: "https://www.tiktok.com/@a/video/123")!
-    let fixtureURL = Bundle.module.url(forResource: "tiktok-oembed", withExtension: "json", subdirectory: "Fixtures")!
-    // The TikTok page body itself is irrelevant (TikTokFetcher doesn't parse it, it
-    // calls the oEmbed endpoint), but the single-fetch flow still GETs it to learn the
-    // resolved host, so it must be stubbed too.
-    var stub = StubHTTPClient(responses: [
-        full: Data(),
-        TikTokFetcher.oembedURL(for: full): try Data(contentsOf: fixtureURL),
-    ])
+    let fixtureURL = Bundle.module.url(forResource: "tiktok-video", withExtension: "html", subdirectory: "Fixtures")!
+    var stub = StubHTTPClient(responses: [full: try Data(contentsOf: fixtureURL)])
     stub.redirects = [short: full]
 
     let result = await MetadataService(client: stub).fetch(for: short)
     #expect(result.resolvedURL == full)
     #expect(result.metadata?.source == .tiktok)
+    #expect(result.metadata?.author == "Gordon Ramsay")
+    // TikTok rate-limits its oEmbed endpoint, so the page must be the only request.
+    #expect(await stub.requestedURLs() == [full])
 }
 
 @Test func fetchesTheResolvedPageExactlyOnce() async throws {
