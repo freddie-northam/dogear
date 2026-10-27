@@ -4,7 +4,7 @@ import ImageIO
 import UniformTypeIdentifiers
 
 public final class ThumbnailCache: @unchecked Sendable {
-    let directory: URL
+    public let directory: URL
     // NSCache is thread-safe, so sharing it across the @unchecked Sendable
     // boundary is safe without extra locking.
     private let decoded = NSCache<NSUUID, NSImage>()

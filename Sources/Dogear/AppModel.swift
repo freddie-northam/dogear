@@ -12,6 +12,7 @@ final class AppModel: ObservableObject {
     static weak var shared: AppModel?
     nonisolated static let concurrencyCap = 4
 
+    let directory: URL
     let store: BookmarkStore
     let enrichment: EnrichmentService
     let thumbnails: ThumbnailCache
@@ -27,16 +28,15 @@ final class AppModel: ObservableObject {
     private var spotlightTask: Task<Void, Never>?
 
     init() {
-        let supportDir: URL
         if let override = ProcessInfo.processInfo.environment["DOGEAR_DATA_DIR"], !override.isEmpty {
-            supportDir = URL(fileURLWithPath: override, isDirectory: true)
+            directory = URL(fileURLWithPath: override, isDirectory: true)
         } else {
-            supportDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
                 .appendingPathComponent("Dogear")
         }
         do {
-            store = try BookmarkStore(directory: supportDir)
-            thumbnails = try ThumbnailCache(directory: supportDir.appendingPathComponent("thumbnails"))
+            store = try BookmarkStore(directory: directory)
+            thumbnails = try ThumbnailCache(directory: directory.appendingPathComponent("thumbnails"))
         } catch {
             fatalError("Dogear cannot read its library and has no backup: \(error)")
         }

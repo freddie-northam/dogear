@@ -74,11 +74,6 @@ private struct LibrarySettings: View {
     @State private var thumbnailBytes: Int64 = 0
     @State private var clearedThumbnails = false
 
-    private var supportDirectory: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Dogear")
-    }
-
     var body: some View {
         let counts = model?.store.counts()
         let total = model?.store.library.bookmarks.count ?? 0
@@ -93,7 +88,9 @@ private struct LibrarySettings: View {
             Section("Storage") {
                 LabeledContent("Location") {
                     Button("Show in Finder") {
-                        NSWorkspace.shared.activateFileViewerSelecting([supportDirectory])
+                        if let directory = model?.directory {
+                            NSWorkspace.shared.activateFileViewerSelecting([directory])
+                        }
                     }
                 }
                 LabeledContent("Thumbnail cache") {
@@ -116,8 +113,8 @@ private struct LibrarySettings: View {
     }
 
     private func measureThumbnails() -> Int64 {
-        let directory = supportDirectory.appendingPathComponent("thumbnails")
-        guard let files = try? FileManager.default.contentsOfDirectory(
+        guard let directory = model?.thumbnails.directory,
+              let files = try? FileManager.default.contentsOfDirectory(
             at: directory, includingPropertiesForKeys: [.fileSizeKey]) else { return 0 }
         return files.reduce(0) { sum, url in
             sum + Int64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
