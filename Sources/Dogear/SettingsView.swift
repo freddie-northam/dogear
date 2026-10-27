@@ -19,8 +19,6 @@ struct SettingsView: View {
     }
 }
 
-// MARK: - General
-
 private struct GeneralSettings: View {
     @AppStorage("detectCopiedLinks") private var detectCopiedLinks = true
     @AppStorage(DockPresence.defaultsKey) private var showDockIcon = true
@@ -71,18 +69,10 @@ private struct GeneralSettings: View {
     }
 }
 
-// MARK: - Library
-
 private struct LibrarySettings: View {
-    // Resolved when the tab is shown, never at launch; see the Settings scene.
     private var model: AppModel? { AppModel.shared }
     @State private var thumbnailBytes: Int64 = 0
     @State private var clearedThumbnails = false
-
-    private var supportDirectory: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Dogear")
-    }
 
     var body: some View {
         let counts = model?.store.counts()
@@ -98,7 +88,9 @@ private struct LibrarySettings: View {
             Section("Storage") {
                 LabeledContent("Location") {
                     Button("Show in Finder") {
-                        NSWorkspace.shared.activateFileViewerSelecting([supportDirectory])
+                        if let directory = model?.directory {
+                            NSWorkspace.shared.activateFileViewerSelecting([directory])
+                        }
                     }
                 }
                 LabeledContent("Thumbnail cache") {
@@ -121,8 +113,8 @@ private struct LibrarySettings: View {
     }
 
     private func measureThumbnails() -> Int64 {
-        let directory = supportDirectory.appendingPathComponent("thumbnails")
-        guard let files = try? FileManager.default.contentsOfDirectory(
+        guard let directory = model?.thumbnails.directory,
+              let files = try? FileManager.default.contentsOfDirectory(
             at: directory, includingPropertiesForKeys: [.fileSizeKey]) else { return 0 }
         return files.reduce(0) { sum, url in
             sum + Int64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
@@ -142,10 +134,6 @@ private struct LibrarySettings: View {
     }
 }
 
-// MARK: - Help
-
-/// Always-available onboarding: the same four ideas the welcome sheet shows on
-/// first run, here for anyone who skipped it or forgot.
 struct HelpSettings: View {
     var body: some View {
         Form {
@@ -206,8 +194,6 @@ struct HelpRow: View {
         .padding(.vertical, 2)
     }
 }
-
-// MARK: - About
 
 private struct AboutSettings: View {
     private var version: String {

@@ -75,8 +75,6 @@ public enum OpenGraphParser {
         for (entity, character) in entities {
             result = result.replacingOccurrences(of: entity, with: character)
         }
-        // Numeric entities, decimal and hex. An invalid scalar (a surrogate,
-        // or out of range) stays as literal text.
         result = result.replacing(#/&#([xX][0-9a-fA-F]+|[0-9]+);/#) { match in
             let body = match.output.1
             let isHex = body.hasPrefix("x") || body.hasPrefix("X")

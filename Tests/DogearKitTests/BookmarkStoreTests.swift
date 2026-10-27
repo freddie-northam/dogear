@@ -142,18 +142,12 @@ import Testing
 @Test func countsMatchExistingAccessors() throws {
     let temp = TempDirectory()
     let store = try BookmarkStore(directory: temp.url)
-    // Filed: refiled into Recipes.
     let (filed, _) = store.add(url: URL(string: "https://a.com/1")!)!
     store.refile(id: filed.id, to: "Recipes")
-    // Unsorted: left in place.
     store.add(url: URL(string: "https://a.com/2")!)
-    // Done: filed then marked done, so it should count toward archive but
-    // not toward its folder's not-done count.
     let (done, _) = store.add(url: URL(string: "https://a.com/3")!)!
     store.refile(id: done.id, to: "Recipes")
     store.markDone(id: done.id)
-    // Favorited and done: favorites() includes done bookmarks (a lens, not a
-    // queue), so this must count toward favorites even though it is archived.
     let (favoriteDone, _) = store.add(url: URL(string: "https://a.com/4")!)!
     store.toggleFavorite(id: favoriteDone.id)
     store.markDone(id: favoriteDone.id)
@@ -364,9 +358,6 @@ private func storeWithADoneMiddle(_ dir: URL) throws -> (BookmarkStore, changes:
     var idsOldestFirst: [UUID] = []
     for i in 0..<15 {
         let created = store.addForTesting(urlString: "https://example.com/oldest/\(i)")
-        // addForTesting stamps createdAt: Date(); reconstruct with a distinct,
-        // strictly increasing timestamp and write it back through the public
-        // update path (createdAt is otherwise immutable on Bookmark).
         let dated = Bookmark(
             id: created.id, url: created.url, title: created.title, author: created.author,
             note: created.note, folder: created.folder, source: created.source,
@@ -377,8 +368,6 @@ private func storeWithADoneMiddle(_ dir: URL) throws -> (BookmarkStore, changes:
         store.update(dated)
         idsOldestFirst.append(created.id)
     }
-    // Each showing is recorded, so the row moves on to the next oldest save
-    // rather than drawing the same one again.
     var seen: [UUID] = []
     for _ in 0..<10 {
         let picked = try #require(store.pick())
@@ -395,7 +384,6 @@ private func storeWithADoneMiddle(_ dir: URL) throws -> (BookmarkStore, changes:
     let store = try BookmarkStore(directory: dir)
     _ = store.add(url: URL(string: "https://a.com/1")!)
     _ = store.add(url: URL(string: "https://a.com/2")!)
-    // The second add rotated a .bak that contains the first bookmark.
     try Data("{corrupt".utf8).write(to: dir.appendingPathComponent("library.json"))
     let recovered = try BookmarkStore(directory: dir)
     #expect(recovered.library.bookmarks.count == 1)
@@ -408,11 +396,8 @@ private func storeWithADoneMiddle(_ dir: URL) throws -> (BookmarkStore, changes:
     let store = try BookmarkStore(directory: dir)
     _ = store.add(url: URL(string: "https://a.com/1")!)
     _ = store.add(url: URL(string: "https://a.com/2")!)
-    // .bak now holds the single-bookmark state. Corrupt library.json and recover from it.
     try Data("{corrupt".utf8).write(to: dir.appendingPathComponent("library.json"))
     _ = try BookmarkStore(directory: dir)
-    // Corrupt library.json again without touching .bak: if recovery had rotated the
-    // corrupt file over .bak, this second recovery would fail to find good data.
     try Data("{corrupt".utf8).write(to: dir.appendingPathComponent("library.json"))
     let recoveredAgain = try BookmarkStore(directory: dir)
     #expect(recoveredAgain.library.bookmarks.count == 1)
@@ -425,7 +410,6 @@ private func storeWithADoneMiddle(_ dir: URL) throws -> (BookmarkStore, changes:
     let store = try BookmarkStore(directory: dir)
     _ = store.add(url: URL(string: "https://a.com/1")!)
     _ = store.add(url: URL(string: "https://a.com/2")!)
-    // The second add rotated a .bak that contains the first bookmark.
     try FileManager.default.removeItem(at: dir.appendingPathComponent("library.json"))
     let recovered = try BookmarkStore(directory: dir)
     #expect(recovered.library.bookmarks.count == 1)
@@ -438,12 +422,8 @@ private func storeWithADoneMiddle(_ dir: URL) throws -> (BookmarkStore, changes:
     let store = try BookmarkStore(directory: dir)
     _ = store.add(url: URL(string: "https://a.com/1")!)
     _ = store.add(url: URL(string: "https://a.com/2")!)
-    // .bak now holds the single-bookmark state. Delete library.json and recover from it.
     try FileManager.default.removeItem(at: dir.appendingPathComponent("library.json"))
     let recovered = try BookmarkStore(directory: dir)
-    // Two more saves after recovery, each rotating library.json into .bak: if the
-    // recovery write had clobbered the good .bak instead, this chain would still
-    // look fine here but fail the corrupt-and-recover below.
     _ = recovered.add(url: URL(string: "https://a.com/3")!)
     _ = recovered.add(url: URL(string: "https://a.com/4")!)
     try Data("{corrupt".utf8).write(to: dir.appendingPathComponent("library.json"))
@@ -524,19 +504,12 @@ private func storeWithADoneMiddle(_ dir: URL) throws -> (BookmarkStore, changes:
     let searchElapsed = ContinuousClock.now - searchStart
     #expect(results.contains { $0.url == "https://example.com/item/49" })
 
-    // The spec's benchmark table (load and search timings) is verified by
-    // `PERF=1 swift test`, not on every PR: shared CI runners are noisy, and a
-    // slow neighbour would fail these for reasons unrelated to the diff.
     if ProcessInfo.processInfo.environment["PERF"] != nil {
         #expect(elapsed < .milliseconds(200))
         #expect(searchElapsed < .milliseconds(100))
     }
 }
 
-// Writes a library.json into a fresh temp directory, so a test can open a store on a
-// folder list that the public API alone cannot produce (Unsorted not last, or empty).
-// Stamped at the current schema version: these tests exercise folder mechanics, not
-// migration, so the one-shot default-folder adoption must not fire here.
 private func storeSeeded(folders: [String]) throws -> BookmarkStore {
     let temp = TempDirectory()
     let dir = temp.url
@@ -605,10 +578,8 @@ private func storeSeeded(folders: [String]) throws -> BookmarkStore {
 @Test func moveFoldersReordersAndKeepsUnsortedLast() throws {
     let temp = TempDirectory()
     let store = try BookmarkStore(directory: temp.url)
-    // Defaults: Recipes, Restaurants, Shows, Music, Articles, Unsorted
     store.moveFolders(fromOffsets: IndexSet(integer: 0), toOffset: 3)
     #expect(store.library.folders == ["Restaurants", "Shows", "Recipes", "Music", "Articles", "Unsorted"])
-    // A move past the end lands above Unsorted, never below it.
     store.moveFolders(fromOffsets: IndexSet(integer: 0), toOffset: 99)
     #expect(store.library.folders.last == "Unsorted")
     #expect(store.library.folders[4] == "Restaurants")
@@ -630,14 +601,12 @@ private func storeSeeded(folders: [String]) throws -> BookmarkStore {
     let (a, _) = store.add(url: URL(string: "https://a.com/1")!)!
     let (b, _) = store.add(url: URL(string: "https://a.com/2")!)!
     _ = store.add(url: URL(string: "https://a.com/3")!)!
-    // Order is newest first: [3, b, a]. Remove b from the middle.
     let removed = try #require(store.remove(id: b.id))
     #expect(removed.index == 1)
     #expect(store.library.bookmarks.count == 2)
     store.restore(removed.bookmark, at: removed.index)
     #expect(store.library.bookmarks.map(\.id)[1] == b.id)
     #expect(store.library.bookmarks.map(\.id)[2] == a.id)
-    // Restoring twice is a no-op.
     store.restore(removed.bookmark, at: 0)
     #expect(store.library.bookmarks.count == 3)
 }
@@ -673,15 +642,12 @@ private func storeSeeded(folders: [String]) throws -> BookmarkStore {
     #expect(store.removeFolder("Nope") == nil)
 }
 
-// MARK: Pick memory
-
 @Test func pickPrefersABookmarkTheRowHasNeverShown() throws {
     let temp = TempDirectory()
     let store = try BookmarkStore(directory: temp.url)
     let older = store.add(url: URL(string: "https://a.com/older")!)!.bookmark
     let newer = store.add(url: URL(string: "https://a.com/newer")!)!.bookmark
     store.markShown(id: older.id)
-    // The older bookmark would win on age alone; having been shown puts it second.
     #expect(store.pick()?.id == newer.id)
 }
 
@@ -728,8 +694,6 @@ private func storeSeeded(folders: [String]) throws -> BookmarkStore {
     #expect(store.library.bookmarks[0].place == nil)
 }
 
-// MARK: Places
-
 private func testPlace(_ name: String, latitude: Double = 51.5, longitude: Double = -0.09) -> Place {
     Place(name: name, address: "\(name) Street", latitude: latitude, longitude: longitude)
 }
@@ -742,7 +706,6 @@ private func testPlace(_ name: String, latitude: Double = 51.5, longitude: Doubl
     #expect(saved.map(\.title) == ["Bao Borough", "Kagari"])
     #expect(saved.allSatisfy { $0.folder == "Restaurants" })
     #expect(saved.allSatisfy { $0.place != nil })
-    // The user chose the folder, so the categorizer must leave these alone.
     #expect(saved.allSatisfy { $0.manuallyFiled })
 }
 
@@ -823,8 +786,6 @@ private func testPlace(_ name: String, latitude: Double = 51.5, longitude: Doubl
     let picked = try #require(store.pick())
     let pickElapsed = ContinuousClock.now - pickStart
 
-    // markShown writes the whole library, and it runs on every popover open,
-    // so it sits inside the same budget as a save.
     let markStart = ContinuousClock.now
     store.markShown(id: picked.id)
     let markElapsed = ContinuousClock.now - markStart
@@ -865,7 +826,6 @@ private func testPlace(_ name: String, latitude: Double = 51.5, longitude: Doubl
     store.refile(id: saved.id, to: "Recipes")
     store.markThumbnails([saved.id])
     let after = try #require(store.library.bookmarks.first { $0.id == saved.id })
-    // A refile that happened while the map was drawing must survive.
     #expect(after.folder == "Recipes")
     #expect(after.place?.name == "Kagari")
     #expect(after.hasThumbnail)
@@ -889,7 +849,6 @@ private func testPlace(_ name: String, latitude: Double = 51.5, longitude: Doubl
 @Test func migrationDropsARecordWhoseURLIsNotHTTP() throws {
     let temp = TempDirectory()
     let dir = temp.url
-    // Schema version 1: a library written before the http(s) gate existed.
     let older = """
         {"folders":["Recipes","Unsorted"],"schemaVersion":1,"bookmarks":[
         {"id":"\(UUID().uuidString)","url":"file:///etc/hosts","title":"Local","folder":"Recipes",
@@ -900,7 +859,6 @@ private func testPlace(_ name: String, latitude: Double = 51.5, longitude: Doubl
     try older.write(to: dir.appendingPathComponent("library.json"), atomically: true, encoding: .utf8)
     let store = try BookmarkStore(directory: dir)
     #expect(store.library.bookmarks.map(\.url) == ["https://a.com/p"])
-    // The drop is persisted, so it happens once and not on every launch.
     let reloaded = try BookmarkStore(directory: dir)
     #expect(reloaded.library.bookmarks.count == 1)
 }
@@ -923,23 +881,11 @@ private func testPlace(_ name: String, latitude: Double = 51.5, longitude: Doubl
 @Test func everythingThePopoverAsksTheStoreForOnOpenIsUnder50ms() throws {
     let temp = TempDirectory()
     let store = try BookmarkStore(directory: temp.url)
-    // One thousand, the size the design spec uses for its library benchmark,
-    // not the five thousand the store-load benchmark uses. A ceiling has to
-    // hold on a shared CI runner as well as on a fast laptop: at five thousand
-    // this measured 43 ms on an M4 Max and 98 ms on the runner, which says the
-    // number was calibrated on the wrong machine rather than that the work is
-    // slow. The five thousand case still has a ceiling of its own, on the
-    // whole-library write that dominates it.
     for i in 0..<1000 {
         _ = store.addForTesting(urlString: "https://example.com/item/\(i)")
     }
     store.saveNow()
 
-    // The design spec sets 150 ms from popover open to ready, and verifies it
-    // by hand with Instruments. These are every store call that open makes:
-    // the pick and the record of it, the counts line, and the three rows of
-    // the recents or favourites list. Holding them well inside the budget is
-    // what leaves room for the part only Instruments can see, the view build.
     let start = ContinuousClock.now
     let picked = try #require(store.pick())
     store.markShown(id: picked.id)

@@ -26,8 +26,6 @@ struct StubHTTPClient: HTTPClient {
     }
 
     func fetch(_ url: URL, limit: Int) async throws -> (data: Data, finalURL: URL) {
-        // Match on canonical form, same as resolvedURL: a redirect keyed on the
-        // pre-canonicalization URL must still match.
         let needle = URLCleaner.canonicalString(url)
         let finalURL = redirects.first(where: { URLCleaner.canonicalString($0.key) == needle })?.value ?? url
         await log.record(finalURL)

@@ -2,6 +2,7 @@ import AppKit
 import CoreGraphics
 import Foundation
 import ImageIO
+import Synchronization
 import Testing
 import UniformTypeIdentifiers
 @testable import DogearKit
@@ -57,7 +58,6 @@ private func makeEnvironment(client: StubHTTPClient) throws -> (BookmarkStore, E
     let after = store.library.bookmarks[0]
     #expect(after.folder == Library.unsorted)
     #expect(after.title == "example.com/gone")
-    // The bookmark persisted: the offline integration requirement.
     #expect(store.library.bookmarks.count == 1)
 }
 
@@ -85,27 +85,25 @@ private func makeEnvironment(client: StubHTTPClient) throws -> (BookmarkStore, E
     #expect(store.library.bookmarks[0].folder == Library.unsorted)
 }
 
-// Wraps a StubHTTPClient and runs a closure on the Nth `data(from:limit:)` call (1-based),
-// so tests can simulate a concurrent store edit landing during a specific await inside
-// enrichment: call 1 is the metadata.fetch's page download, call 2 is the thumbnail
-// download that happens after enrichment's post-fetch re-read.
-// @unchecked Sendable: `count` is only ever touched serially, from the single MainActor
-// task driving enrich() in these tests, never concurrently.
-private final class InterceptingHTTPClient: HTTPClient, @unchecked Sendable {
+/// Lets a client callback reach a service that is built after the client.
+@MainActor private final class ServiceSlot {
+    var service: EnrichmentService?
+}
+
+private final class InterceptingHTTPClient: HTTPClient {
     let inner: StubHTTPClient
     let triggerOnCall: Int
-    let onTrigger: @MainActor () async -> Void
-    private var count = 0
+    let onTrigger: @MainActor @Sendable () async -> Void
+    private let count = Mutex(0)
 
-    init(inner: StubHTTPClient, triggerOnCall: Int = 1, onTrigger: @escaping @MainActor () async -> Void) {
+    init(inner: StubHTTPClient, triggerOnCall: Int = 1, onTrigger: @escaping @MainActor @Sendable () async -> Void) {
         self.inner = inner
         self.triggerOnCall = triggerOnCall
         self.onTrigger = onTrigger
     }
 
     private func bumpAndMaybeTrigger() async {
-        count += 1
-        if count == triggerOnCall { await onTrigger() }
+        if count.withLock({ $0 += 1; return $0 }) == triggerOnCall { await onTrigger() }
     }
 
     func data(from url: URL, limit: Int) async throws -> Data {
@@ -146,9 +144,6 @@ private final class InterceptingHTTPClient: HTTPClient, @unchecked Sendable {
     #expect(after.manuallyFiled)
 }
 
-// generic-page.html has an og:image, so enrichment makes a second data(from:) call (the
-// thumbnail download) after its post-fetch re-read. A refile landing during that second
-// await must survive too.
 @MainActor
 @Test func concurrentRefileDuringThumbnailFetchIsNotReverted() async throws {
     let pageURL = URL(string: "https://example.com/pasta")!
@@ -176,9 +171,6 @@ private final class InterceptingHTTPClient: HTTPClient, @unchecked Sendable {
     #expect(after.manuallyFiled)
 }
 
-// The categorizer guesses "Recipes" for generic-page.html. If that folder is deleted
-// during the thumbnail fetch (the second data(from:) call, after the guess was made but
-// before it lands), the bookmark must fall back to Unsorted, not resurrect a dead folder.
 @MainActor
 @Test func folderDeletedDuringThumbnailFetchFallsBackToUnsorted() async throws {
     let pageURL = URL(string: "https://example.com/pasta")!
@@ -206,11 +198,6 @@ private final class InterceptingHTTPClient: HTTPClient, @unchecked Sendable {
     #expect(!after.manuallyFiled)
 }
 
-// Two short links that both resolve to the same target, enriched concurrently: A's
-// collision check must not run before B has had a chance to land its own resolved URL,
-// or both survive as duplicates. Trigger during A's thumbnail fetch (its second
-// data(from:) call, since generic-page.html has an og:image) so B's full enrich(id:)
-// completes while A is still mid-flight, before A reaches its own write.
 @MainActor
 @Test func concurrentRedirectCollisionKeepsOnlyOneSurvivor() async throws {
     let shortA = URL(string: "https://short.example/a")!
@@ -225,17 +212,18 @@ private final class InterceptingHTTPClient: HTTPClient, @unchecked Sendable {
     var stub = StubHTTPClient(responses: [target: html])
     stub.redirects = [shortA: target, shortB: target]
 
-    var service: EnrichmentService!
+    let slot = ServiceSlot()
     let client = InterceptingHTTPClient(inner: stub, triggerOnCall: 2) {
-        await service.enrich(id: bookmarkB.id)
+        await slot.service?.enrich(id: bookmarkB.id)
     }
-    service = EnrichmentService(
+    let service = EnrichmentService(
         store: store,
         metadata: MetadataService(client: client),
         categorizer: KeywordCategorizer(),
         thumbnails: try ThumbnailCache(directory: dir.appendingPathComponent("thumbnails")),
         client: client
     )
+    slot.service = service
 
     await service.enrich(id: bookmarkA.id)
 
@@ -250,10 +238,8 @@ private final class InterceptingHTTPClient: HTTPClient, @unchecked Sendable {
     client.redirects = [short: full]
     let (store, service) = try await makeEnvironment(client: client)
 
-    // S: the survivor, no note, not favourited.
     let (survivor, _) = store.add(url: full)!
 
-    // D: the duplicate, with a note, a star, and a manual folder to preserve.
     let (duplicate, _) = store.add(url: short)!
     var d = store.library.bookmarks.first { $0.id == duplicate.id }!
     d.note = "keep me"
@@ -355,8 +341,6 @@ private final class InterceptingHTTPClient: HTTPClient, @unchecked Sendable {
     let (duplicate, _) = store.add(url: short)!
     await service.enrich(id: duplicate.id)
 
-    // The merge used to rebuild the record field by field, so any field added
-    // to Bookmark after that code was written was dropped on the floor.
     let merged = try #require(store.library.bookmarks.first { $0.id == survivor.id })
     #expect(store.library.bookmarks.count == 1)
     #expect(merged.lastShownAt == shownAt)
@@ -369,8 +353,6 @@ private final class InterceptingHTTPClient: HTTPClient, @unchecked Sendable {
 
     await service.enrich(id: saved.id)
 
-    // A map link has no page worth reading: a fetch would replace the name the
-    // user approved and refile the card by the map host.
     let after = try #require(store.library.bookmarks.first { $0.id == saved.id })
     #expect(after.title == "Kagari")
     #expect(after.folder == "Restaurants")

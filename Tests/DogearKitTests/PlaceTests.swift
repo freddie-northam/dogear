@@ -50,14 +50,11 @@ import Testing
 @Test func mapsURLEscapesANameWithSpacesAndSymbols() throws {
     let place = Place(name: "Fish & Chips #1", address: nil, latitude: 1, longitude: 2)
     let url = try #require(place.mapsURL)
-    // A raw "&" or "#" would end the query or start a fragment.
     #expect(!url.absoluteString.contains("Chips #1"))
     let query = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems)
     #expect(query.contains(URLQueryItem(name: "q", value: "Fish & Chips #1")))
 }
 
-/// Stands in for the map, so the import path has a test that never goes out
-/// to the network.
 struct StubPlaceResolver: PlaceResolver {
     let places: [String: Place]
     func resolve(_ query: PlaceQuery) async -> Place? { places[query.name] }
@@ -89,8 +86,6 @@ struct StubPlaceResolver: PlaceResolver {
 }
 
 @Test func mapsURLIsNilForAPageThatIsNotAMap() {
-    // The folder name used to decide this, so an article filed under
-    // Restaurants offered to open a map that searched for its title.
     let bookmark = Bookmark(id: UUID(), url: "https://example.com/review", title: "A review",
                             author: nil, note: nil, folder: "Restaurants", source: .web,
                             createdAt: Date(), doneAt: nil, hasThumbnail: false,
@@ -106,9 +101,6 @@ struct StubPlaceResolver: PlaceResolver {
 }
 
 @Test func aGeneralShortenedLinkIsNotAMap() throws {
-    // goo.gl shortens anything. Only its maps subdomain serves a map, and
-    // host matching is by suffix, so a bare "goo.gl" entry would have made
-    // every shortened link in the library offer Open in Maps.
     #expect(!Place.isMapHost(try #require(URL(string: "https://goo.gl/abc123"))))
     #expect(Place.isMapHost(try #require(URL(string: "https://maps.app.goo.gl/abc123"))))
 }

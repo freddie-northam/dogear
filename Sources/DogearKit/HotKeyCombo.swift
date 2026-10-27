@@ -35,8 +35,6 @@ public struct HotKeyCombo: Equatable, Sendable {
         return text + Self.keyName(keyCode)
     }
 
-    // MARK: Storage
-
     /// "keyCode:modifiers". Two numbers keep the stored default readable and
     /// let an unreadable value fall back to no shortcut at all.
     public var defaultsValue: String { "\(keyCode):\(modifiers)" }
@@ -47,8 +45,6 @@ public struct HotKeyCombo: Equatable, Sendable {
               let keyCode = UInt32(parts[0]), let modifiers = UInt32(parts[1]) else { return nil }
         self.init(keyCode: keyCode, modifiers: modifiers)
     }
-
-    // MARK: Key names
 
     static let names: [UInt32: String] = [
         0: "A", 1: "S", 2: "D", 3: "F", 4: "H", 5: "G", 6: "Z", 7: "X", 8: "C", 9: "V",

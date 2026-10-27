@@ -62,7 +62,7 @@ import Testing
     let stub = StubHTTPClient(responses: [pageURL: try Data(contentsOf: fixtureURL)])
     let metadata = try await GenericFetcher().fetch(pageURL, client: stub)
     #expect(metadata.title == "How to Make Fresh Pasta 'Properly'")
-    #expect(metadata.author == "Example Cooking") // og:site_name maps to author
+    #expect(metadata.author == "Example Cooking")
     #expect(metadata.source == .web)
 }
 

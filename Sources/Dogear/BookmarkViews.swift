@@ -1,5 +1,3 @@
-// Cards, list rows, and the actions shared by both. Split out of
-// LibraryWindow.swift, which was being edited for six unrelated reasons.
 import DogearKit
 import SwiftUI
 import UniformTypeIdentifiers
@@ -83,8 +81,6 @@ struct BookmarkActions: ViewModifier {
             Label("Edit Note", systemImage: "note.text")
         }
         if !bookmark.isPlace {
-            // A place has no page behind it; a fetch would only overwrite the
-            // name the user approved.
             Button {
                 let id = bookmark.id
                 Task { await model.enrichment.enrich(id: id) }
@@ -158,13 +154,8 @@ private struct QRPopover: View {
     }
 }
 
-// MARK: - Grid
-
 struct BookmarkGrid: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    // Read here so a sort change animates the reorder. Folder clicks and
-    // search keystrokes replace the whole list and must stay hard cuts, so
-    // the grid does not key its animation on the bookmark ids.
     @AppStorage("librarySort") private var sortRaw = LibrarySort.lastSaved.rawValue
     let bookmarks: [Bookmark]
 
@@ -175,11 +166,6 @@ struct BookmarkGrid: View {
             LazyVGrid(columns: columns, spacing: 16) {
                 ForEach(bookmarks) { bookmark in
                     BookmarkCard(bookmark: bookmark)
-                        // A card that is marked done or deleted leaves toward the
-                        // sidebar, where Archive lives, so the motion says where
-                        // it went. A card that arrives grows into place; it did
-                        // not come from the sidebar. Reduced motion keeps the
-                        // fade only.
                         .transition(reduceMotion
                             ? .opacity
                             : .asymmetric(
@@ -207,10 +193,6 @@ struct BookmarkCard: View {
     }
 
     private var card: some View {
-        // One click opens, the same as the popover rows: a card is a button.
-        // The shared style gives the press its feel on pointer-down, and the
-        // star is a button of its own inside the label, so it wins its own
-        // clicks.
         Button(action: open) {
             VStack(alignment: .leading, spacing: 6) {
                 thumbnail
@@ -221,15 +203,11 @@ struct BookmarkCard: View {
                 Text(bookmark.title)
                     .font(.headline)
                     .lineLimit(2, reservesSpace: true)
-                // The note line always reserves its height, so every card in a
-                // row is the same size whether or not a note exists.
                 Text(bookmark.subtitle ?? " ")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1, reservesSpace: true)
                 HStack(spacing: 6) {
-                    // The folder speaks through its symbol and color; the word,
-                    // the domain, and the raw link are noise at card size.
                     Image(systemName: folderSymbol(for: bookmark.folder))
                         .font(.caption2)
                         .foregroundStyle(folderColor(for: bookmark.folder))
@@ -265,7 +243,6 @@ struct BookmarkCard: View {
                 .clipped()
                 .clipShape(RoundedRectangle(cornerRadius: 6))
         } else if bookmark.source == .x {
-            // A text post reads as a quote, not as a missing image.
             RoundedRectangle(cornerRadius: 6)
                 .fill(.quaternary)
                 .frame(height: 110)
@@ -310,8 +287,6 @@ struct FavoriteStar: View {
     }
 }
 
-// MARK: - List
-
 struct BookmarkList: View {
     enum Grouping {
         case none
@@ -355,7 +330,6 @@ struct BookmarkList: View {
         }
     }
 
-    /// Finder-style recency sections.
     private var dateGroups: [(title: String?, items: [Bookmark])] {
         let calendar = Calendar.current
         let now = Date()
@@ -389,8 +363,6 @@ struct BookmarkListRow: View {
     @State private var isHovering = false
 
     var body: some View {
-        // One click opens here too; the wide row takes a smaller give than
-        // the card so the press reads the same to the eye.
         Button(action: open) {
             HStack(spacing: 10) {
                 badge

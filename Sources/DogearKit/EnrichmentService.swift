@@ -18,59 +18,40 @@ public final class EnrichmentService {
     }
 
     public func enrich(id: UUID) async {
-        guard let started = store.library.bookmarks.first(where: { $0.id == id }),
+        guard let started = current(id), !started.isPlace,
               let url = URL(string: started.url) else { return }
-        // A place has no page behind it. Fetching its map link would replace the
-        // name the user approved with whatever the map site titles that page,
-        // and refile it by the map host. The rule lives here because this is
-        // the only function that could break it.
-        guard !started.isPlace else { return }
 
         let result = await metadata.fetch(for: url)
         let resolved = URLCleaner.canonicalString(result.resolvedURL)
+        let fetched = result.metadata
 
-        // Re-read: the user may have refiled/edited/completed this bookmark while the
-        // network fetch was in flight. Apply enrichment onto the fresh state, never the
-        // pre-fetch snapshot, so a concurrent edit is never reverted.
-        guard var bookmark = store.library.bookmarks.first(where: { $0.id == id }) else { return }
-
-        bookmark.url = resolved
-
-        guard let fetched = result.metadata else {
-            save(bookmark) // keep resolved URL even when enrichment failed
-            return
+        var guess: String?
+        if let fetched, current(id)?.manuallyFiled == false {
+            guess = await categorizer.categorize(fetched, url: result.resolvedURL, folders: store.library.folders)
+        }
+        var storedThumbnail = false
+        if let thumbnailURL = fetched?.thumbnailURL,
+           let data = try? await client.data(from: thumbnailURL, limit: FetchLimit.thumbnail) {
+            storedThumbnail = thumbnails.store(data, for: id)
         }
 
-        if let title = fetched.title, !title.isEmpty { bookmark.title = title }
-        bookmark.author = fetched.author ?? bookmark.author
-        bookmark.source = fetched.source
-
-        if !bookmark.manuallyFiled {
-            let folders = store.library.folders
-            let guess = await categorizer.categorize(fetched, url: result.resolvedURL, folders: folders)
-            bookmark.folder = (guess.flatMap { folders.contains($0) ? $0 : nil }) ?? Library.unsorted
-        }
-
-        if let thumbnailURL = fetched.thumbnailURL,
-           let data = try? await client.data(from: thumbnailURL, limit: FetchLimit.thumbnail),
-           thumbnails.store(data, for: bookmark.id) {
-            bookmark.hasThumbnail = true
-        }
-
-        // Re-read once more: categorize/thumbnail above are another await window where a
-        // concurrent edit can land. Merge enrichment onto the latest state, not the
-        // snapshot captured before those awaits, and only touch folder if it's still
-        // eligible (not manually filed in the meantime).
-        guard var latest = store.library.bookmarks.first(where: { $0.id == id }) else { return }
-        latest.url = bookmark.url
-        latest.title = bookmark.title
-        latest.author = bookmark.author
-        latest.source = bookmark.source
-        latest.hasThumbnail = bookmark.hasThumbnail
-        if !latest.manuallyFiled {
-            latest.folder = store.library.folders.contains(bookmark.folder) ? bookmark.folder : Library.unsorted
+        // Every await above lets the user edit this bookmark, so apply onto the record as it is now.
+        guard var latest = current(id) else { return }
+        latest.url = resolved
+        if storedThumbnail { latest.hasThumbnail = true }
+        if let fetched {
+            if let title = fetched.title, !title.isEmpty { latest.title = title }
+            latest.author = fetched.author ?? latest.author
+            latest.source = fetched.source
+            if !latest.manuallyFiled {
+                latest.folder = guess.flatMap { store.library.folders.contains($0) ? $0 : nil } ?? Library.unsorted
+            }
         }
         save(latest)
+    }
+
+    private func current(_ id: UUID) -> Bookmark? {
+        store.library.bookmarks.first { $0.id == id }
     }
 
     private func save(_ latest: Bookmark) {
@@ -84,19 +65,11 @@ public final class EnrichmentService {
                 survivor.folder = latest.folder
                 survivor.manuallyFiled = true
             }
-            // Copy the survivor and change only the two fields the merge decides.
-            // This used to rebuild through the memberwise initializer, which meant
-            // every field added to Bookmark later was silently dropped here.
-            var merged = survivor
-            merged.createdAt = min(survivor.createdAt, latest.createdAt)
-            merged.doneAt = nil
+            survivor.createdAt = min(survivor.createdAt, latest.createdAt)
             store.remove(id: latest.id)
             thumbnails.remove(for: latest.id)
-            // Write the merged fields onto the survivor, then re-add it: add()'s re-add path
-            // finds the existing record by canonical url, clears doneAt, and bumps it to the
-            // top, so the surviving bookmark surfaces like any re-add.
-            store.update(merged)
-            store.add(url: URL(string: merged.url)!)
+            store.update(survivor)
+            store.add(url: URL(string: survivor.url)!)
             return
         }
         store.update(latest)

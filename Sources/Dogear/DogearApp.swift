@@ -3,7 +3,6 @@ import CoreSpotlight
 import DogearKit
 import SwiftUI
 
-// The idle icon is a template image, so it follows the menu bar appearance.
 private let idleIcon: NSImage = {
     let image = NSImage(systemSymbolName: "bookmark", accessibilityDescription: "Dogear")!
     image.isTemplate = true
@@ -27,8 +26,6 @@ private func pinkMenuBarIcon(_ symbol: String, weight: NSFont.Weight,
 private let linkDetectedIcon = pinkMenuBarIcon(
     "bookmark.fill", weight: .regular, description: "Dogear, link detected")
 
-// Shown for a moment after the shortcut saves a link. The app has no
-// notifications, so the menu bar itself is where the confirmation goes.
 private let savedIcon = pinkMenuBarIcon(
     "checkmark", weight: .semibold, description: "Dogear, link saved")
 
@@ -45,7 +42,6 @@ struct DogearApp: App {
     static let hotKeyDefaultsKey = "captureHotKey" 
 
     init() {
-        // The Dock icon is a setting; LSUIElement only sets the initial state.
         DockPresence.apply()
     }
 
@@ -101,15 +97,11 @@ struct DogearApp: App {
         return clipboard.linkDetected ? linkDetectedIcon : idleIcon
     }
 
-    // MARK: Shortcut
-
     private func applyHotKey() {
         HotKeyMonitor.shared.register(HotKeyCombo(defaultsValue: captureHotKey),
                                       action: captureFromClipboard)
     }
 
-    /// The shortcut path skips the popover: there is nothing to confirm, and
-    /// a save that needs no window is the whole point of a shortcut.
     private func captureFromClipboard() {
         Task { @MainActor in
             guard let text = await clipboard.readLink(),

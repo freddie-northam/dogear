@@ -7,27 +7,16 @@ import DogearKit
 /// bookmark app has no business holding that permission.
 @MainActor
 final class HotKeyMonitor: ObservableObject {
-    /// One monitor for the process. Settings needs to read the result of a
-    /// registration the app scene performed, and a shortcut is a single
-    /// system-wide claim, so there is nothing to gain from a second instance.
     static let shared = HotKeyMonitor()
 
-    /// True when a shortcut is recorded but macOS refused to give it to
-    /// Dogear, which nearly always means another app already holds it.
-    /// Settings reads this to say so, because a shortcut that looks recorded
-    /// and does nothing is indistinguishable from a broken app.
     @Published private(set) var isUnavailable = false
 
-    /// Dogear's four-character signature, as Carbon expects one.
-    private static let signature = OSType(0x44_47_52_31) // "DGR1"
+    private static let signature: OSType = "DGR1".utf8.reduce(0) { $0 << 8 | OSType($1) }
 
     private var reference: EventHotKeyRef?
     private var handler: EventHandlerRef?
     private var action: (() -> Void)?
 
-    /// Claims the shortcut. Calling it again replaces the previous one, so a
-    /// change in Settings takes effect without a relaunch. A nil or
-    /// modifier-less combo just clears the shortcut.
     @discardableResult
     func register(_ combo: HotKeyCombo?, action: @escaping () -> Void) -> Bool {
         unregister()

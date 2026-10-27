@@ -22,7 +22,6 @@ private func fixture(_ name: String) throws -> String {
 
 @Test func survivesMalformedHTML() throws {
     let data = OpenGraphParser.parse(html: try fixture("malformed.html"))
-    // No crash, no hang. Whatever parses, parses.
     _ = data
 }
 
@@ -82,11 +81,6 @@ private func fixture(_ name: String) throws -> String {
 }
 
 @Test func doubleEncodedNamedEntityDecodesFully() {
-    // The author wrote the literal text "&lt;", escaping the ampersand as "&amp;".
-    // Ruling: sites like LinkedIn double-encode og titles, so a second
-    // decode pass runs when the first leaves entities behind. A title that
-    // literally discusses "&lt;" loses one level; sloppy double-encoding
-    // is far more common than titles about HTML entities.
     #expect(OpenGraphParser.decodeEntities("Fish &amp;lt; Chips") == "Fish < Chips")
 }
 
@@ -103,11 +97,9 @@ private func fixture(_ name: String) throws -> String {
 }
 
 @Test func leavesAnInvalidScalarEntityAsIs() {
-    // 55296 is 0xD800, a surrogate: not a valid Unicode scalar.
     #expect(OpenGraphParser.decodeEntities("bad &#55296; scalar") == "bad &#55296; scalar")
 }
 
 @Test func doubleEncodedNumericEntityDecodesFully() {
-    // The author wrote the literal text "&#8217;", escaping the ampersand.
     #expect(OpenGraphParser.decodeEntities("&amp;#8217;") == "\u{2019}")
 }

@@ -29,9 +29,6 @@ public struct Place: Codable, Equatable, Sendable {
 }
 
 extension Place {
-    /// Hosts whose pages are a map. A bookmark pointing at one of these opens
-    /// in Maps even without a resolved place behind it, which is what a link
-    /// copied out of Maps looks like.
     /// Only hosts that serve a map. `goo.gl` on its own is Google's general
     /// shortener and points at anything, so it must not appear here: matching
     /// is by suffix, and a bare entry would swallow every shortened link.
@@ -73,7 +70,6 @@ public enum PlaceParser {
         text.split(whereSeparator: \.isNewline).compactMap { line in
             let cleaned = stripListMarker(String(line))
             guard !cleaned.isEmpty else { return nil }
-            // Split on the first tilde only: a name may contain another one.
             guard let separator = cleaned.firstIndex(of: "~") else {
                 return PlaceQuery(name: cleaned, near: nil)
             }
@@ -87,8 +83,6 @@ public enum PlaceParser {
 
     static func stripListMarker(_ line: String) -> String {
         var text = line.trimmingCharacters(in: .whitespaces)
-        // Bullets survive a copy out of Notes and would otherwise become part
-        // of the search text.
         for marker in ["- ", "* ", "• ", "– "] where text.hasPrefix(marker) {
             text.removeFirst(marker.count)
             break

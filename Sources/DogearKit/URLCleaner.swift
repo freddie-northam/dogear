@@ -34,10 +34,6 @@ public enum URLCleaner {
         }
     }
 
-    /// A scheme-less bare host of one short lowercase label plus a two-letter
-    /// TLD, with no path or query, is a code identifier like "result.id" far
-    /// more often than a saved website. Real bare domains ("booking.com",
-    /// "impeccable.style") have longer TLDs or labels and pass through.
     static func isCodeIdentifier(matchedText: String, url: URL) -> Bool {
         guard !matchedText.contains("://"),
               url.path.isEmpty || url.path == "/", url.query == nil,
@@ -75,8 +71,6 @@ public enum URLCleaner {
         }
         parts.scheme = parts.scheme?.lowercased()
         parts.host = parts.host?.lowercased()
-        // The same tweet arrives as twitter.com or x.com depending on where
-        // the link was copied; one host keeps them one bookmark.
         if let host = parts.host,
            host == "twitter.com" || host == "www.twitter.com" || host == "mobile.twitter.com" {
             parts.host = "x.com"

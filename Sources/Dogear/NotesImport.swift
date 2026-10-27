@@ -1,5 +1,3 @@
-// Reading Apple Notes for links: the import's own state, the two
-// AppleScript reads, and the sheet that asks for consent and folders.
 import DogearKit
 import SwiftUI
 
@@ -16,10 +14,6 @@ struct NotesFolder: Identifiable, Equatable {
     let id: String
     let name: String
 }
-
-/// One alert, one state: the collision message replaces the rename prompt's
-/// content in place instead of a second `.alert` firing from the first's
-/// own dismissal, which SwiftUI can drop silently.
 
 func readNotesFolders() -> [NotesFolder]? {
     let source = "tell application \"Notes\" to get {id of every folder, name of every folder}"
@@ -39,10 +33,6 @@ func readNotesFolders() -> [NotesFolder]? {
     }
 }
 
-/// Reads every non-password-protected note body in one folder, over Apple
-/// events, on the main thread. When `secondsSince` is given, only notes
-/// modified within that many seconds of now are read (an incremental read);
-/// nil means a full read. Returns nil when the folder cannot be read.
 func readNotesBody(folderID: String, secondsSince: Int?) -> String? {
     let escapedID = folderID
         .replacingOccurrences(of: "\\", with: "\\\\")
