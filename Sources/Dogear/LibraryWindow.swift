@@ -593,7 +593,7 @@ struct LibraryWindow: View {
             importFileResult = "No links found in that file."
             return
         }
-        let result = model.capture(urls: URLCleaner.allHTTPURLs(inHTML: html))
+        let result = model.capture(urls: BookmarksHTML.links(in: html))
         if result.total == 0 {
             importFileResult = "No links found in that file."
         } else if result.new == 0 {

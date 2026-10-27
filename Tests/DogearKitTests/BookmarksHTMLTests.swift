@@ -72,11 +72,27 @@ private func bookmark(_ url: String, title: String, folder: String,
         bookmark("https://a.com/p?x=1&y=2", title: "Pasta", folder: "Recipes"),
         bookmark("https://b.com/tacos", title: "Tacos", folder: "Unsorted"),
         bookmark("https://c.com/old", title: "Old", folder: "Recipes", done: true),
+        bookmark("https://d.com/q?s=\"x\"", title: "d.com/q", folder: "Unsorted"),
     ])
-    let recovered = URLCleaner.allHTTPURLs(inHTML: BookmarksHTML.export(library)).map(\.absoluteString)
-    #expect(recovered.contains("https://a.com/p?x=1&y=2"))
-    #expect(recovered.contains("https://b.com/tacos"))
-    #expect(recovered.contains("https://c.com/old"))
+    let recovered = BookmarksHTML.links(in: BookmarksHTML.export(library)).map(\.absoluteString)
+    #expect(Set(recovered) == ["https://a.com/p?x=1&y=2", "https://b.com/tacos", "https://c.com/old",
+                               "https://d.com/q?s=%22x%22"])
+}
+
+@Test func linksReadsOnlyTheHrefOfEachBookmark() {
+    let html = """
+        <DT><a href="https://a.com/1" ADD_DATE="1">see https://not-a-bookmark.com in a.com/2</a>
+        <DD>Notes mention https://also-not.com
+        <DT><A HREF="https://b.com/x?a=1&amp;b=2">B</A>
+        <DT><A HREF="place:sort=8">Firefox smart folder</A>
+        <DT><A HREF = 'https://c.com/single'>C</A>
+        <DT><A HREF="https://en.wikipedia.org/wiki/Bob&#39;s_Burgers">D</A>
+        <DT><A data-href="https://not-a-bookmark.com/data" HREF="https://e.com/real">E</A>
+        """
+    #expect(BookmarksHTML.links(in: html).map(\.absoluteString) == [
+        "https://a.com/1", "https://b.com/x?a=1&b=2", "https://c.com/single",
+        "https://en.wikipedia.org/wiki/Bob's_Burgers", "https://e.com/real",
+    ])
 }
 
 @Test func exportOfAnEmptyLibraryIsStillAValidBookmarkFile() {
