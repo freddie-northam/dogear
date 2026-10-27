@@ -23,19 +23,14 @@ public final class EnrichmentService {
 
         let result = await metadata.fetch(for: url)
         let resolved = URLCleaner.canonicalString(result.resolvedURL)
-        guard let fetched = result.metadata else {
-            guard var latest = current(id) else { return }
-            latest.url = resolved
-            save(latest)
-            return
-        }
+        let fetched = result.metadata
 
         var guess: String?
-        if current(id)?.manuallyFiled == false {
+        if let fetched, current(id)?.manuallyFiled == false {
             guess = await categorizer.categorize(fetched, url: result.resolvedURL, folders: store.library.folders)
         }
         var storedThumbnail = false
-        if let thumbnailURL = fetched.thumbnailURL,
+        if let thumbnailURL = fetched?.thumbnailURL,
            let data = try? await client.data(from: thumbnailURL, limit: FetchLimit.thumbnail) {
             storedThumbnail = thumbnails.store(data, for: id)
         }
@@ -43,12 +38,14 @@ public final class EnrichmentService {
         // Every await above lets the user edit this bookmark, so apply onto the record as it is now.
         guard var latest = current(id) else { return }
         latest.url = resolved
-        if let title = fetched.title, !title.isEmpty { latest.title = title }
-        latest.author = fetched.author ?? latest.author
-        latest.source = fetched.source
         if storedThumbnail { latest.hasThumbnail = true }
-        if !latest.manuallyFiled {
-            latest.folder = guess.flatMap { store.library.folders.contains($0) ? $0 : nil } ?? Library.unsorted
+        if let fetched {
+            if let title = fetched.title, !title.isEmpty { latest.title = title }
+            latest.author = fetched.author ?? latest.author
+            latest.source = fetched.source
+            if !latest.manuallyFiled {
+                latest.folder = guess.flatMap { store.library.folders.contains($0) ? $0 : nil } ?? Library.unsorted
+            }
         }
         save(latest)
     }
