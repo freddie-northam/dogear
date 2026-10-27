@@ -3,7 +3,7 @@ import DogearKit
 import MapKit
 
 enum PlaceSnapshot {
-    static let size = CGSize(width: 600, height: 300)
+    static let size = CGSize(width: ThumbnailCache.maxPixelSize, height: ThumbnailCache.maxPixelSize / 2)
     static let span = MKCoordinateSpan(latitudeDelta: 0.004, longitudeDelta: 0.004)
 
     static func pngData(for place: Place) async -> Data? {

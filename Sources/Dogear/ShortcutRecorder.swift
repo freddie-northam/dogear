@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import DogearKit
 import SwiftUI
 
@@ -43,7 +44,7 @@ struct ShortcutRecorder: View {
     private func startListening() {
         isRecording = true
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            if event.keyCode == 53 {
+            if event.keyCode == UInt16(kVK_Escape) {
                 stopListening()
                 return nil
             }

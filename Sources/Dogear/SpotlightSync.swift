@@ -32,6 +32,7 @@ enum SpotlightSync {
 /// if batch mode ever works for an app signed like this one.
 private struct SystemSpotlightIndex: SpotlightIndexing {
     static let stampKey = "spotlightFingerprint"
+    static let chunkSize = 500
 
     private var index: CSSearchableIndex { .default() }
 
@@ -49,8 +50,8 @@ private struct SystemSpotlightIndex: SpotlightIndexing {
 
     func publish(_ items: [CSSearchableItem], stamp: Data) async {
         let index = index
-        for chunk in stride(from: 0, to: items.count, by: 500) {
-            let slice = Array(items[chunk..<min(chunk + 500, items.count)])
+        for chunk in stride(from: 0, to: items.count, by: Self.chunkSize) {
+            let slice = Array(items[chunk..<min(chunk + Self.chunkSize, items.count)])
             let failed = await withCheckedContinuation { continuation in
                 index.indexSearchableItems(slice) { error in
                     continuation.resume(returning: error != nil)

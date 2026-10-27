@@ -9,7 +9,7 @@ public final class ThumbnailCache: @unchecked Sendable {
     // boundary is safe without extra locking.
     private let decoded = NSCache<NSUUID, NSImage>()
 
-    static let maxPixelSize = 600
+    public static let maxPixelSize = 600
 
     public init(directory: URL) throws {
         self.directory = directory

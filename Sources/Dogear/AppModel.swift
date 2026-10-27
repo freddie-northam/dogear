@@ -10,6 +10,7 @@ struct CaptureResult {
 @MainActor
 final class AppModel: ObservableObject {
     static weak var shared: AppModel?
+    nonisolated static let concurrencyCap = 4
 
     let store: BookmarkStore
     let enrichment: EnrichmentService
@@ -33,8 +34,12 @@ final class AppModel: ObservableObject {
             supportDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
                 .appendingPathComponent("Dogear")
         }
-        store = try! BookmarkStore(directory: supportDir)
-        thumbnails = try! ThumbnailCache(directory: supportDir.appendingPathComponent("thumbnails"))
+        do {
+            store = try BookmarkStore(directory: supportDir)
+            thumbnails = try ThumbnailCache(directory: supportDir.appendingPathComponent("thumbnails"))
+        } catch {
+            fatalError("Dogear cannot read its library and has no backup: \(error)")
+        }
         if store.didRecoverFromBackup {
             storageError = "Dogear restored your bookmarks from a backup. Recent changes may be missing."
         }
@@ -156,7 +161,7 @@ final class AppModel: ObservableObject {
             var drawn: [UUID] = []
             await withTaskGroup(of: UUID?.self) { group in
                 var iterator = saved.makeIterator()
-                for _ in 0..<4 {
+                for _ in 0..<Self.concurrencyCap {
                     guard let bookmark = iterator.next() else { break }
                     group.addTask { await AppModel.drawMap(for: bookmark, into: thumbnails) }
                 }
@@ -206,7 +211,7 @@ final class AppModel: ObservableObject {
             Task {
                 await withTaskGroup(of: Void.self) { group in
                     var iterator = ids.makeIterator()
-                    for _ in 0..<4 {
+                    for _ in 0..<Self.concurrencyCap {
                         guard let id = iterator.next() else { break }
                         group.addTask { await enrichment.enrich(id: id) }
                     }

@@ -11,7 +11,7 @@ final class HotKeyMonitor: ObservableObject {
 
     @Published private(set) var isUnavailable = false
 
-    private static let signature = OSType(0x44_47_52_31)
+    private static let signature: OSType = "DGR1".utf8.reduce(0) { $0 << 8 | OSType($1) }
 
     private var reference: EventHotKeyRef?
     private var handler: EventHandlerRef?
