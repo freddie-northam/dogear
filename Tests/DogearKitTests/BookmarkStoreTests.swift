@@ -1036,3 +1036,79 @@ private func testPlace(_ name: String, latitude: Double = 51.5, longitude: Doubl
     #expect(reloaded.library.bookmarks.first?.doneAt != nil)
     #expect(reloaded.library.bookmarks.first?.favoritedAt != nil)
 }
+
+@Test func aSearchKeystrokeTakesUnder40msWithTwentyThousandBookmarks() throws {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    let words = ["Creamy", "garlic", "pasta", "Crème", "brûlée", "Ramen", "Tokyo", "São", "Paulo", "café", "review", "Swift"]
+    for i in 0..<20_000 {
+        _ = store.addForTesting(
+            urlString: "https://example\(i % 300).com/post/\(i)",
+            title: (0..<6).map { words[($0 * 7 + i) % words.count] }.joined(separator: " "),
+            author: i % 3 == 0 ? "Gordon \(i)" : nil,
+            note: i % 5 == 0 ? "make for game night \(i)" : nil
+        )
+    }
+
+    // The first search after a change builds the search text, so it is timed on its own.
+    let start = ContinuousClock.now
+    let first = store.search("g").count
+    let firstElapsed = ContinuousClock.now - start
+
+    var slowest = Duration.zero
+    var total = first
+    for query in ["ga", "gam", "game", "game n", "crè", "brûl", "zzz", "example12.com"] {
+        let start = ContinuousClock.now
+        total += store.search(query).count
+        slowest = max(slowest, ContinuousClock.now - start)
+    }
+    #expect(total == 58_738)
+
+    if ProcessInfo.processInfo.environment["PERF"] != nil {
+        #expect(firstElapsed < .milliseconds(400))
+        #expect(slowest < .milliseconds(40))
+    }
+}
+
+@Test func searchSeesEveryChangeSinceTheLastSearch() throws {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    let (a, _) = try #require(store.add(url: URL(string: "https://a.com/1")!))
+    #expect(store.search("risotto").isEmpty)
+
+    var updated = a
+    updated.title = "Risotto"
+    store.update(updated)
+    #expect(store.search("risotto").map(\.id) == [a.id])
+
+    updated.note = "for sunday"
+    store.update(updated)
+    #expect(store.search("sunday").map(\.id) == [a.id])
+
+    let (b, _) = try #require(store.add(url: URL(string: "https://b.com/risotto")!))
+    #expect(Set(store.search("risotto").map(\.id)) == [a.id, b.id])
+
+    _ = store.remove(id: a.id)
+    #expect(store.search("risotto").map(\.id) == [b.id])
+}
+
+@Test func searchIgnoresCaseKeepsAccentsAndLibraryOrder() throws {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    for (i, title) in ["Crème brûlée", "PASTA night", "Pasta al forno"].enumerated() {
+        _ = store.addForTesting(urlString: "https://a.com/\(i)", title: title)
+    }
+    #expect(store.search("pasta").map(\.title) == ["PASTA night", "Pasta al forno"])
+    #expect(store.search("CRÈME").map(\.title) == ["Crème brûlée"])
+    #expect(store.search("creme").isEmpty)
+    #expect(store.search("").isEmpty)
+}
+
+@Test func searchDoesNotMatchAcrossTwoFields() throws {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    _ = store.addForTesting(urlString: "https://a.com/1", title: "pasta", author: "Gordon")
+    #expect(store.search("pasta").count == 1)
+    #expect(store.search("pastagordon").isEmpty)
+    #expect(store.search("pasta gordon").isEmpty)
+}
