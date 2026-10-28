@@ -46,11 +46,9 @@ func renderPNG(pixels: Int) -> Data {
     return rep.representation(using: .png, properties: [:])!
 }
 
-// The ten names iconutil requires.
-for size in [16, 32, 128, 256, 512] {
-    try renderPNG(pixels: size)
-        .write(to: URL(fileURLWithPath: "\(iconsetPath)/icon_\(size)x\(size).png"))
-    try renderPNG(pixels: size * 2)
-        .write(to: URL(fileURLWithPath: "\(iconsetPath)/icon_\(size)x\(size)@2x.png"))
+// Each pixel size once. macOS shows the 32 px image for 16 pt at 2x, so a second copy under the @2x name only adds bytes.
+for (name, pixels) in [("16x16", 16), ("32x32", 32), ("32x32@2x", 64), ("128x128", 128),
+                       ("256x256", 256), ("512x512", 512), ("512x512@2x", 1024)] {
+    try renderPNG(pixels: pixels).write(to: URL(fileURLWithPath: "\(iconsetPath)/icon_\(name).png"))
 }
 print("Wrote \(iconsetPath)")
