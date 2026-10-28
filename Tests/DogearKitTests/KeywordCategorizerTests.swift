@@ -47,15 +47,15 @@ private struct AccuracyEntry: Decodable {
     #expect(folder == "Gym")
 }
 
-@Test func githubFilesToCodeWhenTheFolderExists() async {
+@Test func githubFilesToDeveloperWhenTheFolderExists() async {
     let metadata = FetchedMetadata(title: "swiftlang/swift", description: nil)
     let folder = await KeywordCategorizer().categorize(
         metadata, url: URL(string: "https://github.com/swiftlang/swift")!,
-        folders: ["Code", Library.unsorted])
-    #expect(folder == "Code")
+        folders: ["Developer", Library.unsorted])
+    #expect(folder == "Developer")
 }
 
-@Test func githubStaysUnfiledWithoutACodeFolder() async {
+@Test func githubStaysUnfiledWithoutADeveloperFolder() async {
     let metadata = FetchedMetadata(title: "swiftlang/swift", description: nil)
     let folder = await KeywordCategorizer().categorize(
         metadata, url: URL(string: "https://github.com/swiftlang/swift")!,
@@ -101,4 +101,59 @@ private struct AccuracyEntry: Decodable {
         #expect(folderSymbol(for: folder) != "folder", "\(folder) has no distinct symbol")
         #expect(folderColor(for: folder) != folderColor(for: "SomeUnknownFolderName"), "\(folder) has no distinct color")
     }
+}
+
+private func file(_ title: String, in folders: [String], url: String = "https://a.com", source: Source = .web) async -> String? {
+    await KeywordCategorizer().categorize(FetchedMetadata(title: title, description: nil, source: source),
+                                          url: URL(string: url)!, folders: folders)
+}
+
+private let technical = ["Developer", "AI", "Design", Library.unsorted]
+
+@Test(arguments: ["Check your email", "Now available in stores", "Meet the captain", "Said the maid"])
+func aFolderNameMatchesOnlyAsAWholeWord(title: String) async {
+    #expect(await file(title, in: ["AI", Library.unsorted]) == nil)
+}
+
+@Test(arguments: ["AI is eating software", "New ai: what changed", "(AI) roundup", "Thoughts on AI"])
+func aFolderNameMatchesAtAnyWordBoundary(title: String) async {
+    #expect(await file(title, in: ["AI", Library.unsorted]) == "AI")
+}
+
+@Test(arguments: ["C++", "R&D", "a.b", "(x)", "[y]", "*"])
+func anOddFolderNameNeverCrashesOrLeavesTheList(name: String) async {
+    let folders = [name, "Recipes", Library.unsorted]
+    let titled = await file("Notes on \(name) today", in: folders)
+    #expect(titled == nil || folders.contains(titled!))
+    #expect(await file("Nothing related at all", in: folders) == nil)
+}
+
+@Test(arguments: ["Build a guide to quick wins", "A rapid summary", "Drag and drop storage", "Trust the process", "Click here"])
+func aTechnicalKeywordInsideAnotherWordDoesNotFile(title: String) async {
+    #expect(await file(title, in: technical) == nil)
+}
+
+@Test(arguments: [("Shipping a new shadcn block", "Design"), ("LLMs, agents and evals", "AI"),
+                  ("Our Postgres migration", "Developer"), ("A new typeface for the web", "Design")])
+func anXPostWithOneTechnicalHitFiles(title: String, expected: String) async {
+    #expect(await file(title, in: technical, url: "https://x.com/a/status/1", source: .x) == expected)
+}
+
+@Test func anXPostWithOneChattyHitStillStaysUnfiledBesideTechnicalFolders() async {
+    #expect(await file("watch this tonight", in: Library.defaultFolders + ["Developer", "AI", "Design"],
+                       url: "https://x.com/a/status/1", source: .x) == nil)
+}
+
+@Test func technicalFoldersNeverFileWhenTheyAreNotInTheList() async {
+    #expect(await file("Shipping a new shadcn block with an llm agent", in: Library.defaultFolders) == nil)
+}
+
+@Test func anOldFolderStillMatchesAKeywordInsideALongerWord() async {
+    #expect(await file("We baked bread", in: Library.defaultFolders) == "Recipes")
+}
+
+@Test func equalScoresGoToTheFolderFirstInTheSidebar() async {
+    let title = "A recipe album"
+    #expect(await file(title, in: ["Recipes", "Music", Library.unsorted]) == "Recipes")
+    #expect(await file(title, in: ["Music", "Recipes", Library.unsorted]) == "Music")
 }
