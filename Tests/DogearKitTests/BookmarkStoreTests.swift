@@ -210,6 +210,7 @@ private func storeWithADoneMiddle(_ dir: URL) throws -> (BookmarkStore, changes:
     let temp = TempDirectory()
     let (store, changes) = try storeWithADoneMiddle(temp.url)
     let before = store.library.bookmarks
+    store.flush()
     let modified = try FileManager.default.attributesOfItem(
         atPath: temp.url.appendingPathComponent("library.json").path)[.modificationDate] as? Date
     let result = store.add(urls: [URL(string: "https://A.com/2/?utm_source=x")!,
@@ -218,6 +219,7 @@ private func storeWithADoneMiddle(_ dir: URL) throws -> (BookmarkStore, changes:
     #expect(result.existing.map(\.url) == ["https://a.com/2", "https://a.com/3"])
     #expect(store.library.bookmarks == before)
     #expect(changes() == 0)
+    store.flush()
     let after = try FileManager.default.attributesOfItem(
         atPath: temp.url.appendingPathComponent("library.json").path)[.modificationDate] as? Date
     #expect(after == modified)
@@ -384,6 +386,7 @@ private func storeWithADoneMiddle(_ dir: URL) throws -> (BookmarkStore, changes:
     let store = try BookmarkStore(directory: dir)
     _ = store.add(url: URL(string: "https://a.com/1")!)
     _ = store.add(url: URL(string: "https://a.com/2")!)
+    store.flush()
     try Data("{corrupt".utf8).write(to: dir.appendingPathComponent("library.json"))
     let recovered = try BookmarkStore(directory: dir)
     #expect(recovered.library.bookmarks.count == 1)
@@ -396,6 +399,7 @@ private func storeWithADoneMiddle(_ dir: URL) throws -> (BookmarkStore, changes:
     let store = try BookmarkStore(directory: dir)
     _ = store.add(url: URL(string: "https://a.com/1")!)
     _ = store.add(url: URL(string: "https://a.com/2")!)
+    store.flush()
     try Data("{corrupt".utf8).write(to: dir.appendingPathComponent("library.json"))
     _ = try BookmarkStore(directory: dir)
     try Data("{corrupt".utf8).write(to: dir.appendingPathComponent("library.json"))
@@ -410,6 +414,7 @@ private func storeWithADoneMiddle(_ dir: URL) throws -> (BookmarkStore, changes:
     let store = try BookmarkStore(directory: dir)
     _ = store.add(url: URL(string: "https://a.com/1")!)
     _ = store.add(url: URL(string: "https://a.com/2")!)
+    store.flush()
     try FileManager.default.removeItem(at: dir.appendingPathComponent("library.json"))
     let recovered = try BookmarkStore(directory: dir)
     #expect(recovered.library.bookmarks.count == 1)
@@ -422,10 +427,12 @@ private func storeWithADoneMiddle(_ dir: URL) throws -> (BookmarkStore, changes:
     let store = try BookmarkStore(directory: dir)
     _ = store.add(url: URL(string: "https://a.com/1")!)
     _ = store.add(url: URL(string: "https://a.com/2")!)
+    store.flush()
     try FileManager.default.removeItem(at: dir.appendingPathComponent("library.json"))
     let recovered = try BookmarkStore(directory: dir)
     _ = recovered.add(url: URL(string: "https://a.com/3")!)
     _ = recovered.add(url: URL(string: "https://a.com/4")!)
+    recovered.flush()
     try Data("{corrupt".utf8).write(to: dir.appendingPathComponent("library.json"))
     let recoveredAgain = try BookmarkStore(directory: dir)
     #expect(!recoveredAgain.library.bookmarks.isEmpty)
@@ -774,7 +781,7 @@ private func testPlace(_ name: String, latitude: Double = 51.5, longitude: Doubl
     #expect(changes == 0)
 }
 
-@Test func picksAndRecordsTheShowingUnder50msWithFiveThousandBookmarks() throws {
+@Test func picksUnder50msAndRecordsTheShowingUnder5msWithFiveThousandBookmarks() throws {
     let temp = TempDirectory()
     let store = try BookmarkStore(directory: temp.url)
     for i in 0..<5000 {
@@ -792,7 +799,7 @@ private func testPlace(_ name: String, latitude: Double = 51.5, longitude: Doubl
 
     if ProcessInfo.processInfo.environment["PERF"] != nil {
         #expect(pickElapsed < .milliseconds(50))
-        #expect(markElapsed < .milliseconds(50))
+        #expect(markElapsed < .milliseconds(5))
     }
 }
 
@@ -932,6 +939,7 @@ private func testPlace(_ name: String, latitude: Double = 51.5, longitude: Doubl
     store.add(url: URL(string: "https://a.com/x")!)
     store.add(url: URL(string: "https://u:secret@a.com/x")!)
     #expect(store.library.bookmarks.map(\.url) == ["https://a.com/x"])
+    store.flush()
     let file = try String(contentsOf: temp.url.appendingPathComponent("library.json"), encoding: .utf8)
     #expect(!file.contains("secret"))
 }
@@ -957,4 +965,74 @@ private func testPlace(_ name: String, latitude: Double = 51.5, longitude: Doubl
     let temp = TempDirectory()
     let store = try BookmarkStore(directory: temp.url)
     #expect(store.add(url: URL(string: "http://localhost:3000/docs")!)?.isNew == true)
+}
+
+@Test func aStarClickTakesUnder5msWithFiveThousandBookmarksWhileAWriteIsQueued() throws {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    for i in 0..<5000 {
+        _ = store.addForTesting(urlString: "https://example.com/item/\(i)")
+    }
+    store.saveNow()
+    let id = store.library.bookmarks[0].id
+
+    var slowest = Duration.zero
+    for _ in 0..<3 {
+        let start = ContinuousClock.now
+        store.toggleFavorite(id: id)
+        slowest = max(slowest, ContinuousClock.now - start)
+    }
+    store.flush()
+
+    if ProcessInfo.processInfo.environment["PERF"] != nil {
+        #expect(slowest < .milliseconds(5))
+    }
+}
+
+@Test func theLastOfABurstOfChangesIsOnDisk() throws {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    let bookmark = try #require(store.add(url: URL(string: "https://a.com/1")!)).bookmark
+    for _ in 0..<51 {
+        store.toggleFavorite(id: bookmark.id)
+    }
+    store.flush()
+    let data = try Data(contentsOf: temp.url.appendingPathComponent("library.json"))
+    let onDisk = try JSONDecoder().decode(Library.self, from: data)
+    #expect(onDisk.bookmarks.first?.favoritedAt != nil)
+}
+
+@Test func aChangeSurvivesTheStoreThatMadeIt() throws {
+    let temp = TempDirectory()
+    var id: UUID?
+    do {
+        let store = try BookmarkStore(directory: temp.url)
+        id = store.add(url: URL(string: "https://a.com/1")!)?.bookmark.id
+    }
+    let reloaded = try BookmarkStore(directory: temp.url)
+    #expect(reloaded.library.bookmarks.map(\.id) == [try #require(id)])
+}
+
+@MainActor @Test(.timeLimit(.minutes(1))) func aFailedWriteReportsOnTheMainThreadAndALaterChangeStillSaves() async throws {
+    let temp = TempDirectory()
+    let dir = temp.url.appendingPathComponent("library")
+    let store = try BookmarkStore(directory: dir)
+    let bookmark = try #require(store.add(url: URL(string: "https://a.com/1")!)).bookmark
+    store.flush()
+    try FileManager.default.removeItem(at: dir)
+
+    let onMain = await withCheckedContinuation { continuation in
+        store.onWriteFailure = { _ in
+            store.onWriteFailure = nil
+            continuation.resume(returning: Thread.isMainThread)
+        }
+        store.toggleFavorite(id: bookmark.id)
+    }
+    #expect(onMain)
+
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    store.markDone(id: bookmark.id)
+    let reloaded = try BookmarkStore(directory: dir)
+    #expect(reloaded.library.bookmarks.first?.doneAt != nil)
+    #expect(reloaded.library.bookmarks.first?.favoritedAt != nil)
 }

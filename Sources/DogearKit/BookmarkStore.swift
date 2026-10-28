@@ -18,11 +18,14 @@ public final class BookmarkStore {
 
     private let fileURL: URL
     private let backupURL: URL
+    // ponytail: one queue for every store, so a new store waits for the writes of an old one. Key it by directory if two libraries ever need to write at once.
+    private static let writes = DispatchQueue(label: "Dogear.library-writes", qos: .utility)
 
     public init(directory: URL) throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         fileURL = directory.appendingPathComponent("library.json")
         backupURL = directory.appendingPathComponent("library.json.bak")
+        Self.writes.sync {}
 
         if let data = try? Data(contentsOf: fileURL),
            let loaded = try? JSONDecoder().decode(Library.self, from: data) {
@@ -369,36 +372,43 @@ public final class BookmarkStore {
     /// Records that the pick row showed this bookmark, so the next draw
     /// prefers one the user has not seen. This writes but does not notify:
     /// nothing on screen changes, so a redraw would be wasted work.
-    /// ponytail: one whole-library write per popover open, measured at 17 ms
-    /// with 5,000 bookmarks against a 150 ms popover budget. Coalesce the
-    /// write if that margin ever closes.
     public func markShown(id: UUID) {
         guard let index = library.bookmarks.firstIndex(where: { $0.id == id }) else { return }
         library.bookmarks[index].lastShownAt = Date()
-        saveNow()
+        save()
     }
 
     private func mutated() {
-        saveNow()
+        save()
         onChange?()
     }
 
+    /// Waits until every queued write is on disk.
+    public func flush() {
+        Self.writes.sync {}
+    }
+
+    /// Writes the library before it returns.
     public func saveNow() {
-        let data: Data
-        do {
-            data = try JSONEncoder().encode(library)
-        } catch {
-            onWriteFailure?(error)
-            return
-        }
-        if FileManager.default.fileExists(atPath: fileURL.path) {
-            try? FileManager.default.removeItem(at: backupURL)
-            try? FileManager.default.copyItem(at: fileURL, to: backupURL)
-        }
-        do {
-            try data.write(to: fileURL, options: .atomic)
-        } catch {
-            onWriteFailure?(error)
+        save()
+        flush()
+    }
+
+    /// A change copies the library here and queues the encode and the write, so a click does not wait for the disk.
+    /// The queue is serial, so the file always ends at the last change.
+    private func save() {
+        let snapshot = library
+        Self.writes.async { [fileURL, backupURL, weak self] in
+            do {
+                let data = try JSONEncoder().encode(snapshot)
+                if FileManager.default.fileExists(atPath: fileURL.path) {
+                    try? FileManager.default.removeItem(at: backupURL)
+                    try? FileManager.default.copyItem(at: fileURL, to: backupURL)
+                }
+                try data.write(to: fileURL, options: .atomic)
+            } catch {
+                DispatchQueue.main.async { self?.onWriteFailure?(error) }
+            }
         }
     }
 
