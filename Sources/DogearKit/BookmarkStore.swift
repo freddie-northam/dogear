@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 
 enum DuplicatePolicy {
     case resave
@@ -10,7 +11,7 @@ struct Added {
     var existing: [Bookmark] = []
 }
 
-/// Read and written only on `BookmarkStore.writes`, or in `init` before the first write.
+/// Read and written only on the store's write queue, or in `init` before the first write.
 private final class LastWritten: @unchecked Sendable {
     var data: Data?
 }
@@ -27,8 +28,9 @@ public final class BookmarkStore {
     private var searchTexts: [[UInt8]]?
     private let fileURL: URL
     private let backupURL: URL
-    // ponytail: one queue for every store, so a new store waits for the writes of an old one. Key it by directory if two libraries ever need to write at once.
-    private static let writes = DispatchQueue(label: "Dogear.library-writes", qos: .utility)
+    /// One write queue per library folder, so a new store waits for the writes of an old store on the same folder, and no other.
+    private static let queues = Mutex<[String: DispatchQueue]>([:])
+    private let writes: DispatchQueue
     /// The bytes this store wrote or loaded last. The backup is a copy of them, so a file that something else corrupted never becomes the backup.
     private let lastWritten = LastWritten()
 
@@ -36,7 +38,12 @@ public final class BookmarkStore {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         fileURL = directory.appendingPathComponent("library.json")
         backupURL = directory.appendingPathComponent("library.json.bak")
-        Self.writes.sync {}
+        writes = Self.queues.withLock { queues in
+            let queue = queues[directory.standardizedFileURL.path] ?? DispatchQueue(label: "Dogear.library-writes", qos: .utility)
+            queues[directory.standardizedFileURL.path] = queue
+            return queue
+        }
+        writes.sync {}
 
         if let data = try? Data(contentsOf: fileURL),
            let loaded = try? JSONDecoder().decode(Library.self, from: data) {
@@ -406,7 +413,7 @@ public final class BookmarkStore {
 
     /// Waits until every queued write is on disk.
     public func flush() {
-        Self.writes.sync {}
+        writes.sync {}
     }
 
     /// Writes the library before it returns.
@@ -419,7 +426,7 @@ public final class BookmarkStore {
     /// The queue is serial, so the file always ends at the last change.
     private func save() {
         let snapshot = library
-        Self.writes.async { [fileURL, backupURL, lastWritten, weak self] in
+        writes.async { [fileURL, backupURL, lastWritten, weak self] in
             do {
                 let data = try JSONEncoder().encode(snapshot)
                 if let previous = lastWritten.data {
