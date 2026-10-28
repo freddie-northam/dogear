@@ -11,11 +11,15 @@ struct Added {
 }
 
 public final class BookmarkStore {
-    public private(set) var library: Library
+    public private(set) var library: Library {
+        didSet { searchTexts = nil }
+    }
     public private(set) var didRecoverFromBackup = false
     public var onChange: (() -> Void)?
     public var onWriteFailure: ((Error) -> Void)?
 
+    /// The lowercased NFC bytes of each bookmark, in library order. A keystroke then allocates nothing per bookmark.
+    private var searchTexts: [[UInt8]]?
     private let fileURL: URL
     private let backupURL: URL
     // ponytail: one queue for every store, so a new store waits for the writes of an old one. Key it by directory if two libraries ever need to write at once.
@@ -312,15 +316,24 @@ public final class BookmarkStore {
     }
 
     public func search(_ query: String) -> [Bookmark] {
-        let needle = query.lowercased()
+        let needle = Self.searchBytes(query)
         guard !needle.isEmpty else { return [] }
-        return library.bookmarks.filter {
-            $0.title.lowercased().contains(needle)
-                || ($0.author?.lowercased().contains(needle) ?? false)
-                || ($0.note?.lowercased().contains(needle) ?? false)
-                || ($0.place?.address?.lowercased().contains(needle) ?? false)
-                || $0.url.lowercased().contains(needle)
+        // A NUL between fields, so a query cannot match across two of them.
+        let texts = searchTexts ?? library.bookmarks.map {
+            Array([$0.title, $0.author, $0.note, $0.place?.address, $0.url].compactMap { $0.map(Self.searchBytes) }.joined(separator: [0]))
         }
+        searchTexts = texts
+        // ponytail: bytes, not Characters. String.contains took 20 to 37 ms a keystroke at 20,000 bookmarks.
+        // Both sides are NFC, so the two agree except inside a combining sequence that has no composed form.
+        return zip(library.bookmarks, texts).filter { _, text in
+            text.withUnsafeBytes { t in needle.withUnsafeBytes { n in memmem(t.baseAddress, t.count, n.baseAddress, n.count) != nil } }
+        }.map(\.0)
+    }
+
+    /// NFC adds 23 ms at 20,000 bookmarks and changes nothing in ASCII text, so ASCII skips it. Call it once per field: one accent in a joined string sends every field down the slow path.
+    private static func searchBytes(_ text: String) -> [UInt8] {
+        let lowered = text.lowercased()
+        return Array(lowered.utf8.allSatisfy { $0 < 0x80 } ? lowered.utf8 : lowered.precomposedStringWithCanonicalMapping.utf8)
     }
 
     /// Favourites are a lens, not a queue: done bookmarks stay in the list.
@@ -412,9 +425,9 @@ public final class BookmarkStore {
         }
     }
 
-    func addForTesting(urlString: String) -> Bookmark {
+    func addForTesting(urlString: String, title: String? = nil, author: String? = nil, note: String? = nil) -> Bookmark {
         let bookmark = Bookmark(
-            id: UUID(), url: urlString, title: urlString, author: nil, note: nil,
+            id: UUID(), url: urlString, title: title ?? urlString, author: author, note: note,
             folder: Library.unsorted, source: .web, createdAt: Date(), doneAt: nil,
             hasThumbnail: false, manuallyFiled: false
         )
