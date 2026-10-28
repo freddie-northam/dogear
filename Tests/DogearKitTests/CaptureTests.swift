@@ -165,6 +165,7 @@ func summaryTellsTheUserWhatHappened(_ c: SummaryCase) async throws {
     let exported = temp.url.appendingPathComponent("Dogear.html")
     try BookmarksHTML.export(store.library).write(to: exported, atomically: true, encoding: .utf8)
     let libraryFile = temp.url.appendingPathComponent("library.json")
+    store.flush()
     let bytesBefore = try Data(contentsOf: libraryFile)
     let before = store.library
 
@@ -175,6 +176,7 @@ func summaryTellsTheUserWhatHappened(_ c: SummaryCase) async throws {
     #expect(outcome.alreadySaved == 12)
     #expect(store.library == before)
     #expect(store.archive().count == 4)
+    store.flush()
     #expect(try Data(contentsOf: libraryFile) == bytesBefore)
     #expect(try BookmarkStore(directory: temp.url).library == before)
 }

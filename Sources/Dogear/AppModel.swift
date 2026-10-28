@@ -57,6 +57,10 @@ final class AppModel: ObservableObject {
         store.onWriteFailure = { [weak self] error in
             self?.storageError = "Dogear could not save your bookmarks: \(error.localizedDescription)"
         }
+        // The store writes on a queue, so a change from just before quit can still be waiting.
+        _ = NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification, object: nil, queue: .main
+        ) { [store] _ in store.flush() }
     }
 
     // MARK: Spotlight
