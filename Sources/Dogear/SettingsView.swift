@@ -103,7 +103,7 @@ private struct LibrarySettings: View {
                 }
                 Text(clearedThumbnails
                     ? "Cleared. Dogear fetches thumbnails again when you refresh a bookmark."
-                    : "Your library is one JSON file on this Mac, with a backup beside it. Nothing leaves your Mac.")
+                    : "Your library is one JSON file on this Mac, with a backup beside it. Dogear goes online only to get the title and picture of a link you save, and to find a place you add.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
