@@ -352,6 +352,11 @@ public final class BookmarkStore {
     }
 
     /// Favourites are a lens, not a queue: done bookmarks stay in the list.
+    /// Every bookmark not yet done, from every folder, in library order. The window sorts it.
+    public func waiting() -> [Bookmark] {
+        library.bookmarks.filter { !$0.isDone }
+    }
+
     public func favorites() -> [Bookmark] {
         library.bookmarks.filter(\.isFavorite)
             .sorted { ($0.favoritedAt ?? .distantPast) > ($1.favoritedAt ?? .distantPast) }
@@ -361,6 +366,7 @@ public final class BookmarkStore {
         public var byFolder: [String: Int]
         public var favorites: Int
         public var archived: Int
+        public var waiting: Int
     }
 
     /// One pass over the library instead of a filter-and-sort per sidebar
@@ -374,7 +380,8 @@ public final class BookmarkStore {
             if bookmark.isFavorite { favorites += 1 }
             if bookmark.isDone { archived += 1 }
         }
-        return Counts(byFolder: byFolder, favorites: favorites, archived: archived)
+        return Counts(byFolder: byFolder, favorites: favorites, archived: archived,
+                      waiting: library.bookmarks.count - archived)
     }
 
     /// The next bookmark to resurface. Filed bookmarks come before Unsorted
