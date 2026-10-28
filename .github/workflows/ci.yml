@@ -16,6 +16,15 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
+      - name: Read the Swift version
+        id: swift
+        run: echo "version=$(swift --version 2>&1 | shasum | cut -c1-12)" >> "$GITHUB_OUTPUT"
+      # A checkout gives every file a new time, but the build still reuses most of a cached .build.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .build
+          key: build-test-${{ steps.swift.outputs.version }}-${{ github.sha }}
+          restore-keys: build-test-${{ steps.swift.outputs.version }}-
       - name: Run tests
         run: swift test
   perf:
@@ -25,6 +34,14 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
+      - name: Read the Swift version
+        id: swift
+        run: echo "version=$(swift --version 2>&1 | shasum | cut -c1-12)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .build
+          key: build-perf-${{ steps.swift.outputs.version }}-${{ github.sha }}
+          restore-keys: build-perf-${{ steps.swift.outputs.version }}-
       - name: Run performance benchmarks
         run: PERF=1 swift test -c release -Xswiftc -enable-testing --filter BookmarkStoreTests
   package:
@@ -34,6 +51,14 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
+      - name: Read the Swift version
+        id: swift
+        run: echo "version=$(swift --version 2>&1 | shasum | cut -c1-12)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .build
+          key: build-package-${{ steps.swift.outputs.version }}-${{ github.sha }}
+          restore-keys: build-package-${{ steps.swift.outputs.version }}-
       - name: Build the app bundle
         run: Scripts/make-app.sh
       - name: Confirm the bundle exists
