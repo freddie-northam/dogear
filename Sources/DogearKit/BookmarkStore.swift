@@ -10,6 +10,11 @@ struct Added {
     var existing: [Bookmark] = []
 }
 
+/// Read and written only on `BookmarkStore.writes`, or in `init` before the first write.
+private final class LastWritten: @unchecked Sendable {
+    var data: Data?
+}
+
 public final class BookmarkStore {
     public private(set) var library: Library {
         didSet { searchTexts = nil }
@@ -24,6 +29,8 @@ public final class BookmarkStore {
     private let backupURL: URL
     // ponytail: one queue for every store, so a new store waits for the writes of an old one. Key it by directory if two libraries ever need to write at once.
     private static let writes = DispatchQueue(label: "Dogear.library-writes", qos: .utility)
+    /// The bytes this store wrote or loaded last. The backup is a copy of them, so a file that something else corrupted never becomes the backup.
+    private let lastWritten = LastWritten()
 
     public init(directory: URL) throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -34,6 +41,7 @@ public final class BookmarkStore {
         if let data = try? Data(contentsOf: fileURL),
            let loaded = try? JSONDecoder().decode(Library.self, from: data) {
             library = loaded
+            lastWritten.data = data
             migrate()
         } else if let data = try? Data(contentsOf: backupURL),
                   let loaded = try? JSONDecoder().decode(Library.self, from: data) {
@@ -41,6 +49,7 @@ public final class BookmarkStore {
             didRecoverFromBackup = true
             if let data = try? JSONEncoder().encode(library) {
                 try? data.write(to: fileURL, options: .atomic)
+                lastWritten.data = data
             }
             migrate()
         } else if FileManager.default.fileExists(atPath: fileURL.path) {
@@ -85,8 +94,7 @@ public final class BookmarkStore {
         saveNow()
         // The backup still holds the old file, and with it the passwords.
         if hadCredentials {
-            try? FileManager.default.removeItem(at: backupURL)
-            try? FileManager.default.copyItem(at: fileURL, to: backupURL)
+            try? lastWritten.data?.write(to: backupURL, options: .atomic)
         }
     }
 
@@ -411,14 +419,14 @@ public final class BookmarkStore {
     /// The queue is serial, so the file always ends at the last change.
     private func save() {
         let snapshot = library
-        Self.writes.async { [fileURL, backupURL, weak self] in
+        Self.writes.async { [fileURL, backupURL, lastWritten, weak self] in
             do {
                 let data = try JSONEncoder().encode(snapshot)
-                if FileManager.default.fileExists(atPath: fileURL.path) {
-                    try? FileManager.default.removeItem(at: backupURL)
-                    try? FileManager.default.copyItem(at: fileURL, to: backupURL)
+                if let previous = lastWritten.data {
+                    try? previous.write(to: backupURL, options: .atomic)
                 }
                 try data.write(to: fileURL, options: .atomic)
+                lastWritten.data = data
             } catch {
                 DispatchQueue.main.async { self?.onWriteFailure?(error) }
             }

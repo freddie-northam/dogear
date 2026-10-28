@@ -1112,3 +1112,57 @@ private func testPlace(_ name: String, latitude: Double = 51.5, longitude: Doubl
     #expect(store.search("pastagordon").isEmpty)
     #expect(store.search("pasta gordon").isEmpty)
 }
+
+private func backup(_ dir: URL) throws -> Library {
+    try JSONDecoder().decode(Library.self, from: Data(contentsOf: dir.appendingPathComponent("library.json.bak")))
+}
+
+@Test func aCorruptFileFromOutsideNeverReplacesTheBackup() throws {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    _ = store.add(url: URL(string: "https://a.com/1")!)
+    _ = store.add(url: URL(string: "https://a.com/2")!)
+    store.flush()
+    try Data("{corrupt".utf8).write(to: temp.url.appendingPathComponent("library.json"))
+    _ = store.add(url: URL(string: "https://a.com/3")!)
+    store.flush()
+    #expect(try backup(temp.url).bookmarks.count == 2)
+}
+
+@Test func theBackupIsOneChangeBehindAfterABurst() throws {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    for i in 1...20 { _ = store.add(url: URL(string: "https://a.com/\(i)")!) }
+    store.flush()
+    #expect(try backup(temp.url).bookmarks.count == 19)
+}
+
+@Test func theFirstChangeAfterALaunchBacksUpTheFileItLoaded() throws {
+    let temp = TempDirectory()
+    do {
+        let store = try BookmarkStore(directory: temp.url)
+        _ = store.add(url: URL(string: "https://a.com/1")!)
+        store.flush()
+    }
+    try? FileManager.default.removeItem(at: temp.url.appendingPathComponent("library.json.bak"))
+    let store = try BookmarkStore(directory: temp.url)
+    _ = store.add(url: URL(string: "https://a.com/2")!)
+    store.flush()
+    #expect(try backup(temp.url).bookmarks.count == 1)
+}
+
+@Test func theFirstChangeAfterARecoveryBacksUpTheRecoveredLibrary() throws {
+    let temp = TempDirectory()
+    do {
+        let store = try BookmarkStore(directory: temp.url)
+        _ = store.add(url: URL(string: "https://a.com/1")!)
+        _ = store.add(url: URL(string: "https://a.com/2")!)
+        store.flush()
+    }
+    try Data("{corrupt".utf8).write(to: temp.url.appendingPathComponent("library.json"))
+    let recovered = try BookmarkStore(directory: temp.url)
+    _ = recovered.add(url: URL(string: "https://a.com/3")!)
+    recovered.flush()
+    #expect(try backup(temp.url).bookmarks.count == 1)
+    #expect(try BookmarkStore(directory: temp.url).library.bookmarks.count == 2)
+}
