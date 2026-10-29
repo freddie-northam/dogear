@@ -39,9 +39,11 @@ final class ClipboardWatcher: ObservableObject {
     }
 
     func readLink() async -> String? {
+        let count = NSPasteboard.general.changeCount
         guard !copyIsPrivate else { return nil }
         let detected = try? await NSPasteboard.general.detectedPatterns(for: [\.links])
-        guard detected?.contains(\.links) == true else { return nil }
+        // The copy can change during the await, so a new private copy must not be read.
+        guard NSPasteboard.general.changeCount == count, detected?.contains(\.links) == true else { return nil }
         return NSPasteboard.general.string(forType: .string)
     }
 
