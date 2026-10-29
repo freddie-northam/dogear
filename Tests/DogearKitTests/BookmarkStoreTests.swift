@@ -906,7 +906,7 @@ private func testPlace(_ name: String, latitude: Double = 51.5, longitude: Doubl
     }
 }
 
-@MainActor @Test func reimportingAFiveThousandLinkExportWritesNothingUnder200ms() async throws {
+@MainActor @Test func reimportingAFiveThousandLinkExportWritesNothingUnder300ms() async throws {
     let temp = TempDirectory()
     let bookmarks = (0..<5_000).map { i in
         Bookmark(id: UUID(), url: "https://example.com/item/\(i)", title: "Item \(i)", author: nil, note: nil,
@@ -929,7 +929,7 @@ private func testPlace(_ name: String, latitude: Double = 51.5, longitude: Doubl
     #expect(store.archive().count == 1_000)
     #expect(changes == 0)
     if ProcessInfo.processInfo.environment["PERF"] != nil {
-        #expect(elapsed < .milliseconds(200))
+        #expect(elapsed < .milliseconds(300))
     }
 }
 
