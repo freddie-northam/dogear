@@ -13,6 +13,7 @@ struct CapturePopover: View {
     @State private var text = ""
     @State private var hint: String?
     @State private var pick: Bookmark?
+    @State private var pickFolder: String?
     @State private var isPickHovering = false
     @State private var detectedURLCount = 0
     @AppStorage("popoverListTab") private var listTab = "recents"
@@ -43,6 +44,7 @@ struct CapturePopover: View {
         .frame(width: 350)
         .animation(Motion.reveal, value: hint)
         .onAppear {
+            pickFolder = nil
             rollPick()
             Task { await prefill() }
         }
@@ -184,7 +186,12 @@ struct CapturePopover: View {
     }
 
     private func rollPick(excluding excluded: UUID? = nil) {
-        let next = model.store.pick(excluding: excluded)
+        var next = model.store.pick(excluding: excluded, in: pickFolder)
+        // The chosen folder ran out, so fall back to every folder rather than show an empty row.
+        if next == nil, pickFolder != nil {
+            pickFolder = nil
+            next = model.store.pick(excluding: excluded)
+        }
         if let next { model.store.markShown(id: next.id) }
         pick = next
     }
@@ -196,12 +203,7 @@ struct CapturePopover: View {
                     .font(.caption2.weight(.medium))
                     .foregroundStyle(.pink)
                 Spacer()
-                if let counts = countsLine {
-                    Text(counts)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
+                countsRow
             }
             pickRow(pick)
                 .id(pick.id)
@@ -274,9 +276,55 @@ struct CapturePopover: View {
         }
     }
 
-    private var countsLine: String? {
+    @ViewBuilder private var countsRow: some View {
         let counts = model.store.counts()
-        let filed = model.store.library.folders
+        let entries = countEntries(counts)
+        if entries.isEmpty {
+            let unsorted = counts.byFolder[Library.unsorted, default: 0]
+            if unsorted > 0 {
+                Text("\(unsorted) to sort.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        } else {
+            HStack(spacing: 0) {
+                ForEach(Array(entries.enumerated()), id: \.element.name) { index, entry in
+                    if index > 0 { Text(", ") }
+                    Button(entry.label) {
+                        pickFolder = entry.name
+                        withAnimation(Motion.reveal) { rollPick() }
+                    }
+                    .buttonStyle(.plain)
+                    .pointerStyle(.link)
+                    .foregroundStyle(entry.name == pickFolder ? AnyShapeStyle(folderColor(for: entry.name)) : AnyShapeStyle(.secondary))
+                    .help("Show a waiting link from \(entry.name)")
+                    .accessibilityLabel("Show a waiting link from \(entry.name)")
+                }
+                Text(" waiting.")
+                if pickFolder != nil {
+                    Button {
+                        pickFolder = nil
+                        withAnimation(Motion.reveal) { rollPick() }
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                    }
+                    .buttonStyle(.plain)
+                    .pointerStyle(.link)
+                    .foregroundStyle(.tertiary)
+                    .padding(.leading, 4)
+                    .help("Show links from every folder")
+                    .accessibilityLabel("Show links from every folder")
+                }
+            }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+        }
+    }
+
+    private func countEntries(_ counts: BookmarkStore.Counts) -> [(name: String, label: String)] {
+        model.store.library.folders
             .filter { $0 != Library.unsorted }
             .compactMap { folder -> (name: String, count: Int)? in
                 let count = counts.byFolder[folder, default: 0]
@@ -284,17 +332,12 @@ struct CapturePopover: View {
             }
             .sorted { $0.count > $1.count }
             .prefix(3)
-        if filed.isEmpty {
-            let unsorted = counts.byFolder[Library.unsorted, default: 0]
-            return unsorted > 0 ? "\(unsorted) to sort." : nil
-        }
-        let parts = filed.map { entry -> String in
-            var name = entry.name.lowercased()
-            // ponytail: naive singularization; a folder like "Dishes" yields "1 dishe".
-            if entry.count == 1, name.hasSuffix("s") { name.removeLast() }
-            return "\(entry.count) \(name)"
-        }
-        return parts.joined(separator: ", ") + " waiting."
+            .map { entry in
+                var name = entry.name.lowercased()
+                // ponytail: naive singularization; a folder like "Dishes" yields "1 dishe".
+                if entry.count == 1, name.hasSuffix("s") { name.removeLast() }
+                return (entry.name, "\(entry.count) \(name)")
+            }
     }
 
     private var listSection: some View {

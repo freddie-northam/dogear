@@ -394,11 +394,12 @@ public final class BookmarkStore {
     /// The row therefore works through the whole library before it shows
     /// anything twice. The given id is excluded when another candidate
     /// exists, so "show another" always moves on.
-    public func pick(excluding excluded: UUID? = nil) -> Bookmark? {
-        let waiting = library.bookmarks.filter { !$0.isDone }
+    /// With a folder, it draws only from that folder, and Unsorted is not set apart.
+    public func pick(excluding excluded: UUID? = nil, in folder: String? = nil) -> Bookmark? {
+        let waiting = library.bookmarks.filter { !$0.isDone && (folder == nil || $0.folder == folder) }
         let pool = waiting.filter { $0.id != excluded }
         let candidates = pool.isEmpty ? waiting : pool
-        let filed = candidates.filter { $0.folder != Library.unsorted }
+        let filed = folder == nil ? candidates.filter { $0.folder != Library.unsorted } : candidates
         let preferred = filed.isEmpty ? candidates : filed
         return preferred.min { left, right in
             let leftShown = left.lastShownAt ?? .distantPast

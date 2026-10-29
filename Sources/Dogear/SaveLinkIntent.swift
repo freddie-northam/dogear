@@ -13,25 +13,22 @@ struct SaveLinkIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<Int> {
-        let model = try await Self.readyModel()
+        let model = try await AppModel.ready()
         return .result(value: model.captureWithoutWindow(text: text).new.count)
-    }
-
-    @MainActor
-    private static func readyModel() async throws -> AppModel {
-        for _ in 0..<20 {
-            if let model = AppModel.shared { return model }
-            try? await Task.sleep(for: .milliseconds(100))
-        }
-        throw SaveLinkError.libraryUnavailable
     }
 }
 
 enum SaveLinkError: Swift.Error, CustomLocalizedStringResourceConvertible {
     case libraryUnavailable
+    case noSuchFolder(String)
+    case noSuchBookmark
 
     var localizedStringResource: LocalizedStringResource {
-        "Dogear could not open your library."
+        switch self {
+        case .libraryUnavailable: "Dogear could not open your library."
+        case .noSuchFolder(let name): "Dogear has no folder named \(name)."
+        case .noSuchBookmark: "Dogear could not find that bookmark."
+        }
     }
 }
 
@@ -42,6 +39,18 @@ struct DogearShortcuts: AppShortcutsProvider {
             phrases: ["Save links to \(.applicationName)"],
             shortTitle: "Save Links",
             systemImageName: "bookmark"
+        )
+        AppShortcut(
+            intent: GetPickIntent(),
+            phrases: ["Get a pick from \(.applicationName)"],
+            shortTitle: "Get a Pick",
+            systemImageName: "sparkles"
+        )
+        AppShortcut(
+            intent: FindBookmarksIntent(),
+            phrases: ["Find bookmarks in \(.applicationName)"],
+            shortTitle: "Find Bookmarks",
+            systemImageName: "magnifyingglass"
         )
     }
 }
