@@ -1166,3 +1166,15 @@ private func backup(_ dir: URL) throws -> Library {
     #expect(try backup(temp.url).bookmarks.count == 1)
     #expect(try BookmarkStore(directory: temp.url).library.bookmarks.count == 2)
 }
+
+@Test func waitingListsEveryUndoneBookmarkInEveryFolderAndMatchesTheCount() throws {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    store.addFolder("Gym")
+    let added = store.add(urls: (1...4).map { URL(string: "https://a.com/\($0)")! }, duplicates: .resave).new
+    store.refile(id: added[0].id, to: "Gym")
+    store.refile(id: added[1].id, to: "Recipes")
+    store.markDone(id: added[2].id)
+    #expect(Set(store.waiting().map(\.id)) == [added[0].id, added[1].id, added[3].id])
+    #expect(store.counts().waiting == 3)
+}
