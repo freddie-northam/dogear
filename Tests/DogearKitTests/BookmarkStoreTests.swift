@@ -339,6 +339,61 @@ private func storeWithADoneMiddle(_ dir: URL) throws -> (BookmarkStore, changes:
     #expect(store.pick(excluding: only.id)?.id == only.id)
 }
 
+/// Two folders, each with waiting links. Recipes holds `recipeA` then `recipeB`, oldest first.
+private func storeWithTwoFolders() throws -> (store: BookmarkStore, recipeA: Bookmark, recipeB: Bookmark, show: Bookmark, temp: TempDirectory) {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    store.addFolder("Recipes")
+    store.addFolder("Shows")
+    let recipeA = store.add(url: URL(string: "https://a.com/recipe-a")!)!.bookmark
+    let recipeB = store.add(url: URL(string: "https://a.com/recipe-b")!)!.bookmark
+    let show = store.add(url: URL(string: "https://a.com/show")!)!.bookmark
+    store.refile(id: recipeA.id, to: "Recipes")
+    store.refile(id: recipeB.id, to: "Recipes")
+    store.refile(id: show.id, to: "Shows")
+    return (store, recipeA, recipeB, show, temp)
+}
+
+@Test func pickInAFolderDrawsOnlyFromThatFolder() throws {
+    let (store, recipeA, recipeB, _, _) = try storeWithTwoFolders()
+    store.markShown(id: recipeA.id)
+    store.markShown(id: recipeB.id)
+    #expect(store.pick(in: "Recipes")?.folder == "Recipes")
+}
+
+@Test func pickInAFolderKeepsTheNeverShownThenOldestOrder() throws {
+    let (store, recipeA, recipeB, _, _) = try storeWithTwoFolders()
+    #expect(store.pick(in: "Recipes")?.id == recipeA.id)
+    store.markShown(id: recipeA.id)
+    #expect(store.pick(in: "Recipes")?.id == recipeB.id)
+}
+
+@Test func pickInAFolderStillMovesOnFromTheExcludedBookmark() throws {
+    let (store, recipeA, recipeB, _, _) = try storeWithTwoFolders()
+    #expect(store.pick(excluding: recipeA.id, in: "Recipes")?.id == recipeB.id)
+}
+
+@Test func pickInAFolderReturnsTheExcludedBookmarkWhenItIsTheOnlyOne() throws {
+    let (store, _, _, show, _) = try storeWithTwoFolders()
+    #expect(store.pick(excluding: show.id, in: "Shows")?.id == show.id)
+}
+
+@Test func pickInAFolderWithNothingWaitingReturnsNil() throws {
+    let (store, recipeA, recipeB, _, _) = try storeWithTwoFolders()
+    store.markDone(id: recipeA.id)
+    store.markDone(id: recipeB.id)
+    #expect(store.pick(in: "Recipes") == nil)
+    #expect(store.pick(in: "Empty") == nil)
+    #expect(store.pick(in: "Nope") == nil)
+}
+
+@Test func pickInUnsortedIsNotSkippedForFiledBookmarks() throws {
+    let (store, _, _, _, _) = try storeWithTwoFolders()
+    let loose = store.add(url: URL(string: "https://a.com/loose")!)!.bookmark
+    #expect(store.pick()?.folder != Library.unsorted)
+    #expect(store.pick(in: Library.unsorted)?.id == loose.id)
+}
+
 @Test func pickWorksThroughTheOldestBookmarksWithoutRepeating() throws {
     let temp = TempDirectory()
     let store = try BookmarkStore(directory: temp.url)
