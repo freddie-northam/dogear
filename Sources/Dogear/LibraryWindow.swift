@@ -45,6 +45,8 @@ struct LibraryWindow: View {
     @State private var isSuggestingFolders = false
     @State private var importFileResult: String?
     @State private var isAddingPlaces = false
+    @State private var showingCommands = false
+    @State private var isAddingFolder = false
     @AppStorage("libraryView") private var viewRaw = "grid"
     @AppStorage("librarySort") private var sortRaw = LibrarySort.lastSaved.rawValue
     @AppStorage("notesImportSelection") private var selectionJSON = ""
@@ -88,6 +90,9 @@ struct LibraryWindow: View {
         .sheet(isPresented: $isSuggestingFolders) {
             FolderSuggestionSheet()
                 .environmentObject(model)
+        }
+        .sheet(isPresented: $showingCommands) {
+            CommandMenu(commands: commands)
         }
         .onChange(of: selectedFolderIDs) { _, ids in saveSelection(ids) }
         .onChange(of: model.spotlightRequest) { _, _ in
@@ -222,7 +227,7 @@ struct LibraryWindow: View {
                 .onMove { source, destination in
                     model.store.moveFolders(fromOffsets: source, toOffset: destination)
                 }
-                NewFolderRow()
+                NewFolderRow(isAdding: $isAddingFolder)
                     .selectionDisabled()
             }
             .background(folderDeletionDialog)
@@ -246,12 +251,7 @@ struct LibraryWindow: View {
                 }
                 if folder == Library.unsorted {
                     Button {
-                        Task {
-                            let filed = await model.fileUnsorted()
-                            fileForMeResult = filed > 0
-                                ? "Dogear filed \(filed) bookmark\(filed == 1 ? "" : "s")."
-                                : "No matches. Add folders that fit your links, then try again."
-                        }
+                        fileUnsortedForMe()
                     } label: {
                         Label("File These for Me", systemImage: "sparkles")
                     }
@@ -284,6 +284,12 @@ struct LibraryWindow: View {
 
     @ToolbarContentBuilder private var toolbarContent: some ToolbarContent {
         ToolbarItemGroup {
+            Button { showingCommands = true } label: {
+                Image(systemName: "command")
+            }
+            .keyboardShortcut("k", modifiers: .command)
+            .help("Commands (⌘K)")
+            .accessibilityLabel("Commands")
             Picker("View", selection: $viewRaw) {
                 Label("Grid", systemImage: "square.grid.2x2").tag("grid")
                 Label("List", systemImage: "list.bullet").tag("list")
@@ -342,6 +348,37 @@ struct LibraryWindow: View {
             .help("Add bookmarks")
             .accessibilityLabel("Add bookmarks")
         }
+    }
+
+    private func fileUnsortedForMe() {
+        Task {
+            let filed = await model.fileUnsorted()
+            fileForMeResult = filed > 0
+                ? "Dogear filed \(filed) bookmark\(filed == 1 ? "" : "s")."
+                : "No matches. Add folders that fit your links, then try again."
+        }
+    }
+
+    private var commands: [LibraryCommand] {
+        let go: [LibraryCommand] =
+            [LibraryCommand(id: "go.favourites", title: "Go to Favourites", symbol: "star.fill") { selection = favoritesID },
+             LibraryCommand(id: "go.waiting", title: "Go to Waiting", symbol: "tray.full") { selection = waitingID }]
+            + model.store.library.folders.map { folder in
+                LibraryCommand(id: "go.\(folder)", title: "Go to \(folder)", symbol: folderSymbol(for: folder)) { selection = folder }
+            }
+            + [LibraryCommand(id: "go.archive", title: "Go to Archive", symbol: "checkmark.circle") { selection = archiveID }]
+        let actions: [LibraryCommand] = [
+            LibraryCommand(id: "save.clipboard", title: "Save from Clipboard", symbol: "doc.on.clipboard") { pasteFromClipboard() },
+            LibraryCommand(id: "import.notes", title: "Import from Notes...", symbol: "square.and.arrow.down") { startImport() },
+            LibraryCommand(id: "import.file", title: "Import Bookmarks File...", symbol: "doc.badge.plus") { importBookmarksFile() },
+            LibraryCommand(id: "places.add", title: "Add Places...", symbol: "mappin.and.ellipse") { isAddingPlaces = true },
+            LibraryCommand(id: "folders.suggest", title: "Suggest Folders...", symbol: "folder.badge.plus") { isSuggestingFolders = true },
+            LibraryCommand(id: "folders.file", title: "File These for Me", symbol: "sparkles") { fileUnsortedForMe() },
+            LibraryCommand(id: "export.markdown", title: "Export as Markdown...", symbol: "square.and.arrow.up") { exportMarkdownFile() },
+            LibraryCommand(id: "export.file", title: "Export Bookmarks File...", symbol: "square.and.arrow.up.on.square") { exportBookmarksFile() },
+        ]
+        let newFolder = LibraryCommand(id: "folder.new", title: "New Folder", symbol: "plus.circle") { isAddingFolder = true }
+        return go + actions + [newFolder]
     }
 
     private var trimmedQuery: String {
@@ -609,7 +646,7 @@ func hostName(_ bookmark: Bookmark) -> String {
 
 private struct NewFolderRow: View {
     @EnvironmentObject var model: AppModel
-    @State private var isAdding = false
+    @Binding var isAdding: Bool
     @State private var name = ""
     @State private var isHovering = false
     @FocusState private var isFieldFocused: Bool
