@@ -1,4 +1,3 @@
-import AppKit
 import Foundation
 import ImageIO
 import UniformTypeIdentifiers
@@ -7,9 +6,15 @@ public final class ThumbnailCache: @unchecked Sendable {
     public let directory: URL
     // NSCache is thread-safe, so sharing it across the @unchecked Sendable
     // boundary is safe without extra locking.
-    private let decoded = NSCache<NSUUID, NSImage>()
+    private let decoded: NSCache<NSUUID, CGImage> = {
+        let cache = NSCache<NSUUID, CGImage>()
+        cache.countLimit = decodedLimit
+        return cache
+    }()
 
     public static let maxPixelSize = 600
+    /// The count limit for decoded images in memory. NSCache uses it as a target, not as a hard cap.
+    public static let decodedLimit = 100
 
     public init(directory: URL) throws {
         self.directory = directory
@@ -20,11 +25,20 @@ public final class ThumbnailCache: @unchecked Sendable {
         directory.appendingPathComponent("\(id.uuidString).img")
     }
 
-    /// Decoded image for display, read from the file once and cached
-    /// thereafter so repeated view body evaluations don't re-decode JPEGs.
-    public func image(for id: UUID) -> NSImage? {
-        if let cached = decoded.object(forKey: id as NSUUID) { return cached }
-        guard let image = NSImage(contentsOf: fileURL(for: id)) else { return nil }
+    /// The decoded image if it is in memory. It never reads the file, so a view body can call it.
+    public func cachedImage(for id: UUID) -> CGImage? {
+        decoded.object(forKey: id as NSUUID)
+    }
+
+    /// Reads and decodes the file off the caller's actor, then caches the image.
+    /// A cancelled task gets nil and no read, unless the image is already in memory.
+    public nonisolated func loadImage(for id: UUID) async -> CGImage? {
+        if let cached = cachedImage(for: id) { return cached }
+        guard !Task.isCancelled,
+              let source = CGImageSourceCreateWithURL(fileURL(for: id) as CFURL, nil),
+              let image = CGImageSourceCreateImageAtIndex(
+                  source, 0, [kCGImageSourceShouldCacheImmediately: true] as CFDictionary)
+        else { return nil }
         decoded.setObject(image, forKey: id as NSUUID)
         return image
     }
