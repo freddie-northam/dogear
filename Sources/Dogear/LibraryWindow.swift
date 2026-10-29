@@ -50,6 +50,7 @@ struct LibraryWindow: View {
     @AppStorage("notesImportCursors") private var cursorsJSON = "{}"
     private let archiveID = AppModel.archiveID
     private let favoritesID = "__favorites__"
+    private let waitingID = "__waiting__"
 
     var body: some View {
         NavigationSplitView {
@@ -192,6 +193,14 @@ struct LibraryWindow: View {
                 }
                 .badge(counts.favorites)
                 .tag(favoritesID)
+                Label {
+                    Text("Waiting")
+                } icon: {
+                    Image(systemName: "tray.full")
+                        .foregroundStyle(.orange)
+                }
+                .badge(counts.waiting)
+                .tag(waitingID)
             }
             Section("Folders") {
                 ForEach(model.store.library.folders, id: \.self) { folder in
@@ -224,7 +233,7 @@ struct LibraryWindow: View {
             }
         }
         .contextMenu(forSelectionType: String.self) { folders in
-            if let folder = folders.first, folder != archiveID, folder != favoritesID {
+            if let folder = folders.first, folder != archiveID, folder != favoritesID, folder != waitingID {
                 Button {
                     copyToPasteboard(Bookmark.markdownList(model.store.bookmarks(in: folder)))
                 } label: {
@@ -337,6 +346,7 @@ struct LibraryWindow: View {
         if !trimmedQuery.isEmpty { return model.store.search(trimmedQuery) }
         if selection == archiveID { return model.store.archive() }
         if selection == favoritesID { return model.store.favorites() }
+        if selection == waitingID { return sorted(model.store.waiting()) }
         return sorted(model.store.bookmarks(in: selection))
     }
 
@@ -368,6 +378,12 @@ struct LibraryWindow: View {
                 "No favourites yet",
                 systemImage: "star",
                 description: Text("Point at a bookmark and click its star.")
+            )
+        } else if bookmarks.isEmpty, selection == waitingID, !model.store.library.bookmarks.isEmpty {
+            ContentUnavailableView(
+                "Nothing waiting",
+                systemImage: "tray",
+                description: Text("Every bookmark is done.")
             )
         } else if bookmarks.isEmpty, selection == archiveID {
             ContentUnavailableView(
@@ -578,7 +594,7 @@ func openBookmarkURL(_ string: String) {
 }
 
 func hostName(_ bookmark: Bookmark) -> String {
-    URL(string: bookmark.url)?.host ?? ""
+    SiteLabel.of(bookmark.url)
 }
 
 private struct NewFolderRow: View {

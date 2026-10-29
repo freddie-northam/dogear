@@ -213,9 +213,7 @@ struct BookmarkCard: View {
                         .foregroundStyle(folderColor(for: bookmark.folder))
                         .help(bookmark.folder)
                         .accessibilityLabel(bookmark.folder)
-                    if let author = bookmark.author {
-                        Text(author).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                    }
+                    Text(bookmark.author ?? hostName(bookmark)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                     Spacer()
                     Text(bookmark.createdAt, format: .dateTime.day().month())
                         .font(.caption2).foregroundStyle(.tertiary)
@@ -371,6 +369,7 @@ struct BookmarkListRow: View {
                     Text(subtitle).font(.caption).foregroundStyle(.tertiary).lineLimit(1)
                 }
                 Spacer(minLength: 8)
+                Text(hostName(bookmark)).font(.caption).foregroundStyle(.tertiary).lineLimit(1)
                 if bookmark.isFavorite {
                     Image(systemName: "star.fill")
                         .font(.caption2)
