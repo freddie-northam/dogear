@@ -9,6 +9,9 @@ public func folderColor(for name: String) -> Color {
     case "Shows": .purple
     case "Music": .red
     case "Articles": .blue
+    case "Developer": .indigo
+    case "AI": .mint
+    case "Design": .yellow
     case "Unsorted": .gray
     default: .teal
     }
@@ -22,6 +25,9 @@ public func folderSymbol(for name: String) -> String {
     case "Shows": "tv"
     case "Music": "music.note"
     case "Articles": "doc.text"
+    case "Developer": "chevron.left.forwardslash.chevron.right"
+    case "AI": "brain"
+    case "Design": "paintbrush.pointed"
     case "Unsorted": "tray"
     default: "folder"
     }

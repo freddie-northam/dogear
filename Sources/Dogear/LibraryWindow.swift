@@ -42,6 +42,7 @@ struct LibraryWindow: View {
     @State private var importState: NotesImportState = .confirm
     @State private var selectedFolderIDs: Set<String> = []
     @State private var fileForMeResult: String?
+    @State private var isSuggestingFolders = false
     @State private var importFileResult: String?
     @State private var isAddingPlaces = false
     @AppStorage("libraryView") private var viewRaw = "grid"
@@ -82,6 +83,10 @@ struct LibraryWindow: View {
         }
         .sheet(isPresented: $isAddingPlaces) {
             PlacesImportSheet()
+                .environmentObject(model)
+        }
+        .sheet(isPresented: $isSuggestingFolders) {
+            FolderSuggestionSheet()
                 .environmentObject(model)
         }
         .onChange(of: selectedFolderIDs) { _, ids in saveSelection(ids) }
@@ -249,6 +254,11 @@ struct LibraryWindow: View {
                         }
                     } label: {
                         Label("File These for Me", systemImage: "sparkles")
+                    }
+                    Button {
+                        isSuggestingFolders = true
+                    } label: {
+                        Label("Suggest Folders...", systemImage: "folder.badge.plus")
                     }
                 }
                 if folder != Library.unsorted {
