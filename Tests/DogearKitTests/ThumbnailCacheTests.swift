@@ -50,35 +50,78 @@ private func makePNG(width: Int = 4, height: Int = 4) -> Data {
     #expect(!cache.exists(for: id))
 }
 
-@Test func imageForReturnsNilWithoutAFile() throws {
+@Test func loadReturnsNilAndCachesNothingWithoutAFile() async throws {
     let temp = TempDirectory()
-    let dir = temp.url
-    let cache = try ThumbnailCache(directory: dir)
-    #expect(cache.image(for: UUID()) == nil)
+    let cache = try ThumbnailCache(directory: temp.url)
+    let id = UUID()
+    #expect(await cache.loadImage(for: id) == nil)
+    #expect(cache.cachedImage(for: id) == nil)
 }
 
-@Test func imageForReadsAndThenCaches() throws {
+@Test func loadReturnsNilAndCachesNothingForACorruptFile() async throws {
     let temp = TempDirectory()
-    let dir = temp.url
-    let cache = try ThumbnailCache(directory: dir)
+    let cache = try ThumbnailCache(directory: temp.url)
+    let id = UUID()
+    try Data("not a jpeg".utf8).write(to: cache.fileURL(for: id))
+    #expect(await cache.loadImage(for: id) == nil)
+    #expect(cache.cachedImage(for: id) == nil)
+}
+
+@Test func theMemoryReadNeverTouchesTheFileButALoadFillsIt() async throws {
+    let temp = TempDirectory()
+    let cache = try ThumbnailCache(directory: temp.url)
     let id = UUID()
     #expect(cache.store(makePNG(), for: id))
-    #expect(cache.image(for: id) != nil)
-    #expect(cache.image(for: id) != nil)
-    cache.remove(for: id)
-    #expect(cache.image(for: id) == nil)
+    #expect(cache.cachedImage(for: id) == nil)
+    let loaded = try #require(await cache.loadImage(for: id))
+    #expect(cache.cachedImage(for: id) === loaded)
+    #expect(await cache.loadImage(for: id) === loaded)
 }
 
-@Test func storeInvalidatesTheDecodedCache() throws {
+@Test func aCancelledLoadReturnsNilAndCachesNothing() async throws {
     let temp = TempDirectory()
-    let dir = temp.url
-    let cache = try ThumbnailCache(directory: dir)
+    let cache = try ThumbnailCache(directory: temp.url)
+    let id = UUID()
+    #expect(cache.store(makePNG(), for: id))
+    let result = await Task {
+        withUnsafeCurrentTask { $0?.cancel() }
+        return await cache.loadImage(for: id)
+    }.value
+    #expect(result == nil)
+    #expect(cache.cachedImage(for: id) == nil)
+}
+
+@Test func removeDropsTheDecodedImage() async throws {
+    let temp = TempDirectory()
+    let cache = try ThumbnailCache(directory: temp.url)
+    let id = UUID()
+    #expect(cache.store(makePNG(), for: id))
+    #expect(await cache.loadImage(for: id) != nil)
+    cache.remove(for: id)
+    #expect(cache.cachedImage(for: id) == nil)
+    #expect(await cache.loadImage(for: id) == nil)
+}
+
+@Test func storeInvalidatesTheDecodedCache() async throws {
+    let temp = TempDirectory()
+    let cache = try ThumbnailCache(directory: temp.url)
     let id = UUID()
     #expect(cache.store(makePNG(width: 4, height: 4), for: id))
-    let first = try #require(cache.image(for: id))
-    #expect(first.size.width == 4)
+    let first = try #require(await cache.loadImage(for: id))
+    #expect(first.width == 4)
     #expect(cache.store(makePNG(width: 40, height: 40), for: id))
-    let second = try #require(cache.image(for: id))
-    #expect(second.size.width == 40)
-    #expect(second.size.width != first.size.width)
+    #expect(cache.cachedImage(for: id) == nil)
+    let second = try #require(await cache.loadImage(for: id))
+    #expect(second.width == 40)
+}
+
+@Test func theDecodedCacheKeepsAtMostItsLimit() async throws {
+    let temp = TempDirectory()
+    let cache = try ThumbnailCache(directory: temp.url)
+    let ids = (0..<ThumbnailCache.decodedLimit + 20).map { _ in UUID() }
+    for id in ids {
+        #expect(cache.store(makePNG(), for: id))
+        #expect(await cache.loadImage(for: id) != nil)
+    }
+    #expect(ids.filter { cache.cachedImage(for: $0) != nil }.count <= ThumbnailCache.decodedLimit)
 }

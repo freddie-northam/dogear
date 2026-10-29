@@ -232,15 +232,20 @@ struct BookmarkCard: View {
     }
 
     @ViewBuilder private var thumbnail: some View {
-        if bookmark.hasThumbnail,
-           let image = model.thumbnails.image(for: bookmark.id) {
-            Image(nsImage: image)
+        Thumbnail(id: bookmark.hasThumbnail ? bookmark.id : nil) { image in
+            image
                 .resizable().aspectRatio(contentMode: .fill)
                 .frame(minWidth: 0, maxWidth: .infinity)
                 .frame(height: 110)
                 .clipped()
                 .clipShape(RoundedRectangle(cornerRadius: 6))
-        } else if bookmark.source == .x {
+        } placeholder: {
+            placeholder
+        }
+    }
+
+    @ViewBuilder private var placeholder: some View {
+        if bookmark.source == .x {
             RoundedRectangle(cornerRadius: 6)
                 .fill(.quaternary)
                 .frame(height: 110)
@@ -391,13 +396,12 @@ struct BookmarkListRow: View {
     }
 
     @ViewBuilder private var badge: some View {
-        if bookmark.hasThumbnail,
-           let image = model.thumbnails.image(for: bookmark.id) {
-            Image(nsImage: image)
+        Thumbnail(id: bookmark.hasThumbnail ? bookmark.id : nil) { image in
+            image
                 .resizable().aspectRatio(contentMode: .fill)
                 .frame(width: 24, height: 24)
                 .clipShape(RoundedRectangle(cornerRadius: 5))
-        } else {
+        } placeholder: {
             Circle()
                 .fill(folderColor(for: bookmark.folder).opacity(0.2))
                 .frame(width: 24, height: 24)

@@ -257,13 +257,12 @@ struct CapturePopover: View {
     }
 
     @ViewBuilder private func pickBadge(_ pick: Bookmark) -> some View {
-        if pick.hasThumbnail,
-           let image = model.thumbnails.image(for: pick.id) {
-            Image(nsImage: image)
+        Thumbnail(id: pick.hasThumbnail ? pick.id : nil) { image in
+            image
                 .resizable().aspectRatio(contentMode: .fill)
                 .frame(width: 36, height: 36)
                 .clipShape(Circle())
-        } else {
+        } placeholder: {
             Circle()
                 .fill(folderColor(for: pick.folder).opacity(0.2))
                 .frame(width: 36, height: 36)
