@@ -100,7 +100,9 @@ final class AppModel: ObservableObject {
         guard let removed = withAnimation(Motion.shuffle, { store.remove(id: bookmark.id) }) else { return }
         if undoManager == nil { thumbnails.remove(for: bookmark.id) }
         register(undoManager, name: "Delete Bookmark") { model in
-            model.store.restore(removed.bookmark, at: removed.index)
+            if let dropped = model.store.restore(removed.bookmark, at: removed.index) {
+                model.thumbnails.remove(for: dropped.id)
+            }
             model.register(undoManager, name: "Delete Bookmark") { model in
                 model.deleteBookmark(bookmark, undoManager: undoManager)
             }
