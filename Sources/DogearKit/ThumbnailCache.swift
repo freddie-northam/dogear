@@ -13,7 +13,7 @@ public final class ThumbnailCache: @unchecked Sendable {
     }()
 
     public static let maxPixelSize = 600
-    /// A decoded 600 pixel thumbnail holds about 1 MB, so the cache stays near 100 MB.
+    /// The count limit for decoded images in memory. NSCache uses it as a target, not as a hard cap.
     public static let decodedLimit = 100
 
     public init(directory: URL) throws {
@@ -31,7 +31,7 @@ public final class ThumbnailCache: @unchecked Sendable {
     }
 
     /// Reads and decodes the file off the caller's actor, then caches the image.
-    /// It returns nil without a read when the task is already cancelled.
+    /// A cancelled task gets nil and no read, unless the image is already in memory.
     public nonisolated func loadImage(for id: UUID) async -> CGImage? {
         if let cached = cachedImage(for: id) { return cached }
         guard !Task.isCancelled,

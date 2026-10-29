@@ -232,7 +232,7 @@ struct BookmarkCard: View {
     }
 
     @ViewBuilder private var thumbnail: some View {
-        Thumbnail(id: bookmark.hasThumbnail ? bookmark.id : nil) { image in
+        Thumbnail(bookmark: bookmark) { image in
             image
                 .resizable().aspectRatio(contentMode: .fill)
                 .frame(minWidth: 0, maxWidth: .infinity)
@@ -396,7 +396,7 @@ struct BookmarkListRow: View {
     }
 
     @ViewBuilder private var badge: some View {
-        Thumbnail(id: bookmark.hasThumbnail ? bookmark.id : nil) { image in
+        Thumbnail(bookmark: bookmark) { image in
             image
                 .resizable().aspectRatio(contentMode: .fill)
                 .frame(width: 24, height: 24)

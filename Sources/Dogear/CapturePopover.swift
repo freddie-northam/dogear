@@ -257,7 +257,7 @@ struct CapturePopover: View {
     }
 
     @ViewBuilder private func pickBadge(_ pick: Bookmark) -> some View {
-        Thumbnail(id: pick.hasThumbnail ? pick.id : nil) { image in
+        Thumbnail(bookmark: pick) { image in
             image
                 .resizable().aspectRatio(contentMode: .fill)
                 .frame(width: 36, height: 36)

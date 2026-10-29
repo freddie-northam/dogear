@@ -115,7 +115,7 @@ private func makePNG(width: Int = 4, height: Int = 4) -> Data {
     #expect(second.width == 40)
 }
 
-@Test func theDecodedCacheKeepsAtMostItsLimit() async throws {
+@Test func theDecodedCacheEvictsPastItsLimit() async throws {
     let temp = TempDirectory()
     let cache = try ThumbnailCache(directory: temp.url)
     let ids = (0..<ThumbnailCache.decodedLimit + 20).map { _ in UUID() }
@@ -123,5 +123,5 @@ private func makePNG(width: Int = 4, height: Int = 4) -> Data {
         #expect(cache.store(makePNG(), for: id))
         #expect(await cache.loadImage(for: id) != nil)
     }
-    #expect(ids.filter { cache.cachedImage(for: $0) != nil }.count <= ThumbnailCache.decodedLimit)
+    #expect(ids.filter { cache.cachedImage(for: $0) != nil }.count < ids.count)
 }
