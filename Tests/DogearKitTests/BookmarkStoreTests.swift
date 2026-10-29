@@ -252,21 +252,6 @@ private func storeWithADoneMiddle(_ dir: URL) throws -> (BookmarkStore, changes:
     #expect(changes == 0)
 }
 
-@Test func twoRecordsWithOneURLResolveToTheFirst() throws {
-    let temp = TempDirectory()
-    let store = try BookmarkStore(directory: temp.url)
-    let (original, _) = store.add(url: URL(string: "https://a.com/1")!)!
-    let removed = store.remove(id: original.id)!
-    let (resaved, _) = store.add(url: URL(string: "https://a.com/1")!)!
-    store.restore(removed.bookmark, at: 1)
-    #expect(store.library.bookmarks.map(\.id) == [resaved.id, original.id])
-    let skipped = store.add(urls: [URL(string: "https://a.com/1")!], duplicates: .skip)
-    #expect(skipped.existing.map(\.id) == [resaved.id])
-    let bumped = store.add(urls: [URL(string: "https://a.com/1")!], duplicates: .resave)
-    #expect(bumped.existing.map(\.id) == [resaved.id])
-    #expect(store.library.bookmarks.map(\.id) == [resaved.id, original.id])
-}
-
 @Test func reAddingADonePlaceLeavesItDone() throws {
     let temp = TempDirectory()
     let store = try BookmarkStore(directory: temp.url)
@@ -616,6 +601,59 @@ private func storeSeeded(folders: [String]) throws -> BookmarkStore {
     #expect(store.library.bookmarks.map(\.id)[2] == a.id)
     store.restore(removed.bookmark, at: 0)
     #expect(store.library.bookmarks.count == 3)
+}
+
+@Test func undoOfADeleteKeepsTheRestoredRecordWhenTheLinkWasSavedAgain() throws {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    _ = store.add(url: URL(string: "https://a.com/1")!)!
+    var (old, _) = store.add(url: URL(string: "https://a.com/2")!)!
+    _ = store.add(url: URL(string: "https://a.com/3")!)!
+    old.note = "my note"
+    old.folder = "Recipes"
+    store.update(old)
+    store.toggleFavorite(id: old.id)
+    store.markDone(id: old.id)
+    let removed = try #require(store.remove(id: old.id))
+    let (again, _) = store.add(url: URL(string: "https://a.com/2")!)!
+    #expect(again.id != old.id)
+    var changes = 0
+    store.onChange = { changes += 1 }
+
+    let dropped = store.restore(removed.bookmark, at: removed.index)
+
+    #expect(dropped?.id == again.id)
+    #expect(changes == 1)
+    #expect(store.library.bookmarks.count == 3)
+    #expect(store.library.bookmarks.filter { $0.url == old.url }.map(\.id) == [old.id])
+    #expect(store.library.bookmarks[removed.index].id == old.id)
+    let kept = try #require(store.library.bookmarks.first { $0.id == old.id })
+    #expect(kept.note == "my note")
+    #expect(kept.folder == "Recipes")
+    #expect(kept.isFavorite)
+    #expect(kept.isDone)
+}
+
+@Test func restoreDropsNothingWhenNoOtherRecordHasTheURL() throws {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    _ = store.add(url: URL(string: "https://a.com/1")!)!
+    let (b, _) = store.add(url: URL(string: "https://a.com/2")!)!
+    let removed = try #require(store.remove(id: b.id))
+    _ = store.add(url: URL(string: "https://a.com/2/other")!)!
+    #expect(store.restore(removed.bookmark, at: removed.index) == nil)
+    #expect(store.library.bookmarks.count == 3)
+}
+
+@Test func restoreOfARecordStillPresentChangesNothing() throws {
+    let temp = TempDirectory()
+    let store = try BookmarkStore(directory: temp.url)
+    let (a, _) = store.add(url: URL(string: "https://a.com/1")!)!
+    var changes = 0
+    store.onChange = { changes += 1 }
+    #expect(store.restore(a, at: 0) == nil)
+    #expect(store.library.bookmarks.map(\.id) == [a.id])
+    #expect(changes == 0)
 }
 
 @Test func restoreClampsAnOutOfRangeIndex() throws {

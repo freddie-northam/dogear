@@ -194,10 +194,14 @@ public final class BookmarkStore {
 
     /// Reinserts a removed bookmark at its original position (clamped to the
     /// current count). A record already present is left alone.
-    public func restore(_ bookmark: Bookmark, at index: Int) {
-        guard !library.bookmarks.contains(where: { $0.id == bookmark.id }) else { return }
+    /// It drops and returns a record saved again with the same URL, because the restored record holds the note, folder and dates.
+    @discardableResult
+    public func restore(_ bookmark: Bookmark, at index: Int) -> Bookmark? {
+        guard !library.bookmarks.contains(where: { $0.id == bookmark.id }) else { return nil }
+        let dropped = library.bookmarks.firstIndex { $0.url == bookmark.url }.map { library.bookmarks.remove(at: $0) }
         library.bookmarks.insert(bookmark, at: min(index, library.bookmarks.endIndex))
         mutated()
+        return dropped
     }
 
     public func markDone(id: UUID) { setDone(id: id, date: Date()) }
